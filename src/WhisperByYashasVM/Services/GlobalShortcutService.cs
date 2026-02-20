@@ -9,10 +9,9 @@ public sealed class GlobalShortcutService : IDisposable
     private IntPtr _hook = IntPtr.Zero;
     private bool _leftWinDown;
     private bool _rightWinDown;
-    private bool _isActive;
+    private bool _yDown;
 
-    public event EventHandler? HotkeyPressed;
-    public event EventHandler? HotkeyReleased;
+    public event EventHandler? HotkeyTriggered;
 
     public void Start()
     {
@@ -51,25 +50,19 @@ public sealed class GlobalShortcutService : IDisposable
                 break;
             case NativeMethods.VkY:
             {
-                if (keyDown && (_leftWinDown || _rightWinDown) && !_isActive)
+                if (keyDown && (_leftWinDown || _rightWinDown) && !_yDown)
                 {
-                    _isActive = true;
-                    HotkeyPressed?.Invoke(this, EventArgs.Empty);
+                    _yDown = true;
+                    HotkeyTriggered?.Invoke(this, EventArgs.Empty);
                 }
-                else if (keyUp && _isActive)
+
+                if (keyUp)
                 {
-                    _isActive = false;
-                    HotkeyReleased?.Invoke(this, EventArgs.Empty);
+                    _yDown = false;
                 }
 
                 break;
             }
-        }
-
-        if (_isActive && keyUp && (keyData.vkCode == NativeMethods.VkLWin || keyData.vkCode == NativeMethods.VkRWin))
-        {
-            _isActive = false;
-            HotkeyReleased?.Invoke(this, EventArgs.Empty);
         }
 
         return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);

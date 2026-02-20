@@ -6,7 +6,7 @@ namespace WhisperByYashasVM.Services;
 public sealed class AudioCaptureService : IDisposable
 {
     private readonly WaveInEvent _waveIn;
-    private readonly List<byte> _pcmBuffer = [];
+    private MemoryStream _pcmBuffer = new();
     private readonly object _bufferLock = new();
     private bool _capturing;
 
@@ -26,7 +26,8 @@ public sealed class AudioCaptureService : IDisposable
     {
         lock (_bufferLock)
         {
-            _pcmBuffer.Clear();
+            _pcmBuffer.Dispose();
+            _pcmBuffer = new MemoryStream(capacity: 1024 * 128);
             _capturing = true;
         }
         _waveIn.StartRecording();
@@ -44,7 +45,8 @@ public sealed class AudioCaptureService : IDisposable
         lock (_bufferLock)
         {
             pcm = _pcmBuffer.ToArray();
-            _pcmBuffer.Clear();
+            _pcmBuffer.Dispose();
+            _pcmBuffer = new MemoryStream();
         }
 
         if (pcm.Length == 0)
@@ -70,10 +72,7 @@ public sealed class AudioCaptureService : IDisposable
             {
                 return;
             }
-            for (int i = 0; i < e.BytesRecorded; i++)
-            {
-                _pcmBuffer.Add(e.Buffer[i]);
-            }
+            _pcmBuffer.Write(e.Buffer, 0, e.BytesRecorded);
         }
 
         float rms = ComputeRms(e.Buffer, e.BytesRecorded);
@@ -101,6 +100,10 @@ public sealed class AudioCaptureService : IDisposable
 
     public void Dispose()
     {
+        lock (_bufferLock)
+        {
+            _pcmBuffer.Dispose();
+        }
         _waveIn.Dispose();
     }
 }
