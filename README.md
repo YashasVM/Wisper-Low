@@ -1,83 +1,99 @@
-# Wisperlow Prototype
+# Wisperlow
 
-Local-first desktop dictation prototype inspired by Wispr Flow. It runs as a background bubble: press the hotkey, speak, press it again, and it transcribes, cleans, and pastes into the active text field.
+Wisperlow is a local-first Windows dictation prototype. Press the hotkey, speak, press it again, and Wisperlow transcribes, cleans up the wording, and pastes the final text into the active text field.
 
-## Current Prototype Stack
+## Download For Windows
 
-- Python 3.11 background app with a Tkinter overlay bubble
-- Fast local STT through `faster-whisper`
-- Always-available deterministic cleanup
-- Optional local rewrite through Ollama, disabled by default for latency
-- Global hotkeys through the `keyboard` package
-- Clipboard paste insertion with active-window restore on Windows
-- Tiny monochrome floating pill with live waveform feedback
+The ready-to-install Windows setup file is included in this repository:
+
+[Download WisperlowSetup-0.1.0.exe](release/WisperlowSetup-0.1.0.exe)
+
+After downloading:
+
+1. Run `WisperlowSetup-0.1.0.exe`.
+2. Click through the installer.
+3. Launch Wisperlow from the Start Menu.
+4. Press `Ctrl+Alt+P` or `Ctrl+Alt+Space` to start dictation.
+5. Speak, press the hotkey again, and Wisperlow pastes the cleaned text.
+
+Windows may show a SmartScreen warning because this prototype installer is not code-signed yet. Choose **More info** and **Run anyway** if you trust this build.
+
+## What Is Included
+
+- Windows installer with the app bundled
+- Local Whisper speech model
+- Minimal floating black pill while listening
+- Compact loading blob while processing
+- Global hotkeys
+- Local text cleanup and rewrite pipeline
+- Clipboard paste insertion into the active app
 
 ## Hotkeys
 
-Default hotkeys are configurable in `wisperlow_config.json` after first run:
+- `Ctrl+Alt+P`: start or stop dictation
+- `Ctrl+Alt+Space`: alternate start or stop dictation
+- `Ctrl+Alt+Backspace`: cancel dictation
 
-- `ctrl+alt+p`: start/stop dictation
-- `ctrl+alt+space`: alternate start/stop dictation
-- `ctrl+alt+backspace`: cancel dictation
+If one hotkey is already used by another app, try the alternate hotkey.
 
-If either toggle is claimed by another app, the other one should still work. Change the values in `wisperlow_config.json` if needed.
+## Dictation Modes
 
-## Install
+Say a slash mode at the end of your dictation:
+
+- `/email`
+- `/professional`
+- `/casual`
+- `/slack`
+- `/short`
+- `/raw`
+
+Example:
+
+```text
+can you send over the updated prototype tomorrow morning slash email
+```
+
+Wisperlow rewrites it into a cleaner email-style sentence before pasting.
+
+## Privacy
+
+Wisperlow is designed to run locally by default. Audio and transcripts are not sent to cloud services by the app.
+
+Optional local rewriting can use Ollama on `http://127.0.0.1:11434` if you install it separately. That still runs on your machine.
+
+## Developer Setup
+
+Use this only if you want to run from source instead of installing the Windows setup file.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python app.py
 ```
 
-For a quick non-audio smoke test:
+For a quick smoke test:
 
 ```powershell
 python app.py --self-test
-python app.py
 ```
 
-## Local Models
+## Build Installer
 
-Fastest practical setup for this prototype:
+The installer build uses PyInstaller and Inno Setup.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\build.ps1
 ```
 
-The app defaults to `medium.en`, CPU, int8. This avoids CUDA DLL failures such as missing `cublas64_12.dll`/provider DLLs while prioritizing dictation quality over the earlier tiny/fast prototype.
-
-Optional local rewrite:
-
-```powershell
-ollama pull qwen3:4b
-ollama pull qwen3:0.6b
-```
-
-The app prefers `qwen3:4b` for higher-quality rewrites, then uses any good installed local Ollama model it can find. If Ollama is unavailable, it still uses a stronger local rule-based rewrite path.
-
-## Run
-
-```powershell
-python app.py
-```
-
-Keep the app running in the background. Press `ctrl+alt+space`, speak, press it again, and the app will process and paste into the active field.
-The first model download/cache can take longer. After the model is cached and warm-loaded, short dictation should be much faster.
-
-## Windows Installer
-
-The packaged Windows installer is generated at:
+The output is written to:
 
 ```text
 release\WisperlowSetup-0.1.0.exe
 ```
 
-It installs per-user, does not require admin rights, includes the Python runtime and bundled local Whisper speech model, creates Start Menu shortcuts, optionally creates a desktop shortcut, optionally starts with Windows, and can launch Wisperlow after setup.
-
 ## Notes
 
-- Audio and transcripts are not sent to cloud services by default.
-- Ollama is local-only when pointed at `http://127.0.0.1:11434`.
-- If no STT engine is installed, the app still launches and reports the missing dependency instead of crashing.
-- The deterministic cleanup path is deliberately fast and runs before any optional LLM call.
+- First launch may take longer while the local model warms up.
+- The app prioritizes local execution and low-latency dictation.
+- If speech dependencies are missing, Wisperlow should show an error instead of crashing.
