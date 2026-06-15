@@ -1,41 +1,96 @@
-# Whisper -By YashasVM
+# Wisperlow Prototype
 
-Local Windows voice-to-text tray app with on-screen overlay and auto-paste output.
+Local-first desktop dictation prototype inspired by Wispr Flow. It runs as a background bubble: press the hotkey, speak, press it again, and it transcribes, cleans, and pastes into the active text field.
 
-## Behavior
+## Current Prototype Stack
 
-- Shortcut: `Win+Y`
-- Recording mode: press once to start, auto-stop after silence
-- First run includes setup:
-  - minimum-spec check (in-app, not installer-blocking)
-  - model variant selection (`base.en` / `small.en`)
-  - model storage path
-  - start-with-Windows preference
-- Unsupported systems show warning and allow continue only after explicit confirmation.
+- Python 3.11 background app with a Tkinter overlay bubble
+- Fast local STT through `faster-whisper`
+- Always-available deterministic cleanup
+- Optional local rewrite through Ollama, disabled by default for latency
+- Global hotkeys through the `keyboard` package
+- Clipboard paste insertion with active-window restore on Windows
+- Tiny monochrome floating pill with live waveform feedback
 
-## Requirements
+## Hotkeys
 
-- Windows 10/11 64-bit
-- .NET 8 SDK (or use repo-local `.dotnet\dotnet.exe`)
-- Inno Setup 6 (for installer build)
+Default hotkeys are configurable in `wisperlow_config.json` after first run:
 
-## Recommended Minimum Spec
+- `ctrl+alt+p`: start/stop dictation
+- `ctrl+alt+space`: alternate start/stop dictation
+- `ctrl+alt+backspace`: cancel dictation
 
-- Windows 10/11 64-bit
-- 4 logical CPU threads
-- 8 GB RAM
-- AVX2 support
-- 2 GB free disk
+If either toggle is claimed by another app, the other one should still work. Change the values in `wisperlow_config.json` if needed.
 
-## Build
+## Install
 
 ```powershell
-pwsh .\build.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-If global `dotnet` is missing, build script automatically uses `.\.dotnet\dotnet.exe` when present.
+For a quick non-audio smoke test:
 
-## Output Paths
+```powershell
+python app.py --self-test
+python app.py
+```
 
-- App publish folder: `src\WhisperByYashasVM\bin\Release\net8.0-windows\win-x64\publish`
-- Installer EXE: `installer\dist\Whisper-By-YashasVM-Setup-v1.0.0.exe`
+## Local Models
+
+Fastest practical setup for this prototype:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+The app defaults to `medium.en`, CPU, int8. This avoids CUDA DLL failures such as missing `cublas64_12.dll`/provider DLLs while prioritizing dictation quality over the earlier tiny/fast prototype.
+
+Optional local rewrite:
+
+```powershell
+ollama pull qwen3:4b
+ollama pull qwen3:0.6b
+```
+
+The app prefers `qwen3:4b` for higher-quality rewrites, then uses any good installed local Ollama model it can find. If Ollama is unavailable, it still uses a stronger local rule-based rewrite path.
+
+## Dictation Modes
+
+Say or type a slash mode at the end of the dictation:
+
+- `/email` or “slash email”
+- `/professional`
+- `/casual`
+- `/slack`
+- `/short`
+- `/raw`
+
+Example: “can you send over the updated prototype tomorrow morning slash email” becomes a more polished email-style sentence.
+
+## Run
+
+```powershell
+python app.py
+```
+
+Keep the app running in the background. Press `ctrl+alt+space`, speak, press it again, and the app will process and paste into the active field.
+The first model download/cache can take longer. After the model is cached and warm-loaded, short dictation should be much faster.
+
+## Windows Installer
+
+The packaged Windows installer is generated at:
+
+```text
+release\WisperlowSetup-0.1.0.exe
+```
+
+It installs per-user, does not require admin rights, includes the Python runtime and bundled local Whisper speech model, creates Start Menu shortcuts, optionally creates a desktop shortcut, optionally starts with Windows, and can launch Wisperlow after setup.
+
+## Notes
+
+- Audio and transcripts are not sent to cloud services by default.
+- Ollama is local-only when pointed at `http://127.0.0.1:11434`.
+- If no STT engine is installed, the app still launches and reports the missing dependency instead of crashing.
+- The deterministic cleanup path is deliberately fast and runs before any optional LLM call.
