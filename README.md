@@ -56,19 +56,6 @@ ollama pull qwen3:0.6b
 
 The app prefers `qwen3:4b` for higher-quality rewrites, then uses any good installed local Ollama model it can find. If Ollama is unavailable, it still uses a stronger local rule-based rewrite path.
 
-## Dictation Modes
-
-Say or type a slash mode at the end of the dictation:
-
-- `/email` or “slash email”
-- `/professional`
-- `/casual`
-- `/slack`
-- `/short`
-- `/raw`
-
-Example: “can you send over the updated prototype tomorrow morning slash email” becomes a more polished email-style sentence.
-
 ## Run
 
 ```powershell
