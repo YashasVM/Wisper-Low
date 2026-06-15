@@ -336,6 +336,7 @@ class Bubble:
         self.window.configure(bg=self.transparent)
         self.width = 88
         self.height = 42
+        self.render_scale = 12
         self.canvas = tk.Label(
             self.window,
             width=self.width,
@@ -355,8 +356,8 @@ class Bubble:
 
     def _set_dimensions_for_mode(self, mode: str) -> None:
         if mode == "processing":
-            self.width = 42
-            self.height = 42
+            self.width = 38
+            self.height = 38
         else:
             self.width = 88
             self.height = 42
@@ -375,12 +376,12 @@ class Bubble:
         if self.mode == "idle":
             fill = "#ffffff"
             wave = "#050505"
-        scale = 6
+        scale = self.render_scale
         image = Image.new("RGBA", (self.width * scale, self.height * scale), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         draw.rounded_rectangle(
-            (2 * scale, 2 * scale, (self.width - 2) * scale, (self.height - 2) * scale),
-            radius=((self.height - 4) // 2) * scale,
+            (1 * scale, 1 * scale, (self.width - 1) * scale, (self.height - 1) * scale),
+            radius=((self.height - 2) // 2) * scale,
             fill=fill,
         )
         if self.mode == "processing":
@@ -395,13 +396,9 @@ class Bubble:
             for i, level in enumerate(visible_levels):
                 h = max(5 * scale, int(22 * scale * min(level * 2.2, 1.0)))
                 x = left + i * gap
-                draw.line(
-                    (x, center - h // 2, x, center + h // 2),
-                    fill=wave,
-                    width=2 * scale,
-                    joint="curve",
-                )
-                r = scale
+                line_width = max(2 * scale, int(2.4 * scale))
+                draw.line((x, center - h // 2, x, center + h // 2), fill=wave, width=line_width)
+                r = line_width // 2
                 draw.ellipse((x - r, center - h // 2 - r, x + r, center - h // 2 + r), fill=wave)
                 draw.ellipse((x - r, center + h // 2 - r, x + r, center + h // 2 + r), fill=wave)
         image = image.resize((self.width, self.height), Image.Resampling.LANCZOS)
@@ -421,7 +418,7 @@ class Bubble:
         for y in range(height):
             for x in range(width):
                 r, g, b, a = pixels[x, y]
-                if a < 92:
+                if a < 76:
                     pixels[x, y] = key
                 else:
                     pixels[x, y] = (r, g, b, 255)
@@ -430,15 +427,33 @@ class Bubble:
     def _draw_processing(self, draw, scale: int, fill: str) -> None:  # noqa: ANN001
         cx = (self.width * scale) // 2
         cy = (self.height * scale) // 2
-        radius = 8 * scale
-        dot = 2 * scale
-        phase = time.time() * 5.8
-        for i in range(8):
-            angle = phase + i * (math.tau / 8)
-            alpha = int(80 + 175 * ((i + 1) / 8))
-            x = cx + int(math.cos(angle) * radius)
-            y = cy + int(math.sin(angle) * radius)
-            draw.ellipse((x - dot, y - dot, x + dot, y + dot), fill=(255, 255, 255, alpha))
+        phase = (time.time() * 420) % 360
+        box = (
+            cx - 10 * scale,
+            cy - 10 * scale,
+            cx + 10 * scale,
+            cy + 10 * scale,
+        )
+        draw.arc(
+            box,
+            start=phase,
+            end=phase + 275,
+            fill=fill,
+            width=max(3 * scale, int(3.2 * scale)),
+        )
+        cap_radius = int(1.65 * scale)
+        end_angle = math.radians(phase + 275)
+        end_x = cx + math.cos(end_angle) * 10 * scale
+        end_y = cy + math.sin(end_angle) * 10 * scale
+        draw.ellipse(
+            (
+                end_x - cap_radius,
+                end_y - cap_radius,
+                end_x + cap_radius,
+                end_y + cap_radius,
+            ),
+            fill=fill,
+        )
 
     def _draw_legacy_canvas(self) -> None:
         if not hasattr(self.canvas, "delete"):
