@@ -1144,6 +1144,16 @@ class DashboardWindow:
         self._build_diagnostics_tab()
 
     def _build_overview_tab(self) -> None:
+        actions = ttk.Frame(self.overview_tab, style="Dashboard.TFrame")
+        actions.pack(fill="x", pady=(0, 10))
+        for label, command in [
+            ("Start/Stop", self.app.toggle_recording),
+            ("Cancel", self.app.cancel_recording),
+            ("Pause/Resume", self.app.toggle_pause),
+            ("Open Data Folder", self.open_data_folder),
+        ]:
+            ttk.Button(actions, text=label, command=command, style="Dashboard.TButton").pack(side="left", padx=(0, 6))
+
         summary = ttk.Frame(self.overview_tab, style="Dashboard.TFrame")
         summary.pack(fill="x")
         cards = [
