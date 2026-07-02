@@ -57,7 +57,7 @@ Microphone -> Local Whisper STT -> Text cleanup -> Clipboard paste -> Active app
 | **Global Dictation** | Trigger dictation from anywhere on Windows with global hotkeys |
 | **Local Speech Model** | Bundles a local Whisper model for offline-first transcription |
 | **Smart Cleanup** | Improves punctuation, grammar, repeated words, and sentence flow before pasting |
-| **Floating Pill UI** | Small black waveform pill while listening, compact loading blob while processing |
+| **Floating Pill UI** | Small black waveform pill while listening and processing |
 | **Active App Paste** | Restores focus and inserts text into the currently active text field |
 | **Slash Modes** | Supports `/email`, `/professional`, `/casual`, `/slack`, `/short`, and `/raw` |
 | **Cancel Flow** | Cancel dictation without pasting using `Ctrl+Alt+Backspace` |
@@ -214,7 +214,7 @@ release\WisperlowSetup-0.1.0.exe
 - [x] Global hotkey dictation
 - [x] Local Whisper transcription
 - [x] Floating waveform pill
-- [x] Compact processing blob
+- [x] Processing pill
 - [x] Windows installer
 - [x] GitHub release asset
 - [ ] Signed Windows installer
