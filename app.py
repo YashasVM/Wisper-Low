@@ -1139,7 +1139,49 @@ class DashboardWindow:
         self._build_diagnostics_tab()
 
     def _build_overview_tab(self) -> None:
-        ttk.Label(self.overview_tab, text="Runtime summary will appear here.", style="Dashboard.TLabel").pack(anchor="w")
+        summary = ttk.Frame(self.overview_tab, style="Dashboard.TFrame")
+        summary.pack(fill="x")
+        cards = [
+            ("status", "Status"),
+            ("sessions", "Sessions"),
+            ("insertions", "Insertions"),
+            ("errors", "Errors"),
+            ("minutes", "Minutes recorded"),
+            ("words", "Words inserted"),
+        ]
+        for index, (key, label) in enumerate(cards):
+            frame = ttk.LabelFrame(summary, text=label, padding=10, style="Panel.TLabelframe")
+            frame.grid(row=index // 3, column=index % 3, sticky="ew", padx=5, pady=5)
+            summary.columnconfigure(index % 3, weight=1)
+            self.vars[f"overview_{key}"] = tk.StringVar(value="-")
+            ttk.Label(frame, textvariable=self.vars[f"overview_{key}"], style="Stat.TLabel").pack(anchor="w")
+
+        details = ttk.Frame(self.overview_tab, style="Dashboard.TFrame")
+        details.pack(fill="both", expand=True, pady=(16, 0))
+        left = ttk.LabelFrame(details, text="Runtime", padding=10, style="Panel.TLabelframe")
+        right = ttk.LabelFrame(details, text="Last Activity", padding=10, style="Panel.TLabelframe")
+        left.pack(side="left", fill="both", expand=True, padx=(0, 8))
+        right.pack(side="left", fill="both", expand=True, padx=(8, 0))
+
+        for key, label in [
+            ("model", "Model"),
+            ("device", "Device"),
+            ("toggle_hotkey", "Toggle"),
+            ("dashboard_hotkey", "Dashboard"),
+            ("history", "History"),
+        ]:
+            row = ttk.Frame(left, style="Dashboard.TFrame")
+            row.pack(fill="x", pady=3)
+            ttk.Label(row, text=f"{label}:", width=14, style="Muted.TLabel").pack(side="left")
+            self.vars[f"overview_{key}"] = tk.StringVar(value="-")
+            ttk.Label(row, textvariable=self.vars[f"overview_{key}"], style="Dashboard.TLabel").pack(side="left", fill="x", expand=True)
+
+        ttk.Label(right, text="Last result", style="Muted.TLabel").pack(anchor="w")
+        self.widgets["overview_last_result"] = tk.Text(right, height=5, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
+        self.widgets["overview_last_result"].pack(fill="both", expand=True, pady=(3, 8))
+        ttk.Label(right, text="Last error", style="Muted.TLabel").pack(anchor="w")
+        self.widgets["overview_last_error"] = tk.Text(right, height=3, wrap="word", relief="flat", bg="#fff7f7", fg="#7a1d1d")
+        self.widgets["overview_last_error"].pack(fill="both", expand=True, pady=(3, 0))
 
     def _build_history_tab(self) -> None:
         ttk.Label(self.history_tab, text="Recent dictations will appear here.", style="Dashboard.TLabel").pack(anchor="w")
@@ -1164,7 +1206,35 @@ class DashboardWindow:
         self.window.withdraw()
 
     def refresh(self) -> None:
-        return
+        self.refresh_overview()
+
+    def refresh_overview(self) -> None:
+        self.app.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
+        usage = self.app.usage
+        state = "Processing" if self.app.processing else "Listening" if self.app.recorder.is_recording else "Idle"
+        minutes = float(usage.get("seconds_recorded", 0.0)) / 60
+        self.vars["overview_status"].set(state)
+        self.vars["overview_sessions"].set(str(usage.get("sessions", 0)))
+        self.vars["overview_insertions"].set(str(usage.get("insertions", 0)))
+        self.vars["overview_errors"].set(str(usage.get("errors", 0)))
+        self.vars["overview_minutes"].set(f"{minutes:.1f}")
+        self.vars["overview_words"].set(str(usage.get("words_inserted", 0)))
+        self.vars["overview_model"].set(str(self.app.config.get("stt_model", "-")))
+        self.vars["overview_device"].set(f"{self.app.config.get('stt_device', '-')} / {self.app.config.get('stt_compute_type', '-')}")
+        self.vars["overview_toggle_hotkey"].set(str(self.app.config.get("toggle_hotkey", "-")))
+        self.vars["overview_dashboard_hotkey"].set(str(self.app.config.get("dashboard_hotkey", "-")))
+        self.vars["overview_history"].set("enabled" if self.app.config.get("history_enabled", True) else "disabled")
+        self._replace_text("overview_last_result", str(usage.get("last_result", "")))
+        self._replace_text("overview_last_error", str(usage.get("last_error", "")))
+
+    def _replace_text(self, widget_key: str, value: str) -> None:
+        widget = self.widgets.get(widget_key)
+        if not isinstance(widget, tk.Text):
+            return
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("1.0", value)
+        widget.configure(state="disabled")
 
     def _schedule_refresh(self) -> None:
         if self._refresh_job:
