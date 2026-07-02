@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 wisperlow_config.json
 wisperlow_usage.json
-wisperlow_history.json
 *.broken.json
 build/
 dist/
