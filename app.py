@@ -1271,7 +1271,12 @@ class DashboardWindow:
         ttk.Label(actions, textvariable=self.vars["settings_status"], style="Muted.TLabel").pack(side="left", padx=(12, 0))
 
     def _build_diagnostics_tab(self) -> None:
-        ttk.Label(self.diagnostics_tab, text="Diagnostics will appear here.", style="Dashboard.TLabel").pack(anchor="w")
+        actions = ttk.Frame(self.diagnostics_tab, style="Dashboard.TFrame")
+        actions.pack(fill="x", pady=(0, 10))
+        ttk.Button(actions, text="Refresh", command=self.refresh_diagnostics, style="Dashboard.TButton").pack(side="left")
+        ttk.Button(actions, text="Open Data Folder", command=self.open_data_folder, style="Dashboard.TButton").pack(side="left", padx=(8, 0))
+        self.widgets["diagnostics_text"] = tk.Text(self.diagnostics_tab, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
+        self.widgets["diagnostics_text"].pack(fill="both", expand=True)
 
     def show(self) -> None:
         self.window.deiconify()
@@ -1290,6 +1295,7 @@ class DashboardWindow:
         self.refresh_overview()
         self.refresh_history()
         self.refresh_settings()
+        self.refresh_diagnostics()
 
     def refresh_overview(self) -> None:
         self.app.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
@@ -1441,6 +1447,65 @@ class DashboardWindow:
         self.app.history.config = self.app.config
         self.vars["settings_status"].set("Settings saved. Restart to reload changed hotkeys or speech model.")
         self.refresh()
+
+    def refresh_diagnostics(self) -> None:
+        lines = [
+            "Wisperlow Diagnostics",
+            "",
+            f"App dir: {APP_DIR}",
+            f"Resource dir: {RESOURCE_DIR}",
+            f"Config dir: {CONFIG_DIR}",
+            f"Config path: {CONFIG_PATH}",
+            f"Usage path: {USAGE_PATH}",
+            f"History path: {HISTORY_PATH}",
+            "",
+            "Dependencies",
+            f"keyboard: {'ok' if keyboard is not None else 'missing'}",
+            f"sounddevice: {'ok' if sd is not None else 'missing'}",
+            f"numpy: {'ok' if np is not None else 'missing'}",
+            f"pyperclip: {'ok' if pyperclip is not None else 'missing'}",
+            f"Pillow: {'ok' if Image is not None else 'missing'}",
+            "",
+            "Runtime",
+            f"Recording: {self.app.recorder.is_recording}",
+            f"Processing: {self.app.processing}",
+            f"Paused: {self.app.config.get('app_paused', False)}",
+            f"Target window: {self.app.context.window_title}",
+            f"Last error: {self.app.usage.get('last_error', '')}",
+            "",
+            "Speech model",
+            f"Model: {self.app.config.get('stt_model', '')}",
+            f"Device: {self.app.config.get('stt_device', '')}",
+            f"Compute: {self.app.config.get('stt_compute_type', '')}",
+            f"Model ready: {self._model_ready()}",
+            "",
+            "Ollama",
+            f"Enabled: {self.app.config.get('ollama_enabled', False)}",
+            f"Autostart: {self.app.config.get('ollama_autostart', False)}",
+            f"Model: {self.app.config.get('ollama_model', '')}",
+            f"Ready: {self._ollama_ready_label()}",
+        ]
+        self._replace_text("diagnostics_text", "\n".join(lines))
+
+    def _model_ready(self) -> str:
+        model = str(self.app.config.get("stt_model", ""))
+        if not model:
+            return "missing"
+        return "yes" if hf_ct2_model_cached(model) else "no"
+
+    def _ollama_ready_label(self) -> str:
+        if not self.app.config.get("ollama_enabled", False):
+            return "disabled"
+        return "yes" if self.app.rewriter._ollama_ready() else "no"
+
+    def open_data_folder(self) -> None:
+        try:
+            if sys.platform == "win32":
+                os.startfile(CONFIG_DIR)  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(CONFIG_DIR)])
+        except Exception as exc:
+            messagebox.showerror("Wisperlow", str(exc))
 
     def _schedule_refresh(self) -> None:
         if self._refresh_job:
