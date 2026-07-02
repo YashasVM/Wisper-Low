@@ -1550,19 +1550,13 @@ class WisperlowApp:
         if keyboard is None:
             self.bubble.show("error", "keyboard missing")
             return
-        bindings = [
-            (self.config.get("toggle_hotkey"), self.toggle_recording),
-            (self.config.get("alternate_toggle_hotkey"), self.toggle_recording),
-            (self.config.get("cancel_hotkey"), self.cancel_recording),
-            (self.config.get("dashboard_hotkey"), self.show_dashboard),
-        ]
-        seen: set[str] = set()
-        for hotkey, callback in [(h, cb) for h, cb in bindings if h]:
-            if hotkey in seen:
-                continue
-            seen.add(hotkey)
+        hotkeys = [self.config["toggle_hotkey"], self.config.get("alternate_toggle_hotkey"), self.config["cancel_hotkey"]]
+        for hotkey in [h for h in hotkeys if h]:
             try:
-                keyboard.add_hotkey(hotkey, lambda callback=callback: self.post(callback), suppress=True)
+                if hotkey == self.config["cancel_hotkey"]:
+                    keyboard.add_hotkey(hotkey, lambda: self.post(self.cancel_recording), suppress=True)
+                else:
+                    keyboard.add_hotkey(hotkey, lambda: self.post(self.toggle_recording), suppress=True)
             except Exception:
                 self.bubble.show("error", f"{hotkey} busy")
                 self.bubble.hide_later(1600)
@@ -1577,10 +1571,6 @@ class WisperlowApp:
         self.root.after(50, self._drain_events)
 
     def toggle_recording(self) -> None:
-        if self.config.get("app_paused", False):
-            self.bubble.show("idle", "paused")
-            self.bubble.hide_later(650)
-            return
         if self.processing:
             return
         if self.recorder.is_recording:
