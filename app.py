@@ -1084,23 +1084,14 @@ class Inserter:
 
 
 class DashboardWindow:
-    BG = "#0d0f12"
-    PANEL = "#15181d"
-    PANEL_ALT = "#101317"
-    BORDER = "#252a31"
-    TEXT = "#f4f5f6"
-    MUTED = "#9aa1aa"
-    ACCENT = "#e8eaed"
-    DANGER = "#ff6b6b"
-
     def __init__(self, app: "WisperlowApp") -> None:
         self.app = app
         self.root = app.root
         self.window = tk.Toplevel(self.root)
         self.window.title("Wisperlow Dashboard")
-        self.window.geometry("940x640")
-        self.window.minsize(820, 560)
-        self.window.configure(bg=self.BG)
+        self.window.geometry("820x560")
+        self.window.minsize(720, 480)
+        self.window.configure(bg="#f6f6f3")
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.withdraw()
 
@@ -1117,38 +1108,21 @@ class DashboardWindow:
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure(".", font=("Segoe UI", 10))
-        style.configure("Dashboard.TFrame", background=self.BG)
-        style.configure("Card.TFrame", background=self.PANEL, relief="flat")
-        style.configure("Panel.TLabelframe", background=self.PANEL, bordercolor=self.BORDER, lightcolor=self.BORDER, darkcolor=self.BORDER, relief="solid")
-        style.configure("Panel.TLabelframe.Label", background=self.BG, foreground=self.TEXT, font=("Segoe UI", 10, "bold"))
-        style.configure("Dashboard.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI", 10))
-        style.configure("Card.TLabel", background=self.PANEL, foreground=self.TEXT, font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", background=self.BG, foreground=self.MUTED, font=("Segoe UI", 9))
-        style.configure("CardMuted.TLabel", background=self.PANEL, foreground=self.MUTED, font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI Semibold", 22))
-        style.configure("Stat.TLabel", background=self.PANEL, foreground=self.ACCENT, font=("Segoe UI Semibold", 22))
-        style.configure("Dashboard.TButton", background="#20242b", foreground=self.TEXT, bordercolor="#303640", focusthickness=0, focuscolor="#20242b", padding=(12, 7), font=("Segoe UI", 9))
-        style.map("Dashboard.TButton", background=[("active", "#2a3038"), ("pressed", "#343b45")], foreground=[("disabled", "#6f7680")])
-        style.configure("TNotebook", background=self.BG, borderwidth=0, tabmargins=(0, 6, 0, 0))
-        style.configure("TNotebook.Tab", background=self.BG, foreground=self.MUTED, borderwidth=0, padding=(14, 8), font=("Segoe UI Semibold", 9))
-        style.map("TNotebook.Tab", background=[("selected", self.PANEL)], foreground=[("selected", self.TEXT), ("active", self.TEXT)])
-        style.configure("Treeview", background=self.PANEL_ALT, fieldbackground=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, rowheight=28, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=self.PANEL, foreground=self.MUTED, relief="flat", font=("Segoe UI Semibold", 9))
-        style.map("Treeview", background=[("selected", "#2b3440")], foreground=[("selected", self.TEXT)])
-        style.configure("TEntry", fieldbackground=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, insertcolor=self.TEXT, padding=(8, 5))
-        style.configure("TCombobox", fieldbackground=self.PANEL_ALT, background=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, arrowcolor=self.TEXT, padding=(8, 5))
-        style.configure("TCheckbutton", background=self.BG, foreground=self.TEXT, focuscolor=self.BG)
+        style.configure("Dashboard.TFrame", background="#f6f6f3")
+        style.configure("Panel.TLabelframe", background="#f6f6f3", bordercolor="#d8d6ce")
+        style.configure("Panel.TLabelframe.Label", background="#f6f6f3", foreground="#181818", font=("Segoe UI", 10, "bold"))
+        style.configure("Dashboard.TLabel", background="#f6f6f3", foreground="#181818", font=("Segoe UI", 10))
+        style.configure("Muted.TLabel", background="#f6f6f3", foreground="#686760", font=("Segoe UI", 9))
+        style.configure("Stat.TLabel", background="#f6f6f3", foreground="#050505", font=("Segoe UI", 18, "bold"))
+        style.configure("Dashboard.TButton", font=("Segoe UI", 9))
 
     def _build(self) -> None:
-        shell = ttk.Frame(self.window, padding=24, style="Dashboard.TFrame")
+        shell = ttk.Frame(self.window, padding=18, style="Dashboard.TFrame")
         shell.pack(fill="both", expand=True)
         header = ttk.Frame(shell, style="Dashboard.TFrame")
-        header.pack(fill="x", pady=(0, 18))
-        title_block = ttk.Frame(header, style="Dashboard.TFrame")
-        title_block.pack(side="left", fill="x", expand=True)
-        ttk.Label(title_block, text="Wisperlow", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_block, text="Local dictation control center", style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        header.pack(fill="x", pady=(0, 14))
+        ttk.Label(header, text="Wisperlow", style="Stat.TLabel").pack(side="left")
+        ttk.Label(header, text="Local dictation control center", style="Muted.TLabel").pack(side="left", padx=(12, 0), pady=(8, 0))
         ttk.Button(header, text="Refresh", command=self.refresh, style="Dashboard.TButton").pack(side="right")
 
         notebook = ttk.Notebook(shell)
@@ -1211,41 +1185,17 @@ class DashboardWindow:
             ("dashboard_hotkey", "Dashboard"),
             ("history", "History"),
         ]:
-            row = ttk.Frame(left, style="Card.TFrame")
+            row = ttk.Frame(left, style="Dashboard.TFrame")
             row.pack(fill="x", pady=3)
-            ttk.Label(row, text=f"{label}:", width=14, style="CardMuted.TLabel").pack(side="left")
+            ttk.Label(row, text=f"{label}:", width=14, style="Muted.TLabel").pack(side="left")
             self.vars[f"overview_{key}"] = tk.StringVar(value="-")
-            ttk.Label(row, textvariable=self.vars[f"overview_{key}"], style="Card.TLabel").pack(side="left", fill="x", expand=True)
+            ttk.Label(row, textvariable=self.vars[f"overview_{key}"], style="Dashboard.TLabel").pack(side="left", fill="x", expand=True)
 
-        ttk.Label(right, text="Last result", style="CardMuted.TLabel").pack(anchor="w")
-        self.widgets["overview_last_result"] = tk.Text(
-            right,
-            height=5,
-            wrap="word",
-            relief="flat",
-            bg=self.PANEL_ALT,
-            fg=self.TEXT,
-            insertbackground=self.TEXT,
-            padx=10,
-            pady=8,
-            highlightthickness=1,
-            highlightbackground=self.BORDER,
-        )
+        ttk.Label(right, text="Last result", style="Muted.TLabel").pack(anchor="w")
+        self.widgets["overview_last_result"] = tk.Text(right, height=5, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
         self.widgets["overview_last_result"].pack(fill="both", expand=True, pady=(3, 8))
-        ttk.Label(right, text="Last error", style="CardMuted.TLabel").pack(anchor="w")
-        self.widgets["overview_last_error"] = tk.Text(
-            right,
-            height=3,
-            wrap="word",
-            relief="flat",
-            bg="#1a1113",
-            fg=self.DANGER,
-            insertbackground=self.TEXT,
-            padx=10,
-            pady=8,
-            highlightthickness=1,
-            highlightbackground="#3a2025",
-        )
+        ttk.Label(right, text="Last error", style="Muted.TLabel").pack(anchor="w")
+        self.widgets["overview_last_error"] = tk.Text(right, height=3, wrap="word", relief="flat", bg="#fff7f7", fg="#7a1d1d")
         self.widgets["overview_last_error"].pack(fill="both", expand=True, pady=(3, 0))
 
     def _build_history_tab(self) -> None:
@@ -1280,19 +1230,7 @@ class DashboardWindow:
         self.widgets["history_tree"] = tree
 
         ttk.Label(self.history_tab, text="Selected item", style="Muted.TLabel").pack(anchor="w", pady=(12, 3))
-        self.widgets["history_detail"] = tk.Text(
-            self.history_tab,
-            height=7,
-            wrap="word",
-            relief="flat",
-            bg=self.PANEL_ALT,
-            fg=self.TEXT,
-            insertbackground=self.TEXT,
-            padx=10,
-            pady=8,
-            highlightthickness=1,
-            highlightbackground=self.BORDER,
-        )
+        self.widgets["history_detail"] = tk.Text(self.history_tab, height=7, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
         self.widgets["history_detail"].pack(fill="x")
 
     def _build_settings_tab(self) -> None:
@@ -1352,18 +1290,7 @@ class DashboardWindow:
         actions.pack(fill="x", pady=(0, 10))
         ttk.Button(actions, text="Refresh", command=self.refresh_diagnostics, style="Dashboard.TButton").pack(side="left")
         ttk.Button(actions, text="Open Data Folder", command=self.open_data_folder, style="Dashboard.TButton").pack(side="left", padx=(8, 0))
-        self.widgets["diagnostics_text"] = tk.Text(
-            self.diagnostics_tab,
-            wrap="word",
-            relief="flat",
-            bg=self.PANEL_ALT,
-            fg=self.TEXT,
-            insertbackground=self.TEXT,
-            padx=12,
-            pady=10,
-            highlightthickness=1,
-            highlightbackground=self.BORDER,
-        )
+        self.widgets["diagnostics_text"] = tk.Text(self.diagnostics_tab, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
         self.widgets["diagnostics_text"].pack(fill="both", expand=True)
 
     def show(self) -> None:
