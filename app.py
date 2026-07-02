@@ -15,8 +15,10 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 import wave
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -61,6 +63,7 @@ CONFIG_DIR = (
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = CONFIG_DIR / "wisperlow_config.json"
 USAGE_PATH = CONFIG_DIR / "wisperlow_usage.json"
+HISTORY_PATH = CONFIG_DIR / "wisperlow_history.json"
 
 DEFAULT_CONFIG = {
     "toggle_hotkey": "ctrl+alt+p",
@@ -86,6 +89,11 @@ DEFAULT_CONFIG = {
     "ollama_num_ctx": 2048,
     "auto_insert": True,
     "restore_clipboard": True,
+    "dashboard_hotkey": "ctrl+alt+d",
+    "history_enabled": True,
+    "history_limit": 25,
+    "app_paused": False,
+    "paste_focus_delay_seconds": 0.12,
     "target_processing_seconds": 2.0,
     "stt_initial_prompt": (
         "Desktop dictation. Prefer clear English words and technical terms: "
@@ -205,6 +213,63 @@ def ct2_model_ready(path: Path) -> bool:
 
 def save_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+class HistoryStore:
+    def __init__(self, path: Path, config: dict) -> None:
+        self.path = path
+        self.config = config
+
+    def load(self) -> list[dict]:
+        data = load_json(self.path, {"items": []})
+        items = data.get("items", [])
+        return items if isinstance(items, list) else []
+
+    def save_items(self, items: list[dict]) -> None:
+        limit = max(1, int(self.config.get("history_limit", 25)))
+        save_json(self.path, {"items": items[:limit]})
+
+    def add(
+        self,
+        *,
+        status: str,
+        raw: str = "",
+        final: str = "",
+        command: str = "",
+        mode: str = "",
+        window_title: str = "",
+        duration_seconds: float = 0.0,
+        timings: Optional[dict[str, float]] = None,
+        error: str = "",
+    ) -> Optional[dict]:
+        if not self.config.get("history_enabled", True):
+            return None
+        item = {
+            "id": uuid.uuid4().hex,
+            "created_at": utc_now_iso(),
+            "status": status,
+            "raw": raw,
+            "final": final,
+            "command": command,
+            "mode": mode,
+            "window_title": window_title,
+            "duration_seconds": round(float(duration_seconds or 0.0), 3),
+            "timings": timings or {},
+            "error": error,
+        }
+        items = [item] + self.load()
+        self.save_items(items)
+        return item
+
+    def delete(self, item_id: str) -> None:
+        self.save_items([item for item in self.load() if item.get("id") != item_id])
+
+    def clear(self) -> None:
+        self.save_items([])
 
 
 def normalize_spaces(text: str) -> str:
