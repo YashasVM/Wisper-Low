@@ -58,9 +58,6 @@ Microphone -> Local Whisper STT -> Text cleanup -> Clipboard paste -> Active app
 | **Local Speech Model** | Bundles a local Whisper model for offline-first transcription |
 | **Smart Cleanup** | Improves punctuation, grammar, repeated words, and sentence flow before pasting |
 | **Floating Pill UI** | Small black waveform pill while listening and processing |
-| **Dashboard** | Classic local control center for status, history, settings, and diagnostics |
-| **System Tray** | Tray menu for dashboard access, dictation controls, pause/resume, and quit |
-| **Local History** | Keeps recent dictation results locally for copy, reinsert, delete, and clear |
 | **Active App Paste** | Restores focus and inserts text into the currently active text field |
 | **Slash Modes** | Supports `/email`, `/professional`, `/casual`, `/slack`, `/short`, and `/raw` |
 | **Cancel Flow** | Cancel dictation without pasting using `Ctrl+Alt+Backspace` |
@@ -102,7 +99,6 @@ Wisperlow processes the transcript, cleans it, and pastes the final result into 
 | `Ctrl+Alt+P` | Start or stop dictation |
 | `Ctrl+Alt+Space` | Alternate start or stop dictation |
 | `Ctrl+Alt+Backspace` | Cancel dictation |
-| `Ctrl+Alt+D` | Open dashboard |
 
 If one hotkey is already used by another app, try the alternate hotkey.
 
@@ -157,8 +153,6 @@ Clipboard Paste Into Active App
 | Component | Current Prototype |
 |---|---|
 | App Shell | Python 3.11 background app |
-| Dashboard | Tkinter local control center with overview, history, settings, and diagnostics |
-| Tray | `pystray` system tray menu |
 | Overlay | Tkinter + Pillow-rendered high-DPI pill/blob |
 | Speech-to-Text | `faster-whisper` local model |
 | Text Cleanup | Deterministic rewrite pipeline with optional Ollama |
@@ -175,7 +169,6 @@ Wisperlow is designed to run locally by default.
 |---|---|
 | Microphone audio | Captured locally while dictation is active |
 | Transcript text | Processed locally |
-| Dictation history | Stored locally in `wisperlow_history.json`, enabled by default, capped at 25 items |
 | Cloud services | Not used by default |
 | Ollama rewrite | Optional and local when pointed at `127.0.0.1` |
 
@@ -222,14 +215,12 @@ release\WisperlowSetup-0.1.0.exe
 - [x] Local Whisper transcription
 - [x] Floating waveform pill
 - [x] Processing pill
-- [x] Dashboard overview, history, settings, and diagnostics
-- [x] System tray menu
 - [x] Windows installer
 - [x] GitHub release asset
 - [ ] Signed Windows installer
 - [ ] Better first-run permissions screen
 - [ ] Built-in model manager
-- [ ] Dashboard polish
+- [ ] Usage dashboard
 - [ ] Faster local rewrite model selection
 
 ---
