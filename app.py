@@ -128,7 +128,7 @@ class DictationContext:
     style_hint: str = ""
 
 
-def load_json(path: Path, default: dict) -> dict:
+def load_json(path: Path, default: dict, normalizer: Optional[Callable[[dict], dict]] = None) -> dict:
     if not path.exists():
         path.write_text(json.dumps(default, indent=2), encoding="utf-8")
         return dict(default)
@@ -141,7 +141,7 @@ def load_json(path: Path, default: dict) -> dict:
         return dict(default)
     merged = dict(default)
     merged.update(existing)
-    return normalize_config(merged)
+    return normalizer(merged) if normalizer else merged
 
 
 def normalize_config(config: dict) -> dict:
@@ -170,6 +170,14 @@ def normalize_config(config: dict) -> dict:
     if int(config.get("stt_best_of", 1)) > 2:
         config["stt_best_of"] = 1
     return config
+
+
+def normalize_usage(usage: dict) -> dict:
+    normalized = dict(DEFAULT_USAGE)
+    for key in DEFAULT_USAGE:
+        if key in usage:
+            normalized[key] = usage[key]
+    return normalized
 
 
 def hf_ct2_model_cached(model_name: str) -> bool:
@@ -1006,9 +1014,9 @@ class Inserter:
 
 class WisperlowApp:
     def __init__(self) -> None:
-        self.config = load_json(CONFIG_PATH, DEFAULT_CONFIG)
+        self.config = load_json(CONFIG_PATH, DEFAULT_CONFIG, normalize_config)
         save_json(CONFIG_PATH, self.config)
-        self.usage = load_json(USAGE_PATH, DEFAULT_USAGE)
+        self.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("Wisperlow")
@@ -1137,7 +1145,7 @@ class WisperlowApp:
 
 
 def self_test() -> int:
-    config = load_json(CONFIG_PATH, DEFAULT_CONFIG)
+    config = load_json(CONFIG_PATH, DEFAULT_CONFIG, normalize_config)
     save_json(CONFIG_PATH, config)
     sample = "um hello there this is is a test new paragraph can you please fix this sentence"
     cleaned = deterministic_cleanup(sample)
