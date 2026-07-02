@@ -49,6 +49,11 @@ except Exception:
     pyperclip = None
 
 try:
+    import pystray  # type: ignore
+except Exception:
+    pystray = None
+
+try:
     import sounddevice as sd  # type: ignore
 except Exception:
     sd = None
@@ -1536,15 +1541,19 @@ class WisperlowApp:
         self.rewriter = Rewriter(self.config)
         self.inserter = Inserter(self.config)
         self.dashboard = DashboardWindow(self)
+        self._closing = False
+        self.tray_icon = None
         self.processing = False
         self.target_hwnd: Optional[int] = None
         self.context = DictationContext()
         self._register_hotkeys()
         self.root.after(100, self._drain_events)
         self.bubble.hide()
+        self._start_tray()
 
     def post(self, callback: Callable[[], None]) -> None:
-        self.events.put(callback)
+        if not self._closing:
+            self.events.put(callback)
 
     def _register_hotkeys(self) -> None:
         if keyboard is None:
@@ -1568,13 +1577,14 @@ class WisperlowApp:
                 self.bubble.hide_later(1600)
 
     def _drain_events(self) -> None:
-        while True:
+        while not self._closing:
             try:
                 callback = self.events.get_nowait()
             except queue.Empty:
                 break
             callback()
-        self.root.after(50, self._drain_events)
+        if not self._closing:
+            self.root.after(50, self._drain_events)
 
     def toggle_recording(self) -> None:
         if self.config.get("app_paused", False):
@@ -1590,6 +1600,66 @@ class WisperlowApp:
 
     def show_dashboard(self) -> None:
         self.dashboard.show()
+
+    def toggle_pause(self) -> None:
+        self.config["app_paused"] = not bool(self.config.get("app_paused", False))
+        save_json(CONFIG_PATH, self.config)
+        state = "paused" if self.config["app_paused"] else "ready"
+        self.bubble.show("idle", state)
+        self.bubble.hide_later(650)
+
+    def _start_tray(self) -> None:
+        if pystray is None or Image is None:
+            return
+        try:
+            menu = pystray.Menu(
+                pystray.MenuItem("Dashboard", lambda _icon, _item: self.post(self.show_dashboard), default=True),
+                pystray.MenuItem("Start/Stop Dictation", lambda _icon, _item: self.post(self.toggle_recording)),
+                pystray.MenuItem("Cancel Recording", lambda _icon, _item: self.post(self.cancel_recording)),
+                pystray.MenuItem("Pause/Resume", lambda _icon, _item: self.post(self.toggle_pause)),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Open Data Folder", lambda _icon, _item: self.post(self.dashboard.open_data_folder)),
+                pystray.MenuItem("Quit", lambda _icon, _item: self.post(self.quit_app)),
+            )
+            self.tray_icon = pystray.Icon("Wisperlow", self._tray_image(), "Wisperlow", menu)
+            threading.Thread(target=self.tray_icon.run, name="WisperlowTray", daemon=True).start()
+        except Exception:
+            self.tray_icon = None
+
+    def _tray_image(self):  # noqa: ANN202
+        icon_path = RESOURCE_DIR / "assets" / "wisperlow.png"
+        if icon_path.exists():
+            return Image.open(icon_path)
+        return Image.new("RGB", (64, 64), "#050505")
+
+    def quit_app(self) -> None:
+        if self._closing:
+            return
+        self._closing = True
+        try:
+            self.recorder.cancel()
+        except Exception:
+            pass
+        if keyboard is not None:
+            try:
+                keyboard.unhook_all_hotkeys()
+            except Exception:
+                pass
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+            self.tray_icon = None
+        try:
+            self.dashboard.hide()
+        except Exception:
+            pass
+        try:
+            self.bubble.window.destroy()
+        except Exception:
+            pass
+        self.root.after_idle(self.root.destroy)
 
     def start_recording(self) -> None:
         self.target_hwnd = self.inserter.capture_active_window()
