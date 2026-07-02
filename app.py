@@ -1184,7 +1184,39 @@ class DashboardWindow:
         self.widgets["overview_last_error"].pack(fill="both", expand=True, pady=(3, 0))
 
     def _build_history_tab(self) -> None:
-        ttk.Label(self.history_tab, text="Recent dictations will appear here.", style="Dashboard.TLabel").pack(anchor="w")
+        toolbar = ttk.Frame(self.history_tab, style="Dashboard.TFrame")
+        toolbar.pack(fill="x", pady=(0, 10))
+        for label, command in [
+            ("Refresh", self.refresh_history),
+            ("Copy Final", self.copy_selected_history),
+            ("Reinsert", self.reinsert_selected_history),
+            ("Delete", self.delete_selected_history),
+            ("Clear All", self.clear_history),
+        ]:
+            ttk.Button(toolbar, text=label, command=command, style="Dashboard.TButton").pack(side="left", padx=(0, 6))
+
+        table_frame = ttk.Frame(self.history_tab, style="Dashboard.TFrame")
+        table_frame.pack(fill="both", expand=True)
+        columns = ("created", "status", "words", "preview")
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
+        for column, heading, width in [
+            ("created", "Created", 145),
+            ("status", "Status", 90),
+            ("words", "Words", 70),
+            ("preview", "Preview", 420),
+        ]:
+            tree.heading(column, text=heading)
+            tree.column(column, width=width, stretch=column == "preview")
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        tree.bind("<<TreeviewSelect>>", lambda _event: self.show_history_details())
+        self.widgets["history_tree"] = tree
+
+        ttk.Label(self.history_tab, text="Selected item", style="Muted.TLabel").pack(anchor="w", pady=(12, 3))
+        self.widgets["history_detail"] = tk.Text(self.history_tab, height=7, wrap="word", relief="flat", bg="#ffffff", fg="#181818")
+        self.widgets["history_detail"].pack(fill="x")
 
     def _build_settings_tab(self) -> None:
         ttk.Label(self.settings_tab, text="Editable settings will appear here.", style="Dashboard.TLabel").pack(anchor="w")
@@ -1207,6 +1239,7 @@ class DashboardWindow:
 
     def refresh(self) -> None:
         self.refresh_overview()
+        self.refresh_history()
 
     def refresh_overview(self) -> None:
         self.app.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
@@ -1235,6 +1268,87 @@ class DashboardWindow:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
         widget.configure(state="disabled")
+
+    def refresh_history(self) -> None:
+        tree = self.widgets.get("history_tree")
+        if not isinstance(tree, ttk.Treeview):
+            return
+        tree.delete(*tree.get_children())
+        for item in self.app.history.load():
+            text = item.get("final") or item.get("raw") or item.get("error") or item.get("command") or ""
+            preview = normalize_spaces(str(text))[:120]
+            words = word_count(str(item.get("final") or item.get("raw") or ""))
+            tree.insert(
+                "",
+                "end",
+                iid=str(item.get("id")),
+                values=(item.get("created_at", ""), item.get("status", ""), words, preview),
+            )
+        self.show_history_details()
+
+    def _selected_history_item(self) -> Optional[dict]:
+        tree = self.widgets.get("history_tree")
+        if not isinstance(tree, ttk.Treeview):
+            return None
+        selected = tree.selection()
+        if not selected:
+            return None
+        item_id = selected[0]
+        return next((item for item in self.app.history.load() if item.get("id") == item_id), None)
+
+    def show_history_details(self) -> None:
+        item = self._selected_history_item()
+        if not item:
+            self._replace_text("history_detail", "")
+            return
+        lines = [
+            f"Status: {item.get('status', '')}",
+            f"Created: {item.get('created_at', '')}",
+            f"Mode: {item.get('mode', '')}",
+            f"Window: {item.get('window_title', '')}",
+            "",
+            "Final:",
+            str(item.get("final", "")),
+            "",
+            "Raw:",
+            str(item.get("raw", "")),
+            "",
+            "Error:",
+            str(item.get("error", "")),
+        ]
+        self._replace_text("history_detail", "\n".join(lines))
+
+    def copy_selected_history(self) -> None:
+        item = self._selected_history_item()
+        text = str((item or {}).get("final") or (item or {}).get("raw") or (item or {}).get("error") or "")
+        if not text:
+            return
+        if pyperclip is None:
+            messagebox.showerror("Wisperlow", "pyperclip is not available.")
+            return
+        pyperclip.copy(text)
+
+    def reinsert_selected_history(self) -> None:
+        item = self._selected_history_item()
+        text = str((item or {}).get("final") or "")
+        if not text:
+            return
+        try:
+            self.app.inserter.insert_text(text, self.app.target_hwnd)
+        except Exception as exc:
+            messagebox.showerror("Wisperlow", str(exc))
+
+    def delete_selected_history(self) -> None:
+        item = self._selected_history_item()
+        if not item:
+            return
+        self.app.history.delete(str(item.get("id", "")))
+        self.refresh_history()
+
+    def clear_history(self) -> None:
+        if messagebox.askyesno("Wisperlow", "Clear all local dictation history?"):
+            self.app.history.clear()
+            self.refresh_history()
 
     def _schedule_refresh(self) -> None:
         if self._refresh_job:
