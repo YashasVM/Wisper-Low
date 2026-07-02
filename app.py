@@ -1084,28 +1084,33 @@ class Inserter:
 
 
 class DashboardWindow:
-    BG = "#0d0f12"
-    PANEL = "#15181d"
-    PANEL_ALT = "#101317"
-    BORDER = "#252a31"
-    TEXT = "#f4f5f6"
-    MUTED = "#9aa1aa"
-    ACCENT = "#e8eaed"
-    DANGER = "#ff6b6b"
+    BG = "#f3f2ef"
+    SIDEBAR = "#f7f7f5"
+    PANEL = "#ffffff"
+    PANEL_ALT = "#f6f5f2"
+    BORDER = "#e7e4dc"
+    TEXT = "#1f1f22"
+    MUTED = "#77746d"
+    ACCENT = "#241f2d"
+    SOFT_ACCENT = "#eee8ff"
+    DANGER = "#9b1c1c"
 
     def __init__(self, app: "WisperlowApp") -> None:
         self.app = app
         self.root = app.root
         self.window = tk.Toplevel(self.root)
         self.window.title("Wisperlow Dashboard")
-        self.window.geometry("940x640")
-        self.window.minsize(820, 560)
+        self.window.geometry("980x660")
+        self.window.minsize(880, 580)
         self.window.configure(bg=self.BG)
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.withdraw()
 
         self.vars: dict[str, tk.Variable] = {}
         self.widgets: dict[str, object] = {}
+        self.nav_buttons: dict[str, tk.Button] = {}
+        self.content_frames: dict[str, ttk.Frame] = {}
+        self.current_tab = "home"
         self._refresh_job: Optional[str] = None
 
         self._configure_style()
@@ -1119,59 +1124,123 @@ class DashboardWindow:
             pass
         style.configure(".", font=("Segoe UI", 10))
         style.configure("Dashboard.TFrame", background=self.BG)
+        style.configure("Sidebar.TFrame", background=self.SIDEBAR)
         style.configure("Card.TFrame", background=self.PANEL, relief="flat")
         style.configure("Panel.TLabelframe", background=self.PANEL, bordercolor=self.BORDER, lightcolor=self.BORDER, darkcolor=self.BORDER, relief="solid")
-        style.configure("Panel.TLabelframe.Label", background=self.BG, foreground=self.TEXT, font=("Segoe UI", 10, "bold"))
+        style.configure("Panel.TLabelframe.Label", background=self.PANEL, foreground=self.TEXT, font=("Segoe UI Semibold", 10))
         style.configure("Dashboard.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI", 10))
         style.configure("Card.TLabel", background=self.PANEL, foreground=self.TEXT, font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=self.BG, foreground=self.MUTED, font=("Segoe UI", 9))
         style.configure("CardMuted.TLabel", background=self.PANEL, foreground=self.MUTED, font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI Semibold", 22))
-        style.configure("Stat.TLabel", background=self.PANEL, foreground=self.ACCENT, font=("Segoe UI Semibold", 22))
-        style.configure("Dashboard.TButton", background="#20242b", foreground=self.TEXT, bordercolor="#303640", focusthickness=0, focuscolor="#20242b", padding=(12, 7), font=("Segoe UI", 9))
-        style.map("Dashboard.TButton", background=[("active", "#2a3038"), ("pressed", "#343b45")], foreground=[("disabled", "#6f7680")])
-        style.configure("TNotebook", background=self.BG, borderwidth=0, tabmargins=(0, 6, 0, 0))
-        style.configure("TNotebook.Tab", background=self.BG, foreground=self.MUTED, borderwidth=0, padding=(14, 8), font=("Segoe UI Semibold", 9))
-        style.map("TNotebook.Tab", background=[("selected", self.PANEL)], foreground=[("selected", self.TEXT), ("active", self.TEXT)])
-        style.configure("Treeview", background=self.PANEL_ALT, fieldbackground=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, rowheight=28, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=self.PANEL, foreground=self.MUTED, relief="flat", font=("Segoe UI Semibold", 9))
-        style.map("Treeview", background=[("selected", "#2b3440")], foreground=[("selected", self.TEXT)])
-        style.configure("TEntry", fieldbackground=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, insertcolor=self.TEXT, padding=(8, 5))
-        style.configure("TCombobox", fieldbackground=self.PANEL_ALT, background=self.PANEL_ALT, foreground=self.TEXT, bordercolor=self.BORDER, arrowcolor=self.TEXT, padding=(8, 5))
+        style.configure("Title.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI Semibold", 24))
+        style.configure("PageTitle.TLabel", background=self.BG, foreground=self.TEXT, font=("Segoe UI Semibold", 22))
+        style.configure("Stat.TLabel", background=self.PANEL, foreground=self.ACCENT, font=("Segoe UI Semibold", 24))
+        style.configure("Dashboard.TButton", background="#efede8", foreground=self.TEXT, bordercolor=self.BORDER, focusthickness=0, focuscolor="#efede8", padding=(12, 7), font=("Segoe UI Semibold", 9))
+        style.map("Dashboard.TButton", background=[("active", "#e6e2da"), ("pressed", "#ddd8cf")], foreground=[("disabled", "#9b9891")])
+        style.configure("Primary.TButton", background=self.ACCENT, foreground="#ffffff", bordercolor=self.ACCENT, focusthickness=0, focuscolor=self.ACCENT, padding=(14, 8), font=("Segoe UI Semibold", 9))
+        style.map("Primary.TButton", background=[("active", "#342c40"), ("pressed", "#17131f")])
+        style.configure("Treeview", background=self.PANEL, fieldbackground=self.PANEL, foreground=self.TEXT, bordercolor=self.BORDER, rowheight=34, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=self.PANEL_ALT, foreground=self.MUTED, relief="flat", font=("Segoe UI Semibold", 9))
+        style.map("Treeview", background=[("selected", self.SOFT_ACCENT)], foreground=[("selected", self.TEXT)])
+        style.configure("TEntry", fieldbackground=self.PANEL, foreground=self.TEXT, bordercolor=self.BORDER, insertcolor=self.TEXT, padding=(8, 6))
+        style.configure("TCombobox", fieldbackground=self.PANEL, background=self.PANEL, foreground=self.TEXT, bordercolor=self.BORDER, arrowcolor=self.TEXT, padding=(8, 6))
         style.configure("TCheckbutton", background=self.BG, foreground=self.TEXT, focuscolor=self.BG)
 
     def _build(self) -> None:
-        shell = ttk.Frame(self.window, padding=24, style="Dashboard.TFrame")
+        shell = ttk.Frame(self.window, padding=0, style="Dashboard.TFrame")
         shell.pack(fill="both", expand=True)
-        header = ttk.Frame(shell, style="Dashboard.TFrame")
-        header.pack(fill="x", pady=(0, 18))
-        title_block = ttk.Frame(header, style="Dashboard.TFrame")
-        title_block.pack(side="left", fill="x", expand=True)
-        ttk.Label(title_block, text="Wisperlow", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_block, text="Local dictation control center", style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
-        ttk.Button(header, text="Refresh", command=self.refresh, style="Dashboard.TButton").pack(side="right")
+        self.sidebar = ttk.Frame(shell, width=190, padding=(16, 18), style="Sidebar.TFrame")
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.pack_propagate(False)
+        self.main = ttk.Frame(shell, padding=(32, 28), style="Dashboard.TFrame")
+        self.main.pack(side="left", fill="both", expand=True)
 
-        notebook = ttk.Notebook(shell)
-        notebook.pack(fill="both", expand=True)
-        self.widgets["notebook"] = notebook
+        self._build_sidebar()
 
-        self.overview_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.history_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.settings_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.diagnostics_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        notebook.add(self.overview_tab, text="Overview")
-        notebook.add(self.history_tab, text="History")
-        notebook.add(self.settings_tab, text="Settings")
-        notebook.add(self.diagnostics_tab, text="Diagnostics")
+        self.overview_tab = self._make_page("home")
+        self.history_tab = self._make_page("history")
+        self.settings_tab = self._make_page("settings")
+        self.diagnostics_tab = self._make_page("diagnostics")
 
         self._build_overview_tab()
         self._build_history_tab()
         self._build_settings_tab()
         self._build_diagnostics_tab()
+        self._show_tab("home")
+
+    def _build_sidebar(self) -> None:
+        brand = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
+        brand.pack(fill="x", pady=(0, 24))
+        mark = tk.Label(brand, text="W", bg=self.ACCENT, fg="#ffffff", width=3, height=1, font=("Segoe UI Semibold", 14))
+        mark.pack(side="left")
+        tk.Label(brand, text="Wisperlow", bg=self.SIDEBAR, fg=self.TEXT, font=("Segoe UI Semibold", 15)).pack(side="left", padx=(9, 0))
+
+        for key, label in [
+            ("home", "Home"),
+            ("history", "History"),
+            ("settings", "Settings"),
+            ("diagnostics", "Diagnostics"),
+        ]:
+            button = tk.Button(
+                self.sidebar,
+                text=label,
+                anchor="w",
+                relief="flat",
+                bd=0,
+                padx=12,
+                pady=10,
+                bg=self.SIDEBAR,
+                fg=self.TEXT,
+                activebackground="#ebe9e4",
+                activeforeground=self.TEXT,
+                font=("Segoe UI Semibold", 10),
+                command=lambda key=key: self._show_tab(key),
+            )
+            button.pack(fill="x", pady=2)
+            self.nav_buttons[key] = button
+
+        spacer = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
+        spacer.pack(fill="both", expand=True)
+        local_card = tk.Frame(self.sidebar, bg="#f0eee9", highlightthickness=1, highlightbackground=self.BORDER)
+        local_card.pack(fill="x", pady=(12, 14))
+        tk.Label(local_card, text="Local-first", bg="#f0eee9", fg=self.TEXT, font=("Segoe UI Semibold", 10)).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(local_card, text="History stays on this PC", bg="#f0eee9", fg=self.MUTED, font=("Segoe UI", 8), wraplength=140, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
+        tk.Label(self.sidebar, text="Version 0.1", bg=self.SIDEBAR, fg="#aaa69d", font=("Segoe UI", 8)).pack(anchor="w")
+
+    def _make_page(self, key: str) -> ttk.Frame:
+        frame = ttk.Frame(self.main, style="Dashboard.TFrame")
+        self.content_frames[key] = frame
+        return frame
+
+    def _show_tab(self, key: str) -> None:
+        self.current_tab = key
+        for tab_key, frame in self.content_frames.items():
+            if tab_key == key:
+                frame.pack(fill="both", expand=True)
+            else:
+                frame.pack_forget()
+        for tab_key, button in self.nav_buttons.items():
+            selected = tab_key == key
+            button.configure(bg="#ebe9e4" if selected else self.SIDEBAR, fg=self.TEXT if selected else "#5f5c55")
+        self.refresh()
 
     def _build_overview_tab(self) -> None:
+        ttk.Label(self.overview_tab, text="Welcome back", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(self.overview_tab, text="Hold your dictation hotkey and speak into any text field.", style="Muted.TLabel").pack(anchor="w", pady=(4, 18))
+
+        prompt = tk.Frame(self.overview_tab, bg=self.PANEL_ALT, highlightthickness=1, highlightbackground=self.BORDER)
+        prompt.pack(fill="x", pady=(0, 18))
+        tk.Label(prompt, text="Voice dictation in any app", bg=self.PANEL_ALT, fg=self.TEXT, font=("Segoe UI Semibold", 10)).pack(anchor="w", padx=16, pady=(14, 2))
+        tk.Label(
+            prompt,
+            text=f"Press {self.app.config.get('toggle_hotkey', 'ctrl+alt+p')} to start. Press {self.app.config.get('dashboard_hotkey', 'ctrl+alt+d')} for this Hub.",
+            bg=self.PANEL_ALT,
+            fg=self.MUTED,
+            font=("Segoe UI", 9),
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
         actions = ttk.Frame(self.overview_tab, style="Dashboard.TFrame")
-        actions.pack(fill="x", pady=(0, 10))
+        actions.pack(fill="x", pady=(0, 14))
         for label, command in [
             ("Start/Stop", self.app.toggle_recording),
             ("Cancel", self.app.cancel_recording),
@@ -1249,6 +1318,8 @@ class DashboardWindow:
         self.widgets["overview_last_error"].pack(fill="both", expand=True, pady=(3, 0))
 
     def _build_history_tab(self) -> None:
+        ttk.Label(self.history_tab, text="History", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(self.history_tab, text="Private local transcripts stored on this device.", style="Muted.TLabel").pack(anchor="w", pady=(4, 16))
         toolbar = ttk.Frame(self.history_tab, style="Dashboard.TFrame")
         toolbar.pack(fill="x", pady=(0, 10))
         for label, command in [
@@ -1296,6 +1367,8 @@ class DashboardWindow:
         self.widgets["history_detail"].pack(fill="x")
 
     def _build_settings_tab(self) -> None:
+        ttk.Label(self.settings_tab, text="Settings", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(self.settings_tab, text="Tune controls, model behavior, cleanup, insertion, and local history.", style="Muted.TLabel").pack(anchor="w", pady=(4, 16))
         self.setting_keys = [
             "toggle_hotkey",
             "alternate_toggle_hotkey",
@@ -1348,6 +1421,8 @@ class DashboardWindow:
         ttk.Label(actions, textvariable=self.vars["settings_status"], style="Muted.TLabel").pack(side="left", padx=(12, 0))
 
     def _build_diagnostics_tab(self) -> None:
+        ttk.Label(self.diagnostics_tab, text="Diagnostics", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(self.diagnostics_tab, text="Check runtime health and local file paths.", style="Muted.TLabel").pack(anchor="w", pady=(4, 16))
         actions = ttk.Frame(self.diagnostics_tab, style="Dashboard.TFrame")
         actions.pack(fill="x", pady=(0, 10))
         ttk.Button(actions, text="Refresh", command=self.refresh_diagnostics, style="Dashboard.TButton").pack(side="left")
@@ -1623,12 +1698,12 @@ class WisperlowApp:
         self.transcriber = Transcriber(self.config, lambda text: self.post(lambda: self.bubble.show("processing", text)))
         self.rewriter = Rewriter(self.config)
         self.inserter = Inserter(self.config)
-        self.dashboard = DashboardWindow(self)
-        self._closing = False
-        self.tray_icon = None
         self.processing = False
         self.target_hwnd: Optional[int] = None
         self.context = DictationContext()
+        self.dashboard = DashboardWindow(self)
+        self._closing = False
+        self.tray_icon = None
         self._register_hotkeys()
         self.root.after(100, self._drain_events)
         self.bubble.hide()
