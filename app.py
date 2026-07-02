@@ -24,7 +24,6 @@ from typing import Callable, Optional
 
 try:
     import tkinter as tk
-    from tkinter import messagebox, ttk
 except Exception as exc:  # pragma: no cover
     raise SystemExit(f"Tkinter is required for the prototype UI: {exc}")
 
@@ -1078,107 +1077,6 @@ class Inserter:
             keyboard.send("enter")
 
 
-class DashboardWindow:
-    def __init__(self, app: "WisperlowApp") -> None:
-        self.app = app
-        self.root = app.root
-        self.window = tk.Toplevel(self.root)
-        self.window.title("Wisperlow Dashboard")
-        self.window.geometry("820x560")
-        self.window.minsize(720, 480)
-        self.window.configure(bg="#f6f6f3")
-        self.window.protocol("WM_DELETE_WINDOW", self.hide)
-        self.window.withdraw()
-
-        self.vars: dict[str, tk.Variable] = {}
-        self.widgets: dict[str, object] = {}
-        self._refresh_job: Optional[str] = None
-
-        self._configure_style()
-        self._build()
-
-    def _configure_style(self) -> None:
-        style = ttk.Style(self.window)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-        style.configure("Dashboard.TFrame", background="#f6f6f3")
-        style.configure("Panel.TLabelframe", background="#f6f6f3", bordercolor="#d8d6ce")
-        style.configure("Panel.TLabelframe.Label", background="#f6f6f3", foreground="#181818", font=("Segoe UI", 10, "bold"))
-        style.configure("Dashboard.TLabel", background="#f6f6f3", foreground="#181818", font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", background="#f6f6f3", foreground="#686760", font=("Segoe UI", 9))
-        style.configure("Stat.TLabel", background="#f6f6f3", foreground="#050505", font=("Segoe UI", 18, "bold"))
-        style.configure("Dashboard.TButton", font=("Segoe UI", 9))
-
-    def _build(self) -> None:
-        shell = ttk.Frame(self.window, padding=18, style="Dashboard.TFrame")
-        shell.pack(fill="both", expand=True)
-        header = ttk.Frame(shell, style="Dashboard.TFrame")
-        header.pack(fill="x", pady=(0, 14))
-        ttk.Label(header, text="Wisperlow", style="Stat.TLabel").pack(side="left")
-        ttk.Label(header, text="Local dictation control center", style="Muted.TLabel").pack(side="left", padx=(12, 0), pady=(8, 0))
-        ttk.Button(header, text="Refresh", command=self.refresh, style="Dashboard.TButton").pack(side="right")
-
-        notebook = ttk.Notebook(shell)
-        notebook.pack(fill="both", expand=True)
-        self.widgets["notebook"] = notebook
-
-        self.overview_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.history_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.settings_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        self.diagnostics_tab = ttk.Frame(notebook, padding=14, style="Dashboard.TFrame")
-        notebook.add(self.overview_tab, text="Overview")
-        notebook.add(self.history_tab, text="History")
-        notebook.add(self.settings_tab, text="Settings")
-        notebook.add(self.diagnostics_tab, text="Diagnostics")
-
-        self._build_overview_tab()
-        self._build_history_tab()
-        self._build_settings_tab()
-        self._build_diagnostics_tab()
-
-    def _build_overview_tab(self) -> None:
-        ttk.Label(self.overview_tab, text="Runtime summary will appear here.", style="Dashboard.TLabel").pack(anchor="w")
-
-    def _build_history_tab(self) -> None:
-        ttk.Label(self.history_tab, text="Recent dictations will appear here.", style="Dashboard.TLabel").pack(anchor="w")
-
-    def _build_settings_tab(self) -> None:
-        ttk.Label(self.settings_tab, text="Editable settings will appear here.", style="Dashboard.TLabel").pack(anchor="w")
-
-    def _build_diagnostics_tab(self) -> None:
-        ttk.Label(self.diagnostics_tab, text="Diagnostics will appear here.", style="Dashboard.TLabel").pack(anchor="w")
-
-    def show(self) -> None:
-        self.window.deiconify()
-        self.window.lift()
-        self.window.focus_force()
-        self.refresh()
-        self._schedule_refresh()
-
-    def hide(self) -> None:
-        if self._refresh_job:
-            self.root.after_cancel(self._refresh_job)
-            self._refresh_job = None
-        self.window.withdraw()
-
-    def refresh(self) -> None:
-        return
-
-    def _schedule_refresh(self) -> None:
-        if self._refresh_job:
-            self.root.after_cancel(self._refresh_job)
-        if self.window.state() != "withdrawn":
-            self._refresh_job = self.root.after(1000, self._scheduled_refresh)
-
-    def _scheduled_refresh(self) -> None:
-        self._refresh_job = None
-        if self.window.state() != "withdrawn":
-            self.refresh()
-            self._schedule_refresh()
-
-
 class WisperlowApp:
     def __init__(self) -> None:
         self.config = load_json(CONFIG_PATH, DEFAULT_CONFIG, normalize_config)
@@ -1194,7 +1092,6 @@ class WisperlowApp:
         self.transcriber = Transcriber(self.config, lambda text: self.post(lambda: self.bubble.show("processing", text)))
         self.rewriter = Rewriter(self.config)
         self.inserter = Inserter(self.config)
-        self.dashboard = DashboardWindow(self)
         self.processing = False
         self.target_hwnd: Optional[int] = None
         self.context = DictationContext()
@@ -1236,9 +1133,6 @@ class WisperlowApp:
             self.stop_recording()
         else:
             self.start_recording()
-
-    def show_dashboard(self) -> None:
-        self.dashboard.show()
 
     def start_recording(self) -> None:
         self.target_hwnd = self.inserter.capture_active_window()
