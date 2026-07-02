@@ -1,13 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [
-    ('models\\faster-whisper-small.en', 'models\\faster-whisper-small.en'),
-    ('assets\\wisperlow.png', 'assets'),
-    ('assets\\wisperlow.ico', 'assets'),
-]
+datas = [('models\\faster-whisper-small.en', 'models\\faster-whisper-small.en')]
 binaries = []
-hiddenimports = ['keyboard', 'pyperclip', 'PIL._tkinter_finder', 'pystray', 'pystray._base', 'pystray._win32']
+hiddenimports = ['keyboard', 'pyperclip', 'PIL._tkinter_finder']
 tmp_ret = collect_all('faster_whisper')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')
@@ -19,8 +15,6 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('av')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('sounddevice')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('pystray')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
