@@ -69,21 +69,21 @@ DEFAULT_CONFIG = {
     "sample_rate": 16000,
     "channels": 1,
     "stt_engine": "faster-whisper",
-    "stt_model": "medium.en",
+    "stt_model": "small.en",
     "stt_device": "cpu",
     "stt_compute_type": "int8",
-    "stt_beam_size": 5,
-    "stt_best_of": 5,
+    "stt_beam_size": 1,
+    "stt_best_of": 1,
     "rewrite_mode": "smart",
-    "ollama_enabled": True,
-    "ollama_autostart": True,
+    "ollama_enabled": False,
+    "ollama_autostart": False,
     "ollama_model": "qwen3:4b",
     "ollama_fallback_model": "qwen3:0.6b",
     "ollama_url": "http://127.0.0.1:11434/api/generate",
-    "ollama_ping_timeout_seconds": 0.5,
-    "ollama_timeout_seconds": 18.0,
-    "ollama_num_predict": 512,
-    "ollama_num_ctx": 4096,
+    "ollama_ping_timeout_seconds": 0.12,
+    "ollama_timeout_seconds": 2.0,
+    "ollama_num_predict": 160,
+    "ollama_num_ctx": 2048,
     "auto_insert": True,
     "restore_clipboard": True,
     "target_processing_seconds": 2.0,
@@ -145,19 +145,17 @@ def load_json(path: Path, default: dict) -> dict:
 
 
 def normalize_config(config: dict) -> dict:
-    # Migrate early prototype defaults into the quality-first local path.
+    # Migrate early prototype defaults into the fast local path.
     if config.get("toggle_hotkey") in {"ctrl+alt+space", "alt+ctrl+space"}:
         config["toggle_hotkey"] = "ctrl+alt+p"
         config["alternate_toggle_hotkey"] = "ctrl+alt+space"
-    if config.get("stt_model") in {"tiny.en", "tiny", "base.en", "base"}:
-        config["stt_model"] = "medium.en"
     bundled_candidates = [
         RESOURCE_DIR / "models" / "faster-whisper-small.en",
         APP_DIR / "_internal" / "models" / "faster-whisper-small.en",
         APP_DIR / "models" / "faster-whisper-small.en",
     ]
-    bundled_model = next((path for path in bundled_candidates if path.exists()), None)
-    if getattr(sys, "frozen", False) and bundled_model:
+    bundled_model = next((path for path in bundled_candidates if ct2_model_ready(path)), None)
+    if bundled_model and config.get("stt_model") in {"medium.en", "small.en", "tiny.en", "tiny", "base.en", "base"}:
         config["preferred_stt_model"] = config.get("stt_model", "medium.en")
         config["stt_model"] = str(bundled_model)
     if not hf_ct2_model_cached(str(config.get("stt_model", ""))) and hf_ct2_model_cached("small.en"):
@@ -167,31 +165,34 @@ def normalize_config(config: dict) -> dict:
         config["stt_device"] = "cpu"
     if config.get("stt_compute_type") == "auto":
         config["stt_compute_type"] = "int8"
-    if config.get("ollama_enabled") is False:
-        config["ollama_enabled"] = True
-    if config.get("ollama_model") in {"qwen3:0.6b", "phi4-mini"}:
-        config["ollama_model"] = "qwen3:4b"
-        config["ollama_fallback_model"] = "qwen3:0.6b"
-    if float(config.get("ollama_ping_timeout_seconds", 0.18)) < 0.5:
-        config["ollama_ping_timeout_seconds"] = 0.5
-    if float(config.get("ollama_timeout_seconds", 0.25)) < 18.0:
-        config["ollama_timeout_seconds"] = 18.0
-    if int(config.get("ollama_num_predict", 110)) < 512:
-        config["ollama_num_predict"] = 512
-    if int(config.get("ollama_num_ctx", 2048)) < 4096:
-        config["ollama_num_ctx"] = 4096
+    if int(config.get("stt_beam_size", 1)) > 2:
+        config["stt_beam_size"] = 1
+    if int(config.get("stt_best_of", 1)) > 2:
+        config["stt_best_of"] = 1
     return config
 
 
 def hf_ct2_model_cached(model_name: str) -> bool:
     if not model_name:
         return False
-    if Path(model_name).exists():
-        return True
+    model_path = Path(model_name)
+    if model_path.exists():
+        return ct2_model_ready(model_path)
     if "/" in model_name or "\\" in model_name:
         return False
     model_dir = Path.home() / ".cache" / "huggingface" / "hub" / f"models--Systran--faster-whisper-{model_name}"
-    return any(model_dir.glob("snapshots/*/model.bin"))
+    return any(ct2_model_ready(path.parent) for path in model_dir.glob("snapshots/*/model.bin"))
+
+
+def ct2_model_ready(path: Path) -> bool:
+    model_bin = path / "model.bin" if path.is_dir() else path
+    try:
+        if not model_bin.exists() or model_bin.stat().st_size < 1_000_000:
+            return False
+        with model_bin.open("rb") as handle:
+            return not handle.read(64).startswith(b"version https://git-lfs.github.com/spec")
+    except OSError:
+        return False
 
 
 def save_json(path: Path, data: dict) -> None:
@@ -324,6 +325,9 @@ def infer_surface_from_title(title: str) -> str:
 
 
 class Bubble:
+    IDLE_LEVELS = (0.12, 0.22, 0.16, 0.3, 0.2, 0.36, 0.22, 0.32, 0.18, 0.26, 0.14, 0.2, 0.12)
+    ACTIVE_PILL_WIDTH = 96.0
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.window = tk.Toplevel(root)
@@ -334,15 +338,23 @@ class Bubble:
         if sys.platform == "win32":
             self.window.attributes("-transparentcolor", self.transparent)
         self.window.configure(bg=self.transparent)
-        self.width = 88
-        self.height = 42
-        self.render_scale = 12
+        self.width = 96
+        self.height = 46
+        self.pill_width = self.ACTIVE_PILL_WIDTH
+        self.target_pill_width = self.ACTIVE_PILL_WIDTH
+        self.pill_inset = 2
+        self.render_scale = 6
         self.canvas = tk.Label(
             self.window,
             width=self.width,
             height=self.height,
             bg=self.transparent,
             bd=0,
+            borderwidth=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            relief="flat",
         )
         self.canvas.pack(fill="both", expand=True)
         self.levels = [0.08] * 13
@@ -351,16 +363,19 @@ class Bubble:
         self.mode = "idle"
         self.detail = ""
         self._image_ref = None
+        self._processing_frames: list = []
+        self._processing_enter_frames: list = []
+        self._processing_enter_started_at = 0.0
         self._draw()
         self._tick()
 
     def _set_dimensions_for_mode(self, mode: str) -> None:
         if mode == "processing":
-            self.width = 38
-            self.height = 38
+            self.target_pill_width = self.ACTIVE_PILL_WIDTH
+            self.pill_width = self.ACTIVE_PILL_WIDTH
+            self._processing_enter_started_at = time.perf_counter()
         else:
-            self.width = 88
-            self.height = 42
+            self.target_pill_width = self.ACTIVE_PILL_WIDTH
         self.canvas.configure(width=self.width, height=self.height)
 
     def _place(self) -> None:
@@ -371,31 +386,34 @@ class Bubble:
     def _draw(self) -> None:
         if Image is None or ImageDraw is None or ImageTk is None:
             return
+        if self.mode == "processing":
+            elapsed = time.perf_counter() - self._processing_enter_started_at
+            if elapsed < 0.22:
+                self._draw_cached_processing_enter(elapsed)
+                return
+            self.pill_width = self.target_pill_width
+        if self.mode == "processing" and abs(self.pill_width - self.target_pill_width) < 0.6:
+            self._draw_cached_processing()
+            return
         fill = "#050505"
         wave = "#ffffff"
         if self.mode == "idle":
             fill = "#ffffff"
             wave = "#050505"
-        scale = self.render_scale
-        image = Image.new("RGBA", (self.width * scale, self.height * scale), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        draw.rounded_rectangle(
-            (1 * scale, 1 * scale, (self.width - 1) * scale, (self.height - 1) * scale),
-            radius=((self.height - 2) // 2) * scale,
-            fill=fill,
-        )
+        image, draw, scale, bounds = self._new_pill_frame(fill)
+        left, top, right, bottom = bounds
         if self.mode == "processing":
-            self._draw_processing(draw, scale, wave)
+            self._draw_processing(draw, scale, left, top, right, bottom)
         else:
             center = (self.height // 2) * scale
-            left = 22 * scale
+            wave_left = left + 22 * scale
             gap = 4 * scale
             visible_levels = self.levels[-13:]
             if self.mode in {"idle", "error"}:
-                visible_levels = [0.12, 0.22, 0.16, 0.3, 0.2, 0.36, 0.22, 0.32, 0.18, 0.26, 0.14, 0.2, 0.12]
+                visible_levels = self.IDLE_LEVELS
             for i, level in enumerate(visible_levels):
                 h = max(5 * scale, int(22 * scale * min(level * 2.2, 1.0)))
-                x = left + i * gap
+                x = wave_left + i * gap
                 line_width = max(2 * scale, int(2.4 * scale))
                 draw.line((x, center - h // 2, x, center + h // 2), fill=wave, width=line_width)
                 r = line_width // 2
@@ -406,54 +424,109 @@ class Bubble:
         self._image_ref = ImageTk.PhotoImage(image)
         self.canvas.configure(image=self._image_ref)
 
+    def _draw_cached_processing(self) -> None:
+        if not self._processing_frames:
+            self._processing_frames = [
+                ImageTk.PhotoImage(self._render_processing_frame(i / 72 * math.tau))
+                for i in range(72)
+            ]
+        frame = int(time.perf_counter() * 120) % len(self._processing_frames)
+        self._image_ref = self._processing_frames[frame]
+        self.canvas.configure(image=self._image_ref)
+
+    def _draw_cached_processing_enter(self, elapsed: float) -> None:
+        if not self._processing_enter_frames:
+            frame_count = 28
+            self._processing_enter_frames = [
+                ImageTk.PhotoImage(self._render_processing_frame(
+                    i / frame_count * math.tau,
+                    self.ACTIVE_PILL_WIDTH,
+                ))
+                for i in range(frame_count)
+            ]
+        frame = min(len(self._processing_enter_frames) - 1, int((elapsed / 0.22) * len(self._processing_enter_frames)))
+        self._image_ref = self._processing_enter_frames[frame]
+        self.canvas.configure(image=self._image_ref)
+
+    def _render_processing_frame(self, phase: float, pill_width_override: Optional[float] = None):  # noqa: ANN202
+        image, draw, scale, bounds = self._new_pill_frame("#050505", pill_width_override)
+        left, top, right, bottom = bounds
+        self._draw_processing(draw, scale, left, top, right, bottom, phase)
+        image = image.resize((self.width, self.height), Image.Resampling.LANCZOS)
+        return self._flatten_for_tk_transparency(image)
+
+    def _new_pill_frame(self, fill: str, pill_width_override: Optional[float] = None):  # noqa: ANN202
+        scale = self.render_scale
+        image = Image.new("RGBA", (self.width * scale, self.height * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        bounds = self._pill_bounds(scale, pill_width_override)
+        left, top, right, bottom = bounds
+        draw.rounded_rectangle(bounds, radius=(bottom - top) // 2, fill=fill)
+        return image, draw, scale, bounds
+
+    def _pill_bounds(self, scale: int, pill_width_override: Optional[float] = None) -> tuple[int, int, int, int]:
+        inset = self.pill_inset * scale
+        max_width = (self.width - self.pill_inset * 2) * scale
+        requested_width = (pill_width_override if pill_width_override is not None else self.pill_width) * scale
+        pill_width = int(min(requested_width, max_width))
+        left = ((self.width * scale) - pill_width) // 2
+        top = inset
+        return left, top, left + pill_width, (self.height * scale) - inset
+
     def _flatten_for_tk_transparency(self, image):  # noqa: ANN001, ANN202
         # Tk's transparent-color path has no real per-pixel alpha. If we keep
         # antialiased semi-transparent pixels, they blend with magenta and make
-        # the purple outline the user saw. Thresholding the alpha keeps the
-        # pill clean: visible pixels are black/white, hidden pixels are key color.
+        # colored edges. Thresholding in Pillow keeps visible pixels black/white
+        # and hidden pixels at the transparent key color without a Python loop.
         key = (255, 0, 255, 255)
         rgba = image.convert("RGBA")
-        pixels = rgba.load()
-        width, height = rgba.size
-        for y in range(height):
-            for x in range(width):
-                r, g, b, a = pixels[x, y]
-                if a < 76:
-                    pixels[x, y] = key
-                else:
-                    pixels[x, y] = (r, g, b, 255)
-        return rgba
+        mask = rgba.getchannel("A").point(lambda alpha: 255 if alpha >= 32 else 0)
+        opaque = rgba.copy()
+        opaque.putalpha(255)
+        flattened = Image.new("RGBA", rgba.size, key)
+        flattened.paste(opaque, (0, 0), mask)
+        return flattened
 
-    def _draw_processing(self, draw, scale: int, fill: str) -> None:  # noqa: ANN001
-        cx = (self.width * scale) // 2
-        cy = (self.height * scale) // 2
-        phase = (time.time() * 420) % 360
-        box = (
-            cx - 10 * scale,
-            cy - 10 * scale,
-            cx + 10 * scale,
-            cy + 10 * scale,
-        )
-        draw.arc(
-            box,
-            start=phase,
-            end=phase + 275,
-            fill=fill,
-            width=max(3 * scale, int(3.2 * scale)),
-        )
-        cap_radius = int(1.65 * scale)
-        end_angle = math.radians(phase + 275)
-        end_x = cx + math.cos(end_angle) * 10 * scale
-        end_y = cy + math.sin(end_angle) * 10 * scale
+    def _draw_processing(
+        self,
+        draw,
+        scale: int,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        phase: Optional[float] = None,
+    ) -> None:  # noqa: ANN001
+        cx = (left + right) // 2
+        cy = (top + bottom) // 2
+        phase = phase if phase is not None else time.time() * 5.2
+        orbit_x = max(8 * scale, (right - left) * 0.16)
+        orbit_y = 7.5 * scale
+        wash = (math.sin(phase * 0.55) + 1) / 2
+        wash_radius = int((10 + wash * 3) * scale)
+        wash_x = int(cx + math.cos(phase * 0.45) * 5 * scale)
+        wash_y = int(cy + math.sin(phase * 0.42) * 3 * scale)
         draw.ellipse(
             (
-                end_x - cap_radius,
-                end_y - cap_radius,
-                end_x + cap_radius,
-                end_y + cap_radius,
+                wash_x - wash_radius,
+                wash_y - wash_radius,
+                wash_x + wash_radius,
+                wash_y + wash_radius,
             ),
-            fill=fill,
+            fill=(10, 10, 11, 255),
         )
+        dot_count = 5
+        for i in range(dot_count):
+            angle = phase + i * (math.tau / dot_count)
+            lead = (math.cos(angle - phase) + 1) / 2
+            radius = int((2.25 + lead * 0.75) * scale)
+            shade = int(168 + lead * 87)
+            x = int(cx + math.cos(angle) * orbit_x)
+            y = int(cy + math.sin(angle) * orbit_y)
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=(shade, shade, shade, 255),
+            )
 
     def _draw_legacy_canvas(self) -> None:
         if not hasattr(self.canvas, "delete"):
@@ -470,7 +543,7 @@ class Bubble:
         gap = 4
         visible_levels = self.levels[-13:]
         if self.mode in {"idle", "error"}:
-            visible_levels = [0.12, 0.22, 0.16, 0.3, 0.2, 0.36, 0.22, 0.32, 0.18, 0.26, 0.14, 0.2, 0.12]
+            visible_levels = self.IDLE_LEVELS
         for i, level in enumerate(visible_levels):
             h = max(5, int(22 * min(level * 2.2, 1.0)))
             x = left + i * gap
@@ -484,9 +557,11 @@ class Bubble:
 
     def _tick(self) -> None:
         if self.window.state() != "withdrawn":
+            if self.mode != "processing":
+                self.pill_width += (self.target_pill_width - self.pill_width) * 0.18
             self._advance_wave()
             self._draw()
-        self.root.after(16, self._tick)
+        self.root.after(8 if self.mode == "processing" else 16, self._tick)
 
     def _advance_wave(self) -> None:
         self.levels = [
@@ -853,14 +928,49 @@ class Inserter:
         except Exception:
             return ""
 
-    def focus_window(self, hwnd: Optional[int]) -> None:
+    def focus_window(self, hwnd: Optional[int]) -> bool:
         if sys.platform != "win32" or not hwnd:
-            return
+            return False
         try:
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            time.sleep(0.04)
+            user32 = ctypes.windll.user32
+            if not user32.IsWindow(hwnd):
+                return False
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+            for _ in range(10):
+                if user32.GetForegroundWindow() == hwnd:
+                    time.sleep(0.08)
+                    return True
+                time.sleep(0.03)
         except Exception:
+            return False
+        return False
+
+    def _copy_for_paste(self, text: str) -> None:
+        pyperclip.copy(text)
+        deadline = time.time() + 0.8
+        while time.time() < deadline:
+            try:
+                if pyperclip.paste() == text:
+                    return
+            except Exception:
+                pass
+            time.sleep(0.03)
+
+    def _send_paste(self) -> None:
+        if sys.platform != "win32":
+            keyboard.send("ctrl+v")
             return
+        user32 = ctypes.windll.user32
+        vk_control = 0x11
+        vk_v = 0x56
+        keyeventf_keyup = 0x0002
+        user32.keybd_event(vk_control, 0, 0, 0)
+        user32.keybd_event(vk_v, 0, 0, 0)
+        user32.keybd_event(vk_v, 0, keyeventf_keyup, 0)
+        user32.keybd_event(vk_control, 0, keyeventf_keyup, 0)
 
     def insert_text(self, text: str, target_hwnd: Optional[int] = None) -> None:
         if pyperclip is None or keyboard is None:
@@ -870,11 +980,15 @@ class Inserter:
             old_clipboard = pyperclip.paste()
         except Exception:
             pass
-        pyperclip.copy(text)
+        self._copy_for_paste(text)
         self.focus_window(target_hwnd)
-        keyboard.send("ctrl+v")
+        time.sleep(float(self.config.get("paste_focus_delay_seconds", 0.12)))
+        keyboard.release("ctrl")
+        keyboard.release("alt")
+        keyboard.release("shift")
+        self._send_paste()
         if self.config.get("restore_clipboard") and old_clipboard is not None:
-            threading.Timer(0.8, lambda: pyperclip.copy(old_clipboard)).start()
+            threading.Timer(1.5, lambda: pyperclip.copy(old_clipboard)).start()
 
     def run_command(self, command: str, target_hwnd: Optional[int]) -> None:
         if keyboard is None:
@@ -919,9 +1033,9 @@ class WisperlowApp:
         for hotkey in [h for h in hotkeys if h]:
             try:
                 if hotkey == self.config["cancel_hotkey"]:
-                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.cancel_recording))
+                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.cancel_recording), suppress=True)
                 else:
-                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.toggle_recording))
+                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.toggle_recording), suppress=True)
             except Exception:
                 self.bubble.show("error", f"{hotkey} busy")
                 self.bubble.hide_later(1600)
