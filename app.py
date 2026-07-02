@@ -1082,6 +1082,7 @@ class WisperlowApp:
         self.config = load_json(CONFIG_PATH, DEFAULT_CONFIG, normalize_config)
         save_json(CONFIG_PATH, self.config)
         self.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
+        self.history = HistoryStore(HISTORY_PATH, self.config)
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("Wisperlow")
@@ -1162,10 +1163,11 @@ class WisperlowApp:
             if not raw:
                 raise RuntimeError("No transcript produced")
             result = self.rewriter.rewrite(raw, self.context)
+            result.timings["recorded"] = duration
             result.timings["total"] = time.time() - started
             self.post(lambda result=result: self._handle_result(result))
         except Exception as exc:
-            self.post(lambda exc=exc: self.record_error(str(exc)))
+            self.post(lambda exc=exc: self.record_error(str(exc), duration=time.time() - started))
         finally:
             self.processing = False
             if audio_path and audio_path.exists():
@@ -1176,37 +1178,57 @@ class WisperlowApp:
 
     def _handle_result(self, result: DictationResult) -> None:
         if result.error:
-            self.record_error(result.error)
+            self._record_history("error", result=result, error=result.error)
+            self.record_error(result.error, add_history=False)
             return
         try:
             if result.command:
                 self.bubble.hide()
                 self.inserter.run_command(result.command, self.target_hwnd)
+                self._record_history("command", result=result)
             else:
                 self.bubble.hide()
                 self.inserter.insert_text(result.final, self.target_hwnd)
                 self.usage["last_result"] = result.final
                 self.usage["insertions"] += 1
                 self.usage["words_inserted"] += len(result.final.split())
+                self._record_history("inserted", result=result)
             save_json(USAGE_PATH, self.usage)
             self.bubble.hide()
         except Exception as exc:
-            self.record_error(str(exc))
+            self._record_history("error", result=result, error=str(exc))
+            self.record_error(str(exc), add_history=False)
 
     def cancel_recording(self) -> None:
         self.recorder.cancel()
         self.processing = False
         self.usage["cancelled"] += 1
         save_json(USAGE_PATH, self.usage)
+        self.history.add(status="cancelled", window_title=self.context.window_title)
         self.bubble.show("idle", "cancelled")
         self.bubble.hide_later(650)
 
-    def record_error(self, message: str) -> None:
+    def record_error(self, message: str, duration: float = 0.0, add_history: bool = True) -> None:
         self.usage["errors"] += 1
         self.usage["last_error"] = message
         save_json(USAGE_PATH, self.usage)
+        if add_history:
+            self.history.add(status="error", window_title=self.context.window_title, duration_seconds=duration, error=message)
         self.bubble.show("error", message)
         self.bubble.hide_later(2200)
+
+    def _record_history(self, status: str, result: DictationResult, error: str = "") -> None:
+        self.history.add(
+            status=status,
+            raw=result.raw,
+            final=result.final,
+            command=result.command or "",
+            mode=self.context.style_hint,
+            window_title=self.context.window_title,
+            duration_seconds=float(result.timings.get("recorded", 0.0)),
+            timings=result.timings,
+            error=error,
+        )
 
     def run(self) -> None:
         self.root.mainloop()
