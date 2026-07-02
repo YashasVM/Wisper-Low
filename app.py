@@ -1219,56 +1219,7 @@ class DashboardWindow:
         self.widgets["history_detail"].pack(fill="x")
 
     def _build_settings_tab(self) -> None:
-        self.setting_keys = [
-            "toggle_hotkey",
-            "alternate_toggle_hotkey",
-            "cancel_hotkey",
-            "dashboard_hotkey",
-            "stt_model",
-            "stt_device",
-            "stt_compute_type",
-            "rewrite_mode",
-            "ollama_enabled",
-            "ollama_autostart",
-            "ollama_model",
-            "ollama_url",
-            "auto_insert",
-            "restore_clipboard",
-            "paste_focus_delay_seconds",
-            "history_enabled",
-            "history_limit",
-        ]
-        form = ttk.Frame(self.settings_tab, style="Dashboard.TFrame")
-        form.pack(fill="both", expand=True)
-        for row_index, key in enumerate(self.setting_keys):
-            ttk.Label(form, text=key.replace("_", " ").title(), style="Muted.TLabel").grid(row=row_index, column=0, sticky="w", padx=(0, 10), pady=4)
-            value = self.app.config.get(key, DEFAULT_CONFIG.get(key, ""))
-            if isinstance(DEFAULT_CONFIG.get(key), bool):
-                var = tk.BooleanVar(value=bool(value))
-                widget = ttk.Checkbutton(form, variable=var)
-                widget.grid(row=row_index, column=1, sticky="w", pady=4)
-            elif key in {"rewrite_mode", "stt_device", "stt_compute_type"}:
-                var = tk.StringVar(value=str(value))
-                values = {
-                    "rewrite_mode": list(self.app.config.get("custom_modes", DEFAULT_CONFIG["custom_modes"]).keys()),
-                    "stt_device": ["cpu", "cuda"],
-                    "stt_compute_type": ["int8", "int8_float16", "float16", "float32"],
-                }[key]
-                widget = ttk.Combobox(form, textvariable=var, values=values, state="readonly")
-                widget.grid(row=row_index, column=1, sticky="ew", pady=4)
-            else:
-                var = tk.StringVar(value=str(value))
-                widget = ttk.Entry(form, textvariable=var)
-                widget.grid(row=row_index, column=1, sticky="ew", pady=4)
-            self.vars[f"setting_{key}"] = var
-        form.columnconfigure(1, weight=1)
-
-        actions = ttk.Frame(self.settings_tab, style="Dashboard.TFrame")
-        actions.pack(fill="x", pady=(12, 0))
-        ttk.Button(actions, text="Save Settings", command=self.apply_settings, style="Dashboard.TButton").pack(side="left")
-        ttk.Button(actions, text="Reload", command=self.refresh_settings, style="Dashboard.TButton").pack(side="left", padx=(8, 0))
-        self.vars["settings_status"] = tk.StringVar(value="Hotkey and model changes apply fully after restart.")
-        ttk.Label(actions, textvariable=self.vars["settings_status"], style="Muted.TLabel").pack(side="left", padx=(12, 0))
+        ttk.Label(self.settings_tab, text="Editable settings will appear here.", style="Dashboard.TLabel").pack(anchor="w")
 
     def _build_diagnostics_tab(self) -> None:
         ttk.Label(self.diagnostics_tab, text="Diagnostics will appear here.", style="Dashboard.TLabel").pack(anchor="w")
@@ -1289,7 +1240,6 @@ class DashboardWindow:
     def refresh(self) -> None:
         self.refresh_overview()
         self.refresh_history()
-        self.refresh_settings()
 
     def refresh_overview(self) -> None:
         self.app.usage = load_json(USAGE_PATH, DEFAULT_USAGE, normalize_usage)
@@ -1399,48 +1349,6 @@ class DashboardWindow:
         if messagebox.askyesno("Wisperlow", "Clear all local dictation history?"):
             self.app.history.clear()
             self.refresh_history()
-
-    def refresh_settings(self) -> None:
-        for key in getattr(self, "setting_keys", []):
-            var = self.vars.get(f"setting_{key}")
-            if var is None:
-                continue
-            value = self.app.config.get(key, DEFAULT_CONFIG.get(key, ""))
-            if isinstance(var, tk.BooleanVar):
-                var.set(bool(value))
-            else:
-                var.set(str(value))
-
-    def apply_settings(self) -> None:
-        updated = dict(self.app.config)
-        for key in getattr(self, "setting_keys", []):
-            var = self.vars.get(f"setting_{key}")
-            if var is None:
-                continue
-            default = DEFAULT_CONFIG.get(key)
-            value = var.get()
-            if isinstance(default, bool):
-                updated[key] = bool(value)
-            elif isinstance(default, int):
-                try:
-                    updated[key] = int(value)
-                except (TypeError, ValueError):
-                    updated[key] = default
-            elif isinstance(default, float):
-                try:
-                    updated[key] = float(value)
-                except (TypeError, ValueError):
-                    updated[key] = default
-            else:
-                updated[key] = str(value).strip()
-        self.app.config = normalize_config(updated)
-        save_json(CONFIG_PATH, self.app.config)
-        self.app.recorder.config = self.app.config
-        self.app.rewriter = Rewriter(self.app.config)
-        self.app.inserter.config = self.app.config
-        self.app.history.config = self.app.config
-        self.vars["settings_status"].set("Settings saved. Restart to reload changed hotkeys or speech model.")
-        self.refresh()
 
     def _schedule_refresh(self) -> None:
         if self._refresh_job:
