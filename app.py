@@ -1023,7 +1023,7 @@ class WisperlowApp:
         self.events: queue.Queue[Callable[[], None]] = queue.Queue()
         self.bubble = Bubble(self.root)
         self.recorder = AudioRecorder(self.config, self.bubble.set_wave_level)
-        self.transcriber = Transcriber(self.config, lambda text: self.events.put(lambda: self.bubble.show("processing", text)))
+        self.transcriber = Transcriber(self.config, lambda text: self.post(lambda: self.bubble.show("processing", text)))
         self.rewriter = Rewriter(self.config)
         self.inserter = Inserter(self.config)
         self.processing = False
@@ -1033,6 +1033,9 @@ class WisperlowApp:
         self.root.after(100, self._drain_events)
         self.bubble.hide()
 
+    def post(self, callback: Callable[[], None]) -> None:
+        self.events.put(callback)
+
     def _register_hotkeys(self) -> None:
         if keyboard is None:
             self.bubble.show("error", "keyboard missing")
@@ -1041,9 +1044,9 @@ class WisperlowApp:
         for hotkey in [h for h in hotkeys if h]:
             try:
                 if hotkey == self.config["cancel_hotkey"]:
-                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.cancel_recording), suppress=True)
+                    keyboard.add_hotkey(hotkey, lambda: self.post(self.cancel_recording), suppress=True)
                 else:
-                    keyboard.add_hotkey(hotkey, lambda: self.events.put(self.toggle_recording), suppress=True)
+                    keyboard.add_hotkey(hotkey, lambda: self.post(self.toggle_recording), suppress=True)
             except Exception:
                 self.bubble.show("error", f"{hotkey} busy")
                 self.bubble.hide_later(1600)
@@ -1095,9 +1098,9 @@ class WisperlowApp:
                 raise RuntimeError("No transcript produced")
             result = self.rewriter.rewrite(raw, self.context)
             result.timings["total"] = time.time() - started
-            self.events.put(lambda result=result: self._handle_result(result))
+            self.post(lambda result=result: self._handle_result(result))
         except Exception as exc:
-            self.events.put(lambda exc=exc: self.record_error(str(exc)))
+            self.post(lambda exc=exc: self.record_error(str(exc)))
         finally:
             self.processing = False
             if audio_path and audio_path.exists():
