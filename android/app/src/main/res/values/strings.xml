@@ -34,6 +34,8 @@
     <string name="bubble_ready_body">Focus a text field, then tap the bubble and speak.</string>
     <string name="bubble_paused_title">Dictation is paused</string>
     <string name="bubble_paused_body">Turn it on when you want the bubble available in other apps.</string>
+    <string name="bubble_cancel">Cancel dictation</string>
+    <string name="bubble_insert">Insert dictation</string>
     <string name="on_device_badge">ON DEVICE</string>
     <string name="privacy_card_title">Private by default</string>
     <string name="privacy_card_body">Audio and transcripts are processed locally. Nothing is uploaded for recognition.</string>

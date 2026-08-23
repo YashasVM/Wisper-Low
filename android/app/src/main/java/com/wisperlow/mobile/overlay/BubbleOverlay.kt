@@ -17,11 +17,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +46,10 @@ import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -62,13 +68,14 @@ import javax.inject.Singleton
 import kotlin.math.min
 import kotlin.math.sin
 
-enum class BubbleMode { DOT, LISTENING, PROCESSING }
+enum class BubbleMode { DOT, LISTENING, PROCESSING, REVIEW }
 
 @Singleton
 class BubbleOverlay @Inject constructor(@ApplicationContext private val context: Context) {
 
     var onTap: (() -> Unit)? = null
     var onCancelGesture: (() -> Unit)? = null
+    var onConfirm: (() -> Unit)? = null
 
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -242,6 +249,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
 
         val targetWidth = when (mode) {
             BubbleMode.DOT -> DOT_SIZE.dp
+            BubbleMode.REVIEW -> REVIEW_WIDTH.dp
             else -> PILL_WIDTH.dp
         }
         val targetHeight = when (mode) {
@@ -273,13 +281,106 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                     color = Color(0xFF0A0A0A).copy(alpha = BACKGROUND_ALPHA),
                     shape = RoundedCornerShape(cornerRadius)
                 )
-                .pointerInput(Unit) { handleGestures() },
+                .then(
+                    if (mode == BubbleMode.REVIEW) {
+                        Modifier
+                    } else {
+                        Modifier.pointerInput(Unit) { handleGestures() }
+                    },
+                ),
             contentAlignment = Alignment.Center
         ) {
             when (mode) {
                 BubbleMode.DOT -> MicGlyph(modifier = Modifier.size(DOT_SIZE.dp))
                 BubbleMode.LISTENING -> Waveform(modifier = Modifier.fillMaxSize())
                 BubbleMode.PROCESSING -> PulsingDots()
+                BubbleMode.REVIEW -> ReviewControls()
+            }
+        }
+    }
+
+    @Composable
+    private fun ReviewControls() {
+        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            ReviewAction(
+                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_cancel),
+                confirm = false,
+                onClick = { onCancelGesture?.invoke() },
+            )
+            Canvas(modifier = Modifier.weight(1f).height(28.dp)) {
+                val centerY = size.height / 2f
+                repeat(4) { index ->
+                    val height = if (index == 1 || index == 2) size.height * 0.7f else size.height * 0.38f
+                    val x = size.width * (index + 1) / 5f
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.72f),
+                        start = Offset(x, centerY - height / 2f),
+                        end = Offset(x, centerY + height / 2f),
+                        strokeWidth = 3.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+            ReviewAction(
+                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_insert),
+                confirm = true,
+                onClick = { onConfirm?.invoke() },
+            )
+        }
+    }
+
+    @Composable
+    private fun ReviewAction(
+        contentDescription: String,
+        confirm: Boolean,
+        onClick: () -> Unit,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(PILL_HEIGHT.dp)
+                .semantics {
+                    this.contentDescription = contentDescription
+                    role = Role.Button
+                }
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.size(40.dp)) {
+                drawCircle(
+                    color = if (confirm) Color(0xFF8E78FF) else Color.White.copy(alpha = 0.12f),
+                )
+                val strokeWidth = 2.5.dp.toPx()
+                if (confirm) {
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(size.width * 0.27f, size.height * 0.52f),
+                        end = Offset(size.width * 0.43f, size.height * 0.68f),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(size.width * 0.43f, size.height * 0.68f),
+                        end = Offset(size.width * 0.74f, size.height * 0.34f),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                } else {
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(size.width * 0.34f, size.height * 0.34f),
+                        end = Offset(size.width * 0.66f, size.height * 0.66f),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(size.width * 0.66f, size.height * 0.34f),
+                        end = Offset(size.width * 0.34f, size.height * 0.66f),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                }
             }
         }
     }
@@ -454,6 +555,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     companion object {
         private const val DOT_SIZE = 56
         private const val PILL_WIDTH = 180
+        private const val REVIEW_WIDTH = 208
         private const val PILL_HEIGHT = 64
         private const val DOTS_WIDTH = 90
         private const val DOTS_HEIGHT = 24
