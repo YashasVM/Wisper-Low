@@ -107,10 +107,7 @@ class WisperlowAccessibilityService : AccessibilityService() {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("wisperlow", text))
 
-            val arguments = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ARGUMENT_TEXT_CHARSEQUENCE, text)
-            }
-            target.performAction(AccessibilityNodeInfo.ACTION_PASTE, arguments)
+            return target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
         } catch (_: Exception) {
             false
         }

@@ -156,6 +156,7 @@ class MainActivity : ComponentActivity() {
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                     DownloadState.NotStarted -> Unit
+                                    null -> Unit
                                 }
                             }
                             OutlinedButton(onClick = {
