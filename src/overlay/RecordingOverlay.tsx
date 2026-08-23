@@ -243,9 +243,9 @@ const RecordingOverlay: React.FC = () => {
       <div dir={direction} className={`ov-stage ${position}`}>
         <div
           key={session}
-          className={`scard ${open ? "open" : ""} ${collapsed ? "working" : ""} ${
-            isVisible ? "" : "leaving"
-          }`}
+          className={`scard ${open ? "open" : ""} ${working ? "fin" : ""} ${
+            collapsed ? "working" : ""
+          } ${isVisible ? "" : "leaving"}`}
         >
           <div className="stext">
             <div className="stext-clip">

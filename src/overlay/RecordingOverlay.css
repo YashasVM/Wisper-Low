@@ -2,9 +2,10 @@
 
 :root {
   --s-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  /* Near-opaque app surface (theme.css --color-background at 98%). Auto-flips
+  /* Frosted app surface (theme.css --color-background at 80%) — translucent
+     enough for the card's backdrop-filter to pick up what's behind it. Auto-flips
      light/dark with --color-background, so no dark-mode override is needed. */
-  --s-surface: color-mix(in srgb, var(--color-background) 98%, transparent);
+  --s-surface: color-mix(in srgb, var(--color-background) 80%, transparent);
   /* Accent = logo pink; flips automatically via --color-logo-primary. */
   --s-accent: var(--color-logo-primary);
   /* Light/dark pairs for the tokens that can't flip through a shared palette
@@ -115,14 +116,21 @@
   align-items: flex-start; /* top placement: flush to the top edge */
 }
 
-/* Compact pill: fade the whole container in/out (the pill itself never pops or
-   morphs). */
+/* Compact pill: slide up from its anchored edge while fading in (Wisper-style
+   CubicEase feel), reverse on the way out. Top placement slides down instead. */
 .ov-fade {
   opacity: 0;
-  transition: opacity 200ms ease-out;
+  transform: translateY(16px);
+  transition:
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ov-fade.show {
   opacity: 1;
+  transform: none;
+}
+.ov-stage.top.ov-fade {
+  transform: translateY(-16px);
 }
 
 /* Top placement, Live panel: stack the control pill above the text region so the
@@ -158,7 +166,8 @@
   margin: 0;
 }
 
-/* Shared base card. Flat: theme surface + hairline border, no shadow or blur. */
+/* Shared base card. Floating glass pill: frosted surface, hairline border, soft
+   ambient shadow so it reads as hovering above the content behind it. */
 .scard {
   width: var(--ov-pill-w);
   border-radius: 24px;
@@ -169,7 +178,11 @@
   transform-origin: bottom center;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  /* Flat: no drop shadow, no backdrop blur/saturate (was a glassy gradient look). */
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.08);
   /* pop-in plays on mount; morph (width/radius) is a transition */
   animation: scard-pop 460ms cubic-bezier(0.22, 1, 0.36, 1);
   transition:
@@ -265,6 +278,25 @@
 }
 .stext-cap .tentative {
   color: inherit;
+  /* Unconfirmed words read as "not final yet": soft blur that resolves once the
+     backend commits them (the span re-renders without the class content). */
+  filter: blur(1.2px);
+  opacity: 0.75;
+  transition:
+    filter 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease;
+}
+/* While the model is working (transcribing/polishing), the whole transcript
+   blurs; it sharpens the moment the phase flips back — the Wispr-style
+   blurred → sharp completion beat. */
+.scard.fin .stext-cap p {
+  filter: blur(5px);
+  opacity: 0.6;
+}
+.stext-cap p {
+  transition:
+    filter 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 320ms ease;
 }
 .scaret {
   display: inline-block;
