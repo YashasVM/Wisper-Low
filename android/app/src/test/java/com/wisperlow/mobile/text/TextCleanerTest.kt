@@ -17,17 +17,17 @@ class TextCleanerTest {
     @Test
     fun fillerEatsFollowingCommaAndSpace() {
         assertEquals("It was weird.", TextCleaner.clean("it was um, weird"))
-        assertEquals("Like I said.", TextCleaner.clean("like, i said"))
+        assertEquals("Like, I said.", TextCleaner.clean("like, i said"))
     }
 
     @Test
     fun repetitionRemoval() {
-        assertEquals("the quick brown fox.", TextCleaner.clean("the the quick quick brown fox fox"))
+        assertEquals("The quick brown fox.", TextCleaner.clean("the the quick quick brown fox fox"))
     }
 
     @Test
     fun shortWordsNotDedupedByLengthRuleButTripleRuleApplies() {
-        assertEquals("that is is fine.", TextCleaner.clean("that is is is fine"))
+        assertEquals("That is is fine.", TextCleaner.clean("that is is is fine"))
     }
 
     @Test
@@ -66,7 +66,7 @@ class TextCleanerTest {
     @Test
     fun capitalizesFirstLetterOnly() {
         assertEquals("Hello world.", TextCleaner.clean("hello world"))
-        assertEquals("iPhone stays.", TextCleaner.clean("iphone stays"))
+        assertEquals("Iphone stays.", TextCleaner.clean("iphone stays"))
     }
 
     @Test

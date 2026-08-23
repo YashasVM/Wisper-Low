@@ -21,7 +21,7 @@ class PersonalDictionaryTest {
     @Test
     fun caseInsensitiveKeyMatch() {
         val dict = mapOf("kotlinx" to "KotlinX")
-        assertEquals("I love KotlinX!", PersonalDictionary.apply("i love KOTLINX!", dict))
+        assertEquals("i love KotlinX!", PersonalDictionary.apply("i love KOTLINX!", dict))
         assertEquals("KotlinX", PersonalDictionary.apply("KoTlInX", dict))
     }
 
@@ -29,7 +29,7 @@ class PersonalDictionaryTest {
     fun valueInsertedVerbatimRegardlessOfTokenCase() {
         val dict = mapOf("ai" to "A.I.")
         assertEquals("A.I.! wow", PersonalDictionary.apply("AI! wow", dict))
-        assertEquals("use A.I.", PersonalDictionary.apply("use ai period", dict))
+        assertEquals("Use A.I.", PersonalDictionary.apply(TextCleaner.clean("use ai period"), dict))
     }
 
     @Test

@@ -4,9 +4,10 @@ object TextCleaner {
 
     private val horizontalWhitespaceRun = Regex("[^\\S\n]+")
     private val spaceBeforePunct = Regex("\\s+([,.!?;:])")
+    private val firstPersonPronoun = Regex("\\bi\\b")
 
     private val filler = Regex(
-        "\\b(um+|uh+|erm|ah+|like|you know|i mean|basically|actually)\\b[,\\s]*",
+        "\\b(um+|uh+|erm|ah+|basically|actually)\\b[,\\s]*",
         RegexOption.IGNORE_CASE
     )
 
@@ -43,6 +44,7 @@ object TextCleaner {
             text = Regex("\\b${Regex.escape(phrase)}\\b", RegexOption.IGNORE_CASE)
                 .replace(text) { symbol }
         }
+        text = firstPersonPronoun.replace(text, "I")
         text = text.replace(" \n", "\n").replace("\n ", "\n")
         text = normalizeSpaces(text)
         if (text.isEmpty()) return ""

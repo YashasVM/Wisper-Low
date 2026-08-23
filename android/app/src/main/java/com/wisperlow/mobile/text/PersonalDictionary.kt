@@ -12,7 +12,13 @@ object PersonalDictionary {
             while (start < end && !token[start].isLetterOrDigit()) start++
             while (end > start && !token[end - 1].isLetterOrDigit()) end--
             val replacement = lookup[token.substring(start, end).lowercase()] ?: return@joinToString token
-            token.substring(0, start) + replacement + token.substring(end)
+            val suffix = token.substring(end)
+            val preservedSuffix = if (replacement.lastOrNull() == suffix.firstOrNull()) {
+                suffix.drop(1)
+            } else {
+                suffix
+            }
+            token.substring(0, start) + replacement + preservedSuffix
         }
     }
 }
