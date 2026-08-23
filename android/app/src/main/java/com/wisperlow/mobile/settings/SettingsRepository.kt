@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wisperlow.mobile.stt.ModelCatalog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -15,7 +16,7 @@ import javax.inject.Singleton
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wisperlow_settings")
 
 data class WisperlowSettings(
-    val selectedModelId: String = "parakeet-v3-int8",
+    val selectedModelId: String = ModelCatalog.PARAKEET_V3_INT8.id,
     val bubbleEnabled: Boolean = true,
     val personalDictionary: Map<String, String> = emptyMap(),
 )
@@ -31,8 +32,11 @@ class SettingsRepository @Inject constructor(
     }
 
     val settings: Flow<WisperlowSettings> = context.dataStore.data.map { prefs ->
+        val selectedModelId = prefs[Keys.selectedModelId]
+            ?.takeIf { ModelCatalog.byId(it) != null }
+            ?: ModelCatalog.PARAKEET_V3_INT8.id
         WisperlowSettings(
-            selectedModelId = prefs[Keys.selectedModelId] ?: "parakeet-v3-int8",
+            selectedModelId = selectedModelId,
             bubbleEnabled = prefs[Keys.bubbleEnabled] ?: true,
             personalDictionary = parseDictionary(prefs[Keys.dictionary] ?: ""),
         )

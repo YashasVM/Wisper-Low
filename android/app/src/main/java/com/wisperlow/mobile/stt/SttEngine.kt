@@ -86,6 +86,7 @@ class SttEngine(private val modelDir: File) {
                     numThreads = NUM_THREADS,
                     debug = false,
                     provider = "cpu",
+                    modelType = "nemo_transducer",
                 ),
             )
         }
