@@ -47,6 +47,7 @@ import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
 import com.wisperlow.mobile.stt.ModelCatalog
 import com.wisperlow.mobile.stt.ModelDownloader
+import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,7 +68,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            WisperlowTheme {
                 MainScreen()
             }
         }
