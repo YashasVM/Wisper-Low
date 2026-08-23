@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.wisperlow.mobile.app-debug-52:/xml_accessibility_service_config.xml.flat",
+        "source": "com.wisperlow.mobile.app-main-54:/xml/accessibility_service_config.xml"
+    },
+    {
+        "merged": "com.wisperlow.mobile.app-debug-52:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.wisperlow.mobile.app-main-54:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.wisperlow.mobile.app-debug-52:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.wisperlow.mobile.app-main-54:/drawable/ic_launcher_foreground.xml"
+    }
+]

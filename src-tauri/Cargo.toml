@@ -1,8 +1,8 @@
 [package]
 name = "handy"
 version = "0.9.5"
-description = "Handy"
-authors = ["cjpais"]
+description = "Wisperlow"
+authors = ["YashasVM"]
 edition = "2021"
 license = "MIT"
 default-run = "handy"
@@ -135,10 +135,11 @@ winreg = "0.55"
 # handy.exe and we ship zero DLLs, which sidesteps the installer's per-DLL
 # signtool verify entirely. CI pins -DGGML_NATIVE=OFF (see build.yml) so the
 # static build targets a portable ARM baseline, not the build runner's CPU.
+# Wisperlow x86_64: CPU-only for now (no Vulkan SDK requirement locally).
+# Re-add "vulkan" here after installing the Vulkan SDK to enable GPU Whisper.
 [target.'cfg(all(windows, target_arch = "x86_64"))'.dependencies]
 transcribe-cpp = { version = "0.2.0", default-features = false, features = [
   "dynamic-backends",
-  "vulkan",
 ] }
 
 [target.'cfg(all(windows, target_arch = "aarch64"))'.dependencies]
