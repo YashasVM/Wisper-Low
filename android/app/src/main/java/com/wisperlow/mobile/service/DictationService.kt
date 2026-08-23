@@ -113,7 +113,7 @@ class DictationService : Service() {
             phase.value = DictationPhase.Error("No STT model installed")
             return
         }
-        prepareStt(modelDir)
+        if (!prepareStt(modelDir)) return
         prepareVad()
         val bubble = overlay.get() ?: run {
             phase.value = DictationPhase.Error("Bubble unavailable")
@@ -137,7 +137,7 @@ class DictationService : Service() {
         return installed
     }
 
-    private suspend fun prepareStt(modelDir: File) {
+    private suspend fun prepareStt(modelDir: File): Boolean {
         val modelId = modelDir.name
         if (stt == null || loadedModelId != modelId) {
             stt?.release()
@@ -145,11 +145,12 @@ class DictationService : Service() {
             val ok = withContext(Dispatchers.Default) { engine.load() }
             if (!ok) {
                 phase.value = DictationPhase.Error("Failed to load model $modelId")
-                return
+                return false
             }
             stt = engine
             loadedModelId = modelId
         }
+        return true
     }
 
     private suspend fun prepareVad() {
