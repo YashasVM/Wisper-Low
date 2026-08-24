@@ -42,6 +42,9 @@
     <string name="recent_dictations">Recent dictations</string>
     <string name="recent_empty_title">Your words will show up here</string>
     <string name="recent_empty_body">Complete setup and dictate in any app. History will stay on this device.</string>
+    <string name="history_copy">Copy</string>
+    <string name="history_delete">Delete</string>
+    <string name="history_words">%1$d words</string>
     <string name="dictionary_title">Dictionary</string>
     <string name="dictionary_subtitle">Teach Wisperlow the names and terms you use.</string>
     <string name="dictionary_card_title">Custom words</string>
