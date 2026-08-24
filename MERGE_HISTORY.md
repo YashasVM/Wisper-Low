@@ -36,3 +36,7 @@ This file documents the unification of all branches into main with full history 
 ### 7. LFS - models/model.bin and release exe via Git LFS
 - Tracked in .gitattributes
 
+
+### 8. Graph - main now shows 892 commits, 33+ recent YashasVM
+- Command: git log --oneline --graph -20
+
