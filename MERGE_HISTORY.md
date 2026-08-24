@@ -40,3 +40,7 @@ This file documents the unification of all branches into main with full history 
 ### 8. Graph - main now shows 892 commits, 33+ recent YashasVM
 - Command: git log --oneline --graph -20
 
+
+### 9. Next - all future work branches from unified main
+- Base: 95c2a820 + docs commits
+
