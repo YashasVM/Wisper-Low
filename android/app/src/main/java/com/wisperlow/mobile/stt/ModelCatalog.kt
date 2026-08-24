@@ -19,16 +19,7 @@ object ModelCatalog {
         sizeHintMb = 490,
     )
 
-    val WHISPER_TINY_EN = SttModel(
-        id = "whisper-tiny-en",
-        displayName = "Whisper tiny.en",
-        downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2",
-        archiveName = "sherpa-onnx-whisper-tiny.en.tar.bz2",
-        dirName = "sherpa-onnx-whisper-tiny.en",
-        sizeHintMb = 150,
-    )
-
-    val all: List<SttModel> = listOf(PARAKEET_V3_INT8, WHISPER_TINY_EN)
+    val all: List<SttModel> = listOf(PARAKEET_V3_INT8)
 
     fun byId(id: String): SttModel? = all.firstOrNull { it.id == id }
 }

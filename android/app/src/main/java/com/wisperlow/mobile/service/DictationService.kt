@@ -17,6 +17,7 @@ import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
 import com.wisperlow.mobile.audio.AudioEngine
 import com.wisperlow.mobile.audio.VadEngine
 import com.wisperlow.mobile.audio.VadEvent
+import com.wisperlow.mobile.history.TranscriptRepository
 import com.wisperlow.mobile.overlay.BubbleMode
 import com.wisperlow.mobile.overlay.BubbleOverlay
 import com.wisperlow.mobile.settings.SettingsRepository
@@ -42,6 +43,7 @@ sealed interface DictationPhase {
     data object Idle : DictationPhase
     data object Listening : DictationPhase
     data object Processing : DictationPhase
+    data object Review : DictationPhase
     data class Error(val message: String) : DictationPhase
 }
 
@@ -50,6 +52,7 @@ class DictationService : Service() {
 
     @Inject lateinit var modelDownloader: ModelDownloader
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var transcriptRepository: TranscriptRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val audio = AudioEngine()
@@ -61,6 +64,7 @@ class DictationService : Service() {
 
     private var recording = false
     private var speechActive = false
+    private var pendingText: String? = null
     private val collected = ArrayList<ShortArray>(256)
     private val preroll = ArrayDeque<ShortArray>()
 
@@ -113,7 +117,7 @@ class DictationService : Service() {
             phase.value = DictationPhase.Error("No STT model installed")
             return
         }
-        prepareStt(modelDir)
+        if (!prepareStt(modelDir)) return
         prepareVad()
         val bubble = overlay.get() ?: run {
             phase.value = DictationPhase.Error("Bubble unavailable")
@@ -124,6 +128,9 @@ class DictationService : Service() {
         }
         bubble.onCancelGesture = {
             scope.launch { cancelDictation() }
+        }
+        bubble.onConfirm = {
+            scope.launch { confirmPendingText() }
         }
         bubble.show(BubbleMode.DOT)
         phase.value = DictationPhase.Idle
@@ -137,7 +144,7 @@ class DictationService : Service() {
         return installed
     }
 
-    private suspend fun prepareStt(modelDir: File) {
+    private suspend fun prepareStt(modelDir: File): Boolean {
         val modelId = modelDir.name
         if (stt == null || loadedModelId != modelId) {
             stt?.release()
@@ -145,11 +152,12 @@ class DictationService : Service() {
             val ok = withContext(Dispatchers.Default) { engine.load() }
             if (!ok) {
                 phase.value = DictationPhase.Error("Failed to load model $modelId")
-                return
+                return false
             }
             stt = engine
             loadedModelId = modelId
         }
+        return true
     }
 
     private suspend fun prepareVad() {
@@ -168,11 +176,12 @@ class DictationService : Service() {
     }
 
     private fun startDictation() {
-        if (recording || phase.value is DictationPhase.Processing) return
+        if (recording || phase.value is DictationPhase.Processing || phase.value is DictationPhase.Review) return
         collected.clear()
         preroll.clear()
         speechActive = false
         recording = true
+        phase.value = DictationPhase.Listening
         overlay.get()?.show(BubbleMode.LISTENING)
         updateNotification("Listening… speak now", idle = false)
         audio.setListener { samples, level ->
@@ -241,6 +250,7 @@ class DictationService : Service() {
     private fun cancelDictation() {
         speechActive = false
         recording = false
+        pendingText = null
         audio.stop()
         synchronized(this) {
             collected.clear()
@@ -252,7 +262,7 @@ class DictationService : Service() {
 
     private fun processPcm(pcm: ShortArray) {
         if (pcm.size < MIN_PCM_SAMPLES) {
-            overlay.get()?.show(BubbleMode.DOT)
+            resetAfterProcessing()
             updateNotification("Too short — try again", idle = true)
             return
         }
@@ -270,32 +280,40 @@ class DictationService : Service() {
                 }
                 val command = TextCleaner.classifyCommand(cleaned)
                 when (command) {
-                    "cancel" -> Unit
-                    "undo" -> Unit
-                    else -> insertText(cleaned)
+                    "cancel", "undo" -> resetAfterProcessing()
+                    else -> {
+                        val dictionary = settingsRepository.settings.first().personalDictionary
+                        pendingText = PersonalDictionary.apply(cleaned, dictionary)
+                        phase.value = DictationPhase.Review
+                        overlay.get()?.show(BubbleMode.REVIEW)
+                        updateNotification("Review dictation", idle = false)
+                    }
                 }
             } catch (t: Throwable) {
                 android.util.Log.e(TAG, "transcription failed", t)
                 showToast("Transcription failed: ${t.message}")
-            } finally {
                 resetAfterProcessing()
             }
         }
     }
 
-    private suspend fun insertText(text: String) {
-        val dictionary = settingsRepository.settings.first().personalDictionary
-        val final = PersonalDictionary.apply(text, dictionary)
-        val ok = WisperlowAccessibilityService.pasteText(final)
+    private suspend fun confirmPendingText() {
+        val text = pendingText ?: return
+        pendingText = null
+        val ok = WisperlowAccessibilityService.pasteText(text)
+        runCatching { transcriptRepository.add(text) }
+            .onFailure { android.util.Log.e(TAG, "history save failed", it) }
         if (!ok) {
             showToast(
                 "Enable Wisperlow in Accessibility settings so text can be pasted",
                 long = true,
             )
         }
+        resetAfterProcessing()
     }
 
     private fun resetAfterProcessing() {
+        pendingText = null
         vad?.reset()
         overlay.get()?.show(BubbleMode.DOT)
         phase.value = DictationPhase.Idle
@@ -304,7 +322,7 @@ class DictationService : Service() {
 
     private suspend fun watchSettings() {
         settingsRepository.settings.collect { settings ->
-            if (settings.bubbleEnabled && phase.value !is DictationPhase.Error &&
+            if (settings.bubbleEnabled && phase.value is DictationPhase.Idle &&
                 android.provider.Settings.canDrawOverlays(this)
             ) {
                 overlay.get()?.show(BubbleMode.DOT)
