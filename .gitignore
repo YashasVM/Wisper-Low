@@ -45,6 +45,15 @@ result
 
 # Python bytecode (scripts/)
 __pycache__/
+*.pyc
+.venv/
+
+# Python prototype (WIN branch)
+wisperlow_config.json
+wisperlow_usage.json
+*.broken.json
+build/
+installer-test/
 
 # Android build outputs
 android/.gradle/

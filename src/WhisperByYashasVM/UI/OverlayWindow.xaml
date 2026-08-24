@@ -1,0 +1,79 @@
+<Window x:Class="WhisperByYashasVM.UI.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="OverlayWindow"
+        Width="520"
+        Height="220"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        Topmost="True">
+    <Grid>
+        <Border x:Name="BubbleBorder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,24"
+                Width="{Binding BubbleWidth}"
+                Height="140"
+                CornerRadius="30"
+                BorderThickness="1"
+                BorderBrush="#1B1D24"
+                Background="#CC090A0D"
+                Opacity="0">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="BubbleTranslate" Y="80"/>
+            </Border.RenderTransform>
+            <Grid Margin="24,14,24,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="{Binding StatusText}"
+                           Foreground="#ECEDEF"
+                           FontSize="14"
+                           FontWeight="SemiBold"/>
+
+                <ItemsControl Grid.Row="1"
+                              Margin="0,12,0,10"
+                              ItemsSource="{Binding WaveLevels}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="4"
+                                    Height="{Binding}"
+                                    Margin="3,0"
+                                    VerticalAlignment="Bottom"
+                                    CornerRadius="4"
+                                    Background="#F6F7F8"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock x:Name="TranscriptText"
+                           Grid.Row="2"
+                           Text="{Binding TranscriptText}"
+                           Foreground="#FFFFFF"
+                           FontSize="15"
+                           TextWrapping="Wrap"
+                           MaxHeight="52">
+                    <TextBlock.Effect>
+                        <BlurEffect x:Name="TranscriptBlur" Radius="0"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
