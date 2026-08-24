@@ -20,3 +20,6 @@ This file documents the unification of all branches into main with full history 
 ### 3. codex/android-wisprflow (7ece1d7e) - Android transcript history (14 commits)
 - Features: TranscriptRepository, WisperlowAppScreen, Flow theme
 
+
+### 4. Verification - total commits 887, all branches preserved via merge commits
+- Count: git rev-list --count HEAD = 887"n
