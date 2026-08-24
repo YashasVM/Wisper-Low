@@ -32,3 +32,7 @@ This file documents the unification of all branches into main with full history 
 ### 6. Push - fast-forward from origin/main (5172f574) to unified main
 - Push: git push origin main
 
+
+### 7. LFS - models/model.bin and release exe via Git LFS
+- Tracked in .gitattributes
+
