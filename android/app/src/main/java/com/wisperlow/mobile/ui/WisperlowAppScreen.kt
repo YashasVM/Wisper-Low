@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wisperlow.mobile.R
+import com.wisperlow.mobile.history.TranscriptEntry
 import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
 import com.wisperlow.mobile.stt.ModelCatalog
@@ -90,6 +91,7 @@ fun WisperlowAppScreen(
     serviceRunning: Boolean,
     downloadStates: Map<String, DownloadState>,
     dictionaryText: String,
+    history: List<TranscriptEntry> = emptyList(),
     onRequestMicrophone: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
@@ -97,6 +99,8 @@ fun WisperlowAppScreen(
     onToggleService: () -> Unit,
     onBubbleEnabledChange: (Boolean) -> Unit,
     onDictionaryTextChange: (String) -> Unit,
+    onCopyHistory: (TranscriptEntry) -> Unit = {},
+    onDeleteHistory: (TranscriptEntry) -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val tab = AppTab.entries[selectedTab]
