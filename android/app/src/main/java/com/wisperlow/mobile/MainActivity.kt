@@ -1,6 +1,8 @@
 package com.wisperlow.mobile
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -21,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
+import com.wisperlow.mobile.history.TranscriptEntry
+import com.wisperlow.mobile.history.TranscriptRepository
 import com.wisperlow.mobile.service.DictationService
 import com.wisperlow.mobile.settings.SettingsRepository
 import com.wisperlow.mobile.settings.WisperlowSettings
@@ -39,6 +43,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var modelDownloader: ModelDownloader
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var transcriptRepository: TranscriptRepository
 
     private val permissionRefresh = mutableIntStateOf(0)
 
@@ -66,6 +71,7 @@ class MainActivity : ComponentActivity() {
         var settings by remember { mutableStateOf(WisperlowSettings()) }
         var downloadStates by remember { mutableStateOf(mapOf<String, DownloadState>()) }
         var dictionaryText by remember { mutableStateOf("") }
+        val history by transcriptRepository.entries.collectAsState()
         val serviceRunning by DictationService.running.collectAsState()
         val scope = rememberCoroutineScope()
         val refresh = permissionRefresh.intValue
@@ -79,6 +85,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+        LaunchedEffect(Unit) {
+            transcriptRepository.load()
         }
         LaunchedEffect(Unit) {
             ModelCatalog.all.forEach { model ->
@@ -103,6 +112,7 @@ class MainActivity : ComponentActivity() {
             serviceRunning = serviceRunning,
             downloadStates = downloadStates,
             dictionaryText = dictionaryText,
+            history = history,
             onRequestMicrophone = ::requestCorePermissions,
             onRequestOverlay = {
                 startActivity(
@@ -147,6 +157,8 @@ class MainActivity : ComponentActivity() {
                     settingsRepository.setPersonalDictionary(SettingsRepository.parseDictionary(text))
                 }
             },
+            onCopyHistory = { entry -> copyTranscript(entry) },
+            onDeleteHistory = { entry -> scope.launch { transcriptRepository.delete(entry.id) } },
         )
     }
 
@@ -157,5 +169,10 @@ class MainActivity : ComponentActivity() {
                 if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
             }.toTypedArray(),
         )
+    }
+
+    private fun copyTranscript(entry: TranscriptEntry) {
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText("Wisperlow transcript", entry.text))
     }
 }
