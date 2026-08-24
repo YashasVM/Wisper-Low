@@ -23,3 +23,8 @@ This file documents the unification of all branches into main with full history 
 
 ### 4. Verification - total commits 887, all branches preserved via merge commits
 - Count: git rev-list --count HEAD = 887"n
+
+### 5. Contributions - ensure 30+ commits visible on GitHub profile
+- Author: YashasVM <yashasvmtvzzz@gmail.com> verified
+- Email verified via GitHub settings
+
