@@ -11,7 +11,7 @@ class TranscriptHistoryTest {
         val original = TranscriptEntry("entry-1", 123L, "first\tline\nsecond line")
         assertEquals(original, TranscriptLineCodec.decode(TranscriptLineCodec.encode(original)))
         assertNull(TranscriptLineCodec.decode("not a transcript"))
-        assertEquals(3, original.wordCount)
+        assertEquals(4, original.wordCount)
         assertNull(TranscriptLineCodec.decode("entry-1\t123\t2\tnot-base64"))
 
         val entries = (101 downTo 1).map { TranscriptEntry("$it", it.toLong(), "word") }
