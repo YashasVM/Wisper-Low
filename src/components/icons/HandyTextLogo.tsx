@@ -1,5 +1,7 @@
 import React from "react";
 
+const PRODUCT_NAME = "Wisperlow";
+
 const WisperlowTextLogo = ({
   width,
   height,
@@ -17,7 +19,7 @@ const WisperlowTextLogo = ({
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     role="img"
-    aria-label="Wisperlow"
+    aria-label={PRODUCT_NAME}
   >
     <g fill="currentColor" className="logo-primary">
       <rect x="0" y="38" width="10" height="44" rx="5" />
@@ -32,7 +34,7 @@ const WisperlowTextLogo = ({
         fontWeight="600"
         letterSpacing="-2"
       >
-        Wisperlow
+        {PRODUCT_NAME}
       </text>
     </g>
   </svg>

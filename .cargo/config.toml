@@ -1,1 +1,5 @@
 [build]
+
+[env]
+# ponytail: MSBuild file tracking hangs before cl.exe starts; remove once the installed tracker is fixed.
+TrackFileAccess = "false"

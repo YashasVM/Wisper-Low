@@ -1,4 +1,10 @@
-import { useEffect, useState, useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type ReactNode,
+} from "react";
 import { toast, Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
@@ -240,11 +246,11 @@ function App() {
     }
   };
 
-  const handleAccessibilityComplete = () => {
+  const handleAccessibilityComplete = useCallback(() => {
     // Returning users already have models, skip to main app
     // New users need to select a model
     setOnboardingStep(isReturningUser ? "done" : "model");
-  };
+  }, [isReturningUser]);
 
   const handleModelSelected = () => {
     // Transition to main app - user has started a download
@@ -275,7 +281,11 @@ function App() {
 
   // Still checking onboarding status
   if (onboardingStep === null) {
-    return null;
+    return (
+      <div className="h-screen flex items-center justify-center" role="status">
+        {t("modelSelector.loadingGeneric")}
+      </div>
+    );
   }
 
   // Select the content for the current step. The Toaster is rendered once, in a
