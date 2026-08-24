@@ -16,3 +16,7 @@ This file documents the unification of all branches into main with full history 
 ### 2. fix/windows-startup-audit (92281ef0) - cargo config, overlay, tests
 - Fixes: Windows startup, onboarding, App.tsx
 
+
+### 3. codex/android-wisprflow (7ece1d7e) - Android transcript history (14 commits)
+- Features: TranscriptRepository, WisperlowAppScreen, Flow theme
+
