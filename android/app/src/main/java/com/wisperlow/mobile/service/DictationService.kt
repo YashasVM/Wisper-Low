@@ -17,6 +17,7 @@ import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
 import com.wisperlow.mobile.audio.AudioEngine
 import com.wisperlow.mobile.audio.VadEngine
 import com.wisperlow.mobile.audio.VadEvent
+import com.wisperlow.mobile.history.TranscriptRepository
 import com.wisperlow.mobile.overlay.BubbleMode
 import com.wisperlow.mobile.overlay.BubbleOverlay
 import com.wisperlow.mobile.settings.SettingsRepository
@@ -51,6 +52,7 @@ class DictationService : Service() {
 
     @Inject lateinit var modelDownloader: ModelDownloader
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var transcriptRepository: TranscriptRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val audio = AudioEngine()
@@ -299,6 +301,8 @@ class DictationService : Service() {
         val text = pendingText ?: return
         pendingText = null
         val ok = WisperlowAccessibilityService.pasteText(text)
+        runCatching { transcriptRepository.add(text) }
+            .onFailure { android.util.Log.e(TAG, "history save failed", it) }
         if (!ok) {
             showToast(
                 "Enable Wisperlow in Accessibility settings so text can be pasted",
