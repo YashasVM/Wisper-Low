@@ -5,9 +5,17 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
@@ -16,12 +24,23 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface DownloadState {
     data object NotStarted : DownloadState
-    data class Downloading(val progressPct: Int) : DownloadState
+    data class Downloading(
+        val downloadedBytes: Long,
+        val totalBytes: Long,
+    ) : DownloadState {
+        val progressPct: Int
+            get() = if (totalBytes > 0L) {
+                ((downloadedBytes * 100L) / totalBytes).toInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+    }
     data object Extracting : DownloadState
     data class Completed(val modelDir: File) : DownloadState
     data class Failed(val message: String) : DownloadState
@@ -37,10 +56,46 @@ class ModelDownloader @Inject constructor(
     private val downloadsDir: File?
         get() = context.getExternalFilesDir(null)?.let { File(it, "downloads") }
 
+    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
+    private val _states = MutableStateFlow<Map<String, DownloadState>>(
+        ModelCatalog.all.associate { it.id to DownloadState.NotStarted },
+    )
+
+    val states: StateFlow<Map<String, DownloadState>> = _states.asStateFlow()
+
+    /** Reconcile disk and DownloadManager state after process/activity recreation. */
+    fun refresh() {
+        ModelCatalog.all.forEach { model ->
+            val installedDir = installedDirFor(model.id)
+            if (installedDir != null) {
+                clearPersistedDownload(model.id)
+                setState(model.id, DownloadState.Completed(installedDir))
+                return@forEach
+            }
+
+            val downloadId = persistedDownloadId(model.id)
+            val snapshot = downloadId?.let(::querySnapshot)
+            if (snapshot != null &&
+                (snapshot.status == DownloadManager.STATUS_SUCCESSFUL || snapshot.isActive)
+            ) {
+                setState(
+                    model.id,
+                    DownloadState.Downloading(snapshot.downloadedBytes, snapshot.totalBytes),
+                )
+                ensureOperation(model)
+            } else {
+                clearPersistedDownload(model.id)
+                setState(model.id, DownloadState.NotStarted)
+            }
+        }
+    }
+
     fun installedModels(): List<File> {
         val root = modelsRoot
         if (!root.isDirectory) return emptyList()
-        return root.listFiles { f -> f.isDirectory && File(f, MARKER_FILE).isFile }
+        return root.listFiles { file -> isValidModelDirectory(file) }
             ?.sortedBy { it.name }
             ?: emptyList()
     }
@@ -48,14 +103,94 @@ class ModelDownloader @Inject constructor(
     fun installedDirFor(modelId: String): File? {
         val model = ModelCatalog.byId(modelId) ?: return null
         val dir = File(modelsRoot, model.dirName)
-        return if (File(dir, MARKER_FILE).isFile) dir else null
+        return dir.takeIf(::isValidModelDirectory)
     }
 
-    fun enqueue(model: SttModel): Result<Long> = runCatching {
-        val destDir = downloadsDir ?: throw IOException("External storage unavailable")
-        if (!destDir.isDirectory && !destDir.mkdirs()) {
+    /** Starts or attaches to the one operation for this model. */
+    suspend fun download(model: SttModel): File {
+        installedDirFor(model.id)?.let { installed ->
+            setState(model.id, DownloadState.Completed(installed))
+            return installed
+        }
+        return ensureOperation(model).await()
+    }
+
+    fun deleteModel(modelId: String) {
+        val model = ModelCatalog.byId(modelId) ?: return
+        File(modelsRoot, model.dirName).deleteRecursively()
+        clearPersistedDownload(modelId)
+        setState(modelId, DownloadState.NotStarted)
+    }
+
+    private fun ensureOperation(model: SttModel): Deferred<File> {
+        inFlight[model.id]?.let { return it }
+
+        lateinit var operation: Deferred<File>
+        operation = downloadScope.async(start = CoroutineStart.LAZY) {
+            performDownload(model)
+        }
+        operation.invokeOnCompletion {
+            inFlight.remove(model.id, operation)
+        }
+
+        val existing = inFlight.putIfAbsent(model.id, operation)
+        if (existing != null) {
+            operation.cancel()
+            return existing
+        }
+        operation.start()
+        return operation
+    }
+
+    private suspend fun performDownload(model: SttModel): File {
+        var archive: File? = null
+        try {
+            val downloadId = findOrEnqueue(model)
+            archive = awaitDownload(downloadId, model)
+            setState(model.id, DownloadState.Extracting)
+            val installedDir = extract(archive, model)
+            setState(model.id, DownloadState.Completed(installedDir))
+            clearPersistedDownload(model.id)
+            return installedDir
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            setState(
+                model.id,
+                DownloadState.Failed(error.message ?: "Model download failed"),
+            )
+            clearPersistedDownload(model.id)
+            throw error
+        } finally {
+            archive?.let { file ->
+                if (file.exists() && !file.delete()) {
+                    Log.w(TAG, "Failed to delete downloaded archive ${file.name}")
+                }
+            }
+        }
+    }
+
+    private fun findOrEnqueue(model: SttModel): Long {
+        val persistedId = persistedDownloadId(model.id)
+        if (persistedId != null) {
+            val snapshot = querySnapshot(persistedId)
+            if (snapshot != null &&
+                (snapshot.isActive || snapshot.status == DownloadManager.STATUS_SUCCESSFUL)
+            ) {
+                return persistedId
+            }
+            clearPersistedDownload(model.id)
+        }
+
+        val destinationDir = downloadsDir ?: throw IOException("External storage unavailable")
+        if (!destinationDir.isDirectory && !destinationDir.mkdirs()) {
             throw IOException("Cannot create download directory")
         }
+        val destination = File(destinationDir, model.archiveName)
+        if (destination.exists() && !destination.delete()) {
+            throw IOException("Cannot replace an incomplete model download")
+        }
+
         val request = DownloadManager.Request(Uri.parse(model.downloadUrl)).apply {
             setTitle(model.archiveName)
             setDescription(model.displayName)
@@ -65,99 +200,109 @@ class ModelDownloader @Inject constructor(
             )
             setAllowedOverMetered(true)
             setAllowedOverRoaming(true)
-            setDestinationUri(Uri.fromFile(File(destDir, model.archiveName)))
+            setDestinationUri(Uri.fromFile(destination))
         }
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        dm.enqueue(request)
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        return downloadManager.enqueue(request).also { id ->
+            preferences.edit().putLong(downloadKey(model.id), id).apply()
+        }
     }
 
-    suspend fun awaitAndExtract(downloadId: Long, model: SttModel): File =
-        withContext(Dispatchers.IO) {
-            val archive = awaitDownload(downloadId)
-            try {
-                extract(archive, model)
-                val dir = File(modelsRoot, model.dirName)
-                File(dir, MARKER_FILE).writeText(model.id)
-                dir
-            } finally {
-                if (!archive.delete()) {
-                    Log.w(TAG, "Failed to delete archive ${archive.name}")
-                }
-            }
-        }
-
-    fun deleteModel(modelId: String) {
-        val model = ModelCatalog.byId(modelId) ?: return
-        File(modelsRoot, model.dirName).deleteRecursively()
-    }
-
-    private suspend fun awaitDownload(downloadId: Long): File {
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    private suspend fun awaitDownload(downloadId: Long, model: SttModel): File {
         while (true) {
-            pollOnce(dm, downloadId)?.let { file -> return file }
-            delay(POLL_INTERVAL_MS)
-        }
-    }
-
-    private fun pollOnce(dm: DownloadManager, downloadId: Long): File? {
-        dm.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
-            if (!cursor.moveToFirst()) {
-                throw IOException("Download $downloadId not found")
-            }
-            when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                DownloadManager.STATUS_SUCCESSFUL -> return localFile(dm, downloadId)
-                DownloadManager.STATUS_FAILED -> {
-                    val reason =
-                        cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    throw IOException("Download failed: reason=$reason")
+            val snapshot = querySnapshot(downloadId)
+                ?: throw IOException("Download $downloadId is no longer available")
+            when {
+                snapshot.status == DownloadManager.STATUS_SUCCESSFUL -> {
+                    return snapshot.localFile
+                        ?: throw IOException("Downloaded model file is unavailable")
                 }
-            }
-        }
-        return null
-    }
-
-    private fun localFile(dm: DownloadManager, downloadId: Long): File {
-        dm.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
-            if (cursor.moveToFirst()) {
-                val idx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-                val uri = if (idx >= 0) cursor.getString(idx) else null
-                if (uri != null) {
-                    val path = Uri.parse(uri).path
-                    if (path != null && File(path).isFile) {
-                        return File(path)
-                    }
+                snapshot.status == DownloadManager.STATUS_FAILED -> {
+                    throw IOException("Download failed: reason=${snapshot.reason}")
                 }
+                snapshot.isActive -> {
+                    setState(
+                        model.id,
+                        DownloadState.Downloading(
+                            snapshot.downloadedBytes,
+                            snapshot.totalBytes,
+                        ),
+                    )
+                    delay(POLL_INTERVAL_MS)
+                }
+                else -> throw IOException("Download stopped unexpectedly")
             }
         }
-        throw IOException("Could not locate downloaded file for $downloadId")
     }
 
-    private fun extract(archive: File, model: SttModel) {
-        val dest = File(modelsRoot, model.dirName)
+    private fun querySnapshot(downloadId: Long): DownloadSnapshot? {
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        downloadManager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            val downloadedBytes = cursor.getLong(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR),
+            )
+            val totalBytes = cursor.getLong(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES),
+            )
+            val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+            val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+            val localUri = localUriIndex.takeIf { it >= 0 && !cursor.isNull(it) }
+                ?.let(cursor::getString)
+            val localFile = localUri?.let { uri ->
+                Uri.parse(uri).path?.let(::File)?.takeIf(File::isFile)
+            }
+            return DownloadSnapshot(
+                status = status,
+                downloadedBytes = downloadedBytes.coerceAtLeast(0L),
+                totalBytes = totalBytes.coerceAtLeast(0L),
+                reason = reason,
+                localFile = localFile,
+            )
+        }
+    }
+
+    private fun extract(archive: File, model: SttModel): File {
         if (!modelsRoot.isDirectory && !modelsRoot.mkdirs()) {
             throw IOException("Cannot create models directory")
         }
-        if (dest.exists() && !dest.deleteRecursively()) {
-            throw IOException("Cannot clear existing model directory")
+        val destination = File(modelsRoot, model.dirName)
+        val temporary = File(modelsRoot, ".${model.dirName}.partial")
+        if (temporary.exists() && !temporary.deleteRecursively()) {
+            throw IOException("Cannot clear incomplete model extraction")
         }
-        if (!dest.mkdirs()) {
-            throw IOException("Cannot create model directory ${dest.name}")
+        if (!temporary.mkdirs()) {
+            throw IOException("Cannot create temporary model directory")
         }
-        val destCanonical = dest.canonicalPath + File.separator
-        val stripPrefix = detectRootFolder(archive)
 
-        BZip2CompressorInputStream(BufferedInputStream(FileInputStream(archive))).use { bz ->
-            TarArchiveInputStream(bz).use { tar ->
-                while (true) {
-                    val entry = tar.nextTarEntry ?: break
-                    val relative = entry.name.removePrefix(stripPrefix)
-                    if (relative.isEmpty()) continue
-                    writeEntry(entry, relative, tar, dest, destCanonical)
+        try {
+            val destinationCanonical = temporary.canonicalPath + File.separator
+            val stripPrefix = detectRootFolder(archive)
+            BZip2CompressorInputStream(BufferedInputStream(FileInputStream(archive))).use { bz ->
+                TarArchiveInputStream(bz).use { tar ->
+                    while (true) {
+                        val entry = tar.nextTarEntry ?: break
+                        val relative = entry.name.removePrefix(stripPrefix)
+                        if (relative.isEmpty()) continue
+                        writeEntry(entry, relative, tar, temporary, destinationCanonical)
+                    }
                 }
             }
-        }
-        if (dest.listFiles().isNullOrEmpty()) {
-            throw IOException("Extraction produced no files for ${model.dirName}")
+            if (!isValidModelDirectory(temporary)) {
+                throw IOException("Downloaded archive does not contain a valid speech model")
+            }
+            if (destination.exists() && !destination.deleteRecursively()) {
+                throw IOException("Cannot replace existing model directory")
+            }
+            if (!temporary.renameTo(destination)) {
+                throw IOException("Cannot finalize model extraction")
+            }
+            File(destination, MARKER_FILE).writeText(model.id)
+            return destination
+        } catch (error: Throwable) {
+            temporary.deleteRecursively()
+            throw error
         }
     }
 
@@ -167,7 +312,7 @@ class ModelDownloader @Inject constructor(
             TarArchiveInputStream(bz).use { tar ->
                 while (true) {
                     val entry = tar.nextTarEntry ?: break
-                    if (!entry.name.isBlank()) {
+                    if (entry.name.isNotBlank()) {
                         roots.add(entry.name.trimStart('/').substringBefore('/'))
                         if (roots.size > 1) return ""
                     }
@@ -181,39 +326,76 @@ class ModelDownloader @Inject constructor(
         entry: TarArchiveEntry,
         relativeName: String,
         tar: TarArchiveInputStream,
-        dest: File,
-        destCanonical: String,
+        destination: File,
+        destinationCanonical: String,
     ) {
-        if (relativeName.contains("..")) {
+        if (relativeName.split('/').any { it == ".." }) {
             Log.w(TAG, "Skipping suspicious tar entry: ${entry.name}")
             return
         }
-        val outFile = File(dest, relativeName)
-        if (!outFile.canonicalPath.startsWith(destCanonical)) {
-            throw IOException("Zip-slip detected in entry ${entry.name}")
+        val outputFile = File(destination, relativeName)
+        if (!outputFile.canonicalPath.startsWith(destinationCanonical)) {
+            throw IOException("Archive path escapes model directory")
         }
         if (entry.isSymbolicLink || entry.isLink) {
             Log.w(TAG, "Skipping link entry: ${entry.name}")
             return
         }
         if (entry.isDirectory) {
-            if (!outFile.isDirectory && !outFile.mkdirs()) {
-                throw IOException("Cannot create directory ${outFile.name}")
+            if (!outputFile.isDirectory && !outputFile.mkdirs()) {
+                throw IOException("Cannot create model directory ${outputFile.name}")
             }
             return
         }
-        outFile.parentFile?.let { parent ->
+        outputFile.parentFile?.let { parent ->
             if (!parent.isDirectory && !parent.mkdirs()) {
                 throw IOException("Cannot create directory ${parent.name}")
             }
         }
-        FileOutputStream(outFile).use { out ->
-            tar.copyTo(out, BUFFER_SIZE)
+        FileOutputStream(outputFile).use { output ->
+            tar.copyTo(output, BUFFER_SIZE)
         }
+    }
+
+    private fun isValidModelDirectory(directory: File): Boolean {
+        if (!directory.isDirectory) return false
+        val files = directory.listFiles { file -> file.isFile && file.length() > 0L } ?: return false
+        val hasTokens = files.any { it.name == "tokens.txt" }
+        val hasTransducer = files.any { it.name.startsWith("encoder") && it.name.endsWith(".onnx") } &&
+            files.any { it.name.startsWith("decoder") && it.name.endsWith(".onnx") }
+        val hasSingleNemoModel = files.count { it.name.endsWith(".onnx") } == 1
+        return hasTokens && (hasTransducer || hasSingleNemoModel)
+    }
+
+    private fun setState(modelId: String, state: DownloadState) {
+        _states.value = _states.value + (modelId to state)
+    }
+
+    private fun persistedDownloadId(modelId: String): Long? =
+        preferences.getLong(downloadKey(modelId), -1L).takeIf { it > 0L }
+
+    private fun clearPersistedDownload(modelId: String) {
+        preferences.edit().remove(downloadKey(modelId)).apply()
+    }
+
+    private fun downloadKey(modelId: String): String = "download_id_$modelId"
+
+    private data class DownloadSnapshot(
+        val status: Int,
+        val downloadedBytes: Long,
+        val totalBytes: Long,
+        val reason: Int,
+        val localFile: File?,
+    ) {
+        val isActive: Boolean
+            get() = status == DownloadManager.STATUS_PENDING ||
+                status == DownloadManager.STATUS_RUNNING ||
+                status == DownloadManager.STATUS_PAUSED
     }
 
     companion object {
         private const val TAG = "ModelDownloader"
+        private const val PREFERENCES_NAME = "model_downloads"
         private const val MARKER_FILE = ".installed"
         private const val POLL_INTERVAL_MS = 500L
         private const val BUFFER_SIZE = 64 * 1024

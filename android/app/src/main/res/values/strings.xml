@@ -64,6 +64,9 @@
     <string name="model_installed">Installed</string>
     <string name="model_active">Active</string>
     <string name="model_downloading">Downloading and preparing…</string>
+    <string name="model_downloading_short">Downloading…</string>
+    <string name="model_extracting">Preparing model for offline use…</string>
+    <string name="model_progress_percentage">%1$d%%</string>
     <string name="model_download_failed">Download failed: %1$s</string>
     <string name="action_redownload">Redownload</string>
     <string name="local_storage_title">Local storage only</string>

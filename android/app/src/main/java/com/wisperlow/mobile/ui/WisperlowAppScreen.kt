@@ -116,6 +116,7 @@ fun WisperlowAppScreen(
             AppTab.Home -> HomeScreen(
                 setup = setup,
                 serviceRunning = serviceRunning,
+                modelDownloadState = downloadStates[settings.selectedModelId],
                 onRequestMicrophone = onRequestMicrophone,
                 onRequestOverlay = onRequestOverlay,
                 onRequestAccessibility = onRequestAccessibility,
@@ -149,6 +150,7 @@ fun WisperlowAppScreen(
 private fun HomeScreen(
     setup: SetupState,
     serviceRunning: Boolean,
+    modelDownloadState: DownloadState?,
     onRequestMicrophone: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
@@ -180,6 +182,7 @@ private fun HomeScreen(
             item {
                 SetupCard(
                     setup = setup,
+                    modelDownloadState = modelDownloadState,
                     onRequestMicrophone = onRequestMicrophone,
                     onRequestOverlay = onRequestOverlay,
                     onRequestAccessibility = onRequestAccessibility,
@@ -208,6 +211,7 @@ private fun HomeScreen(
 @Composable
 private fun SetupCard(
     setup: SetupState,
+    modelDownloadState: DownloadState?,
     onRequestMicrophone: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
@@ -273,8 +277,12 @@ private fun SetupCard(
                 detail = stringResource(R.string.setup_model_detail),
                 actionLabel = stringResource(R.string.action_download),
                 complete = setup.modelReady,
+                busy = modelDownloadState.isDownloadInProgress(),
                 onAction = onDownloadModel,
             )
+            if (modelDownloadState.isDownloadInProgress()) {
+                ModelDownloadProgress(modelDownloadState)
+            }
         }
     }
 }
@@ -285,6 +293,7 @@ private fun SetupRow(
     detail: String,
     actionLabel: String,
     complete: Boolean,
+    busy: Boolean = false,
     onAction: () -> Unit,
 ) {
     Row(
@@ -308,6 +317,12 @@ private fun SetupRow(
                 text = stringResource(R.string.status_ready),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.tertiary,
+            )
+        } else if (busy) {
+            Text(
+                text = stringResource(R.string.model_downloading_short),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.secondary,
             )
         } else {
             TextButton(onClick = onAction) { Text(actionLabel) }
@@ -618,7 +633,15 @@ private fun ModelRow(
             }
             when {
                 state is DownloadState.Downloading || state is DownloadState.Extracting -> {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                    if (state is DownloadState.Downloading && state.totalBytes > 0L) {
+                        Text(
+                            text = stringResource(R.string.model_progress_percentage, state.progressPct),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    } else {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                    }
                 }
                 selected && installed -> Text(
                     stringResource(R.string.model_active),
@@ -636,11 +659,7 @@ private fun ModelRow(
             }
         }
         when (state) {
-            is DownloadState.Downloading, DownloadState.Extracting -> Text(
-                stringResource(R.string.model_downloading),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
+            is DownloadState.Downloading, DownloadState.Extracting -> ModelDownloadProgress(state)
             is DownloadState.Failed -> Text(
                 stringResource(R.string.model_download_failed, state.message),
                 style = MaterialTheme.typography.bodyMedium,
@@ -653,6 +672,67 @@ private fun ModelRow(
             )
             DownloadState.NotStarted, null -> Unit
         }
+    }
+}
+
+private fun DownloadState?.isDownloadInProgress(): Boolean =
+    this is DownloadState.Downloading || this is DownloadState.Extracting
+
+@Composable
+private fun ModelDownloadProgress(state: DownloadState) {
+    when (state) {
+        is DownloadState.Downloading -> {
+            val progress = if (state.totalBytes > 0L) {
+                state.downloadedBytes.toFloat() / state.totalBytes.toFloat()
+            } else {
+                null
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(R.string.model_downloading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                    if (progress != null) {
+                        Text(
+                            text = stringResource(R.string.model_progress_percentage, state.progressPct),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                }
+                if (progress == null) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            }
+        }
+        DownloadState.Extracting -> {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = stringResource(R.string.model_extracting),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+        }
+        else -> Unit
     }
 }
 

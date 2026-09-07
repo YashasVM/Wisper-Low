@@ -29,14 +29,13 @@ import com.wisperlow.mobile.service.DictationService
 import com.wisperlow.mobile.settings.SettingsRepository
 import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
-import com.wisperlow.mobile.stt.ModelCatalog
 import com.wisperlow.mobile.stt.ModelDownloader
 import com.wisperlow.mobile.ui.SetupState
 import com.wisperlow.mobile.ui.WisperlowAppScreen
 import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -70,7 +69,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun MainScreen() {
         var settings by remember { mutableStateOf(WisperlowSettings()) }
-        var downloadStates by remember { mutableStateOf(mapOf<String, DownloadState>()) }
+        val downloadStates by modelDownloader.states.collectAsState()
         var dictionaryText by remember { mutableStateOf("") }
         val history by transcriptRepository.entries.collectAsState()
         val serviceRunning by DictationService.running.collectAsState()
@@ -90,12 +89,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             transcriptRepository.load()
         }
-        LaunchedEffect(Unit) {
-            ModelCatalog.all.forEach { model ->
-                val directory = modelDownloader.installedDirFor(model.id) ?: return@forEach
-                downloadStates = downloadStates + (model.id to DownloadState.Completed(directory))
-            }
-        }
+        LaunchedEffect(Unit) { modelDownloader.refresh() }
 
         val setup = remember(refresh, downloadStates) {
             SetupState(
@@ -103,7 +97,7 @@ class MainActivity : ComponentActivity() {
                     PackageManager.PERMISSION_GRANTED,
                 overlayReady = Settings.canDrawOverlays(this),
                 accessibilityReady = WisperlowAccessibilityService.isReady,
-                modelReady = ModelCatalog.all.any { downloadStates[it.id] is DownloadState.Completed },
+                modelReady = downloadStates[settings.selectedModelId] is DownloadState.Completed,
             )
         }
 
@@ -129,14 +123,10 @@ class MainActivity : ComponentActivity() {
             onDownloadModel = { model ->
                 scope.launch {
                     try {
-                        downloadStates = downloadStates + (model.id to DownloadState.Downloading(0))
-                        val downloadId = modelDownloader.enqueue(model).getOrThrow()
-                        val directory = modelDownloader.awaitAndExtract(downloadId, model)
+                        modelDownloader.download(model)
                         settingsRepository.setSelectedModel(model.id)
-                        downloadStates = downloadStates + (model.id to DownloadState.Completed(directory))
-                    } catch (error: Throwable) {
-                        downloadStates = downloadStates +
-                            (model.id to DownloadState.Failed(error.message ?: "Unknown error"))
+                    } catch (_: Throwable) {
+                        // ModelDownloader publishes the user-visible failure state.
                     }
                 }
             },
