@@ -16,7 +16,8 @@
     "postProcessing": "Post proceso",
     "history": "Historial",
     "debug": "Depuración",
-    "about": "Acerca de"
+    "about": "Acerca de",
+    "home": "Home"
   },
   "onboarding": {
     "subtitle": "Para comenzar, elige un modelo de transcripción",
@@ -152,7 +153,8 @@
     },
     "cancel": "Cancelar",
     "cancelDownload": "Cancelar descarga",
-    "legacy": "Heredado"
+    "legacy": "Heredado",
+    "downloadingGeneric": "Downloading..."
   },
   "settings": {
     "modelSettings": {
@@ -683,5 +685,58 @@
     "learnMore": "Cómo solucionarlo",
     "recorderBlocked": "Ahora mismo no se pueden grabar atajos: Secure Input de macOS está bloqueando los eventos de teclado. Resuelve primero el aviso de Secure Input.",
     "dismiss": "Descartar"
+  },
+  "dashboard": {
+    "eyebrow": "PRIVATE SPEECH WORKSPACE",
+    "title": "Speak freely.\nWrite instantly.",
+    "subtitle": "A calm, local-first dictation space for thoughts, notes, and everything in between.",
+    "startSpeaking": "Start speaking",
+    "stopSpeaking": "Stop & transcribe",
+    "transcribing": "Transcribing…",
+    "startHint": "Click once, then talk naturally",
+    "listeningHint": "Listening — click when you’re done",
+    "shortcutLabel": "or use your shortcut",
+    "shortcutCommand": "⌘ / Ctrl",
+    "shortcutShift": "⇧",
+    "shortcutSpace": "Space",
+    "statsLabel": "Workspace status",
+    "stats": {
+      "localValue": "100% local",
+      "localLabel": "Your audio stays private",
+      "noModel": "Choose a model",
+      "modelLabel": "Active speech model",
+      "instantValue": "One click",
+      "instantLabel": "From voice to text"
+    },
+    "recentKicker": "YOUR VOICE",
+    "recentTitle": "Recent dictations",
+    "viewHistory": "Open history",
+    "emptyHistory": "Your first dictation is waiting",
+    "emptyHistoryHint": "Click Start speaking above and your words will appear here.",
+    "quickKicker": "READY WHEN YOU ARE",
+    "quickTitle": "Quick setup",
+    "quickMicrophone": "Check microphone",
+    "quickMicrophoneHint": "Choose the input that sounds best",
+    "quickSettings": "Tune your workflow",
+    "quickSettingsHint": "Shortcuts, output, and accessibility",
+    "modelsKicker": "VOICE ENGINE",
+    "modelsTitle": "Choose your model",
+    "modelsSubtitle": "Run speech recognition on your device with the balance of speed and accuracy you prefer.",
+    "showAll": "View catalogue",
+    "showLess": "Show fewer",
+    "noModels": "No models are available yet.",
+    "recommended": "Recommended",
+    "liveBadge": "Live capable",
+    "localBadge": "On device",
+    "english": "English",
+    "languages": "{{count}} languages",
+    "active": "Active",
+    "select": "Use this model",
+    "download": "Download",
+    "errors": {
+      "toggle": "Could not start dictation. Check microphone access and try again.",
+      "model": "Could not switch speech model.",
+      "download": "Model download failed. Check your connection and try again."
+    }
   }
 }
