@@ -6,6 +6,21 @@ pub mod transcription;
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
 use crate::utils::cancel_current_operation;
 use tauri::{AppHandle, Manager};
+
+/// Toggle the primary dictation action from the settings window.
+///
+/// The UI uses the same coordinator as global shortcuts, which means a click
+/// can start and stop recording without creating a second recording pipeline.
+#[tauri::command]
+#[specta::specta]
+pub fn toggle_transcription(app: AppHandle) -> Result<(), String> {
+    let coordinator = app
+        .try_state::<crate::TranscriptionCoordinator>()
+        .ok_or_else(|| "Transcription coordinator is not initialized".to_string())?;
+
+    coordinator.send_input("transcribe", "settings-window", true, false);
+    Ok(())
+}
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]

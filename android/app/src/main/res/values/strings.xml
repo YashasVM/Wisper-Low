@@ -28,6 +28,7 @@
     <string name="action_allow">Allow</string>
     <string name="action_open">Open</string>
     <string name="action_download">Download</string>
+    <string name="action_select">Use model</string>
     <string name="action_turn_on">Turn on dictation</string>
     <string name="action_pause">Pause bubble</string>
     <string name="bubble_ready_title">Your dictation bubble is ready</string>
@@ -61,6 +62,7 @@
     <string name="speech_model_title">Speech model</string>
     <string name="model_size">About %1$d MB · English</string>
     <string name="model_installed">Installed</string>
+    <string name="model_active">Active</string>
     <string name="model_downloading">Downloading and preparing…</string>
     <string name="model_download_failed">Download failed: %1$s</string>
     <string name="action_redownload">Redownload</string>

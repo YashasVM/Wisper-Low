@@ -36,6 +36,7 @@ import com.wisperlow.mobile.ui.WisperlowAppScreen
 import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -136,6 +137,19 @@ class MainActivity : ComponentActivity() {
                     } catch (error: Throwable) {
                         downloadStates = downloadStates +
                             (model.id to DownloadState.Failed(error.message ?: "Unknown error"))
+                    }
+                }
+            },
+            onSelectModel = { model ->
+                scope.launch {
+                    settingsRepository.setSelectedModel(model.id)
+                    // A running service owns the loaded recognizer. Restart it
+                    // after a model change so the next tap uses the model the
+                    // catalogue shows as active.
+                    if (DictationService.running.value) {
+                        DictationService.stop(this@MainActivity)
+                        delay(250)
+                        DictationService.start(this@MainActivity)
                     }
                 }
             },

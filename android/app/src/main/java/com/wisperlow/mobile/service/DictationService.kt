@@ -218,12 +218,16 @@ class DictationService : Service() {
         }
     }
 
-    private fun finishSpeech() {
-        if (!speechActive) return
+    private fun finishSpeech(force: Boolean = false) {
+        if (!recording) return
+        if (!speechActive && !force) return
         speechActive = false
         val pcm = synchronized(this) {
             recording = false
             audio.stop()
+            // A manual stop can happen before VAD crosses its speech threshold.
+            // In that case retain any collected frames instead of silently
+            // dropping the whole dictation.
             val flat = ShortArray(collected.sumOf { it.size })
             var offset = 0
             for (chunk in collected) {
@@ -237,8 +241,9 @@ class DictationService : Service() {
     }
 
     private fun stopDictation() {
-        if (speechActive) {
-            finishSpeech()
+        val hasCollectedAudio = synchronized(this) { collected.isNotEmpty() }
+        if (speechActive || hasCollectedAudio) {
+            finishSpeech(force = true)
         } else {
             recording = false
             audio.stop()

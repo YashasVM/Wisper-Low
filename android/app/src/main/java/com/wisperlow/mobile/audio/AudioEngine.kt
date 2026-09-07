@@ -69,10 +69,16 @@ class AudioEngine(private val sampleRate: Int = 16000) {
 
     fun stop() {
         running = false
-        try {
-            thread?.join(2000)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
+        val worker = thread
+        // VAD can decide that speech ended from inside the audio callback.
+        // Joining the callback thread from itself stalls for the full timeout
+        // and makes every dictation feel like it hangs after speaking.
+        if (worker != null && worker !== Thread.currentThread()) {
+            try {
+                worker.join(2000)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
         thread = null
         try {

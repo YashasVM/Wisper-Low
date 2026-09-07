@@ -96,6 +96,7 @@ fun WisperlowAppScreen(
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
     onDownloadModel: (SttModel) -> Unit,
+    onSelectModel: (SttModel) -> Unit = {},
     onToggleService: () -> Unit,
     onBubbleEnabledChange: (Boolean) -> Unit,
     onDictionaryTextChange: (String) -> Unit,
@@ -118,7 +119,12 @@ fun WisperlowAppScreen(
                 onRequestMicrophone = onRequestMicrophone,
                 onRequestOverlay = onRequestOverlay,
                 onRequestAccessibility = onRequestAccessibility,
-                onDownloadModel = { onDownloadModel(ModelCatalog.PARAKEET_V3_INT8) },
+                onDownloadModel = {
+                    onDownloadModel(
+                        ModelCatalog.byId(settings.selectedModelId)
+                            ?: ModelCatalog.PARAKEET_V3_INT8,
+                    )
+                },
                 onToggleService = onToggleService,
                 modifier = Modifier.padding(contentPadding),
             )
@@ -132,6 +138,7 @@ fun WisperlowAppScreen(
                 downloadStates = downloadStates,
                 onBubbleEnabledChange = onBubbleEnabledChange,
                 onDownloadModel = onDownloadModel,
+                onSelectModel = onSelectModel,
                 modifier = Modifier.padding(contentPadding),
             )
         }
@@ -520,6 +527,7 @@ private fun SettingsScreen(
     downloadStates: Map<String, DownloadState>,
     onBubbleEnabledChange: (Boolean) -> Unit,
     onDownloadModel: (SttModel) -> Unit,
+    onSelectModel: (SttModel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ScreenList(modifier) {
@@ -555,6 +563,8 @@ private fun SettingsScreen(
                             model = model,
                             state = downloadStates[model.id],
                             onDownload = { onDownloadModel(model) },
+                            selected = settings.selectedModelId == model.id,
+                            onSelect = { onSelectModel(model) },
                         )
                     }
                 }
@@ -583,6 +593,8 @@ private fun ModelRow(
     model: SttModel,
     state: DownloadState?,
     onDownload: () -> Unit,
+    selected: Boolean,
+    onSelect: () -> Unit,
 ) {
     val installed = state is DownloadState.Completed
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -608,11 +620,17 @@ private fun ModelRow(
                 is DownloadState.Downloading, DownloadState.Extracting -> {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                 }
+                selected && installed -> Text(
+                    stringResource(R.string.model_active),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                installed -> OutlinedButton(onClick = onSelect) {
+                    Text(stringResource(R.string.action_select))
+                }
                 else -> OutlinedButton(onClick = onDownload) {
                     Text(
-                        stringResource(
-                            if (installed) R.string.action_redownload else R.string.action_download,
-                        ),
+                        stringResource(R.string.action_download),
                     )
                 }
             }
