@@ -281,7 +281,7 @@ private fun SetupCard(
                 onAction = onDownloadModel,
             )
             if (modelDownloadState.isDownloadInProgress()) {
-                ModelDownloadProgress(modelDownloadState)
+                modelDownloadState?.let { ModelDownloadProgress(it) }
             }
         }
     }
