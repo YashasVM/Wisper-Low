@@ -616,8 +616,8 @@ private fun ModelRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            when (state) {
-                is DownloadState.Downloading, DownloadState.Extracting -> {
+            when {
+                state is DownloadState.Downloading || state is DownloadState.Extracting -> {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                 }
                 selected && installed -> Text(
