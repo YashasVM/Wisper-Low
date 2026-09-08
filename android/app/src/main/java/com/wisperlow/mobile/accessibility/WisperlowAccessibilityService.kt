@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.lang.ref.WeakReference
@@ -26,6 +27,9 @@ class WisperlowAccessibilityService : AccessibilityService() {
 
         fun pasteNewline(): Boolean =
             ref?.get()?.pasteTextImpl("\n") ?: false
+
+        fun pressEnter(): Boolean =
+            ref?.get()?.pressEnterImpl() ?: false
     }
 
     override fun onServiceConnected() {
@@ -47,7 +51,12 @@ class WisperlowAccessibilityService : AccessibilityService() {
     private fun findEditableTargetImpl(): AccessibilityNodeInfo? {
         return try {
             val root = rootInActiveWindow ?: return null
-            findFocusTarget(root) ?: findBfsEditableTarget(root)
+            val focused = findFocusTarget(root)
+            if (focused != null) {
+                focused
+            } else {
+                findBfsEditableTarget(root)
+            }
         } catch (_: Exception) {
             null
         }
@@ -60,8 +69,9 @@ class WisperlowAccessibilityService : AccessibilityService() {
             null
         }
         while (current != null) {
-            if (current.isEditable && current.isFocusable) return current
-            current = current.parent
+            val candidate = current
+            if (candidate.isEditable && candidate.isFocusable) return candidate
+            current = try { candidate.parent } catch (_: Exception) { null }
         }
         return null
     }
@@ -107,9 +117,38 @@ class WisperlowAccessibilityService : AccessibilityService() {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("wisperlow", text))
 
-            return target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            return if (target.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+                true
+            } else {
+                setTextAtSelection(target, text)
+            }
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun pressEnterImpl(): Boolean {
+        val target = findEditableTargetImpl() ?: return false
+        return try {
+            target.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun setTextAtSelection(target: AccessibilityNodeInfo, inserted: String): Boolean {
+        val current = target.text?.toString().orEmpty()
+        val selectionStart = target.textSelectionStart.takeIf { it in 0..current.length }
+            ?: current.length
+        val selectionEnd = target.textSelectionEnd.takeIf { it in selectionStart..current.length }
+            ?: selectionStart
+        val replacement = current.replaceRange(selectionStart, selectionEnd, inserted)
+        val arguments = Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                replacement,
+            )
+        }
+        return target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
     }
 }

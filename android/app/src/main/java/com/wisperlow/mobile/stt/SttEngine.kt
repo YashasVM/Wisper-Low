@@ -41,9 +41,13 @@ class SttEngine(private val modelDir: File) {
             }
             return try {
                 val stream = rec.createStream()
-                stream.acceptWaveform(floats)
-                rec.decode(stream)
-                rec.getResult(stream).text.trim()
+                try {
+                    stream.acceptWaveform(floats)
+                    rec.decode(stream)
+                    rec.getResult(stream).text.trim()
+                } finally {
+                    stream.release()
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "Transcription failed", t)
                 ""
@@ -83,7 +87,7 @@ class SttEngine(private val modelDir: File) {
                         joiner = joiner?.absolutePath ?: "",
                     ),
                     tokens = tokens.absolutePath,
-                    numThreads = NUM_THREADS,
+                    numThreads = inferenceThreads,
                     debug = false,
                     provider = "cpu",
                     modelType = "nemo_transducer",
@@ -103,7 +107,7 @@ class SttEngine(private val modelDir: File) {
                 modelConfig = OfflineModelConfig(
                     nemo = OfflineNemoEncDecCtcModelConfig(model = singleModel.absolutePath),
                     tokens = tokens.absolutePath,
-                    numThreads = NUM_THREADS,
+                    numThreads = inferenceThreads,
                     debug = false,
                     provider = "cpu",
                 ),
@@ -112,8 +116,11 @@ class SttEngine(private val modelDir: File) {
         throw IllegalArgumentException("No recognizable model layout in ${modelDir.absolutePath}")
     }
 
+    private val inferenceThreads: Int
+        get() = Runtime.getRuntime().availableProcessors().coerceIn(2, MAX_THREADS)
+
     companion object {
         private const val TAG = "SttEngine"
-        private const val NUM_THREADS = 2
+        private const val MAX_THREADS = 4
     }
 }
