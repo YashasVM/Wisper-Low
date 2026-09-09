@@ -112,7 +112,13 @@ class DictationService : Service() {
         audio.setListener(null)
         audio.stop()
         vad?.close()
-        stt?.release()
+        val engine = stt
+        stt = null
+        if (engine != null) {
+            // Native decode is serialized with release; do not block the main
+            // service teardown thread while a long utterance finishes.
+            Thread({ engine.release() }, "wisperlow-stt-release").start()
+        }
         overlay.hide()
         scope.cancel()
         super.onDestroy()
@@ -142,7 +148,11 @@ class DictationService : Service() {
         prepareVad()
         val bubble = overlay
         bubble.onTap = {
-            scope.launch { if (recording) stopDictation() else startDictation() }
+            scope.launch {
+                initializationMutex.withLock {
+                    if (recording) stopDictation() else startDictation()
+                }
+            }
         }
         bubble.onCancelGesture = {
             scope.launch { cancelDictation() }
@@ -252,21 +262,20 @@ class DictationService : Service() {
         }
     }
 
-    private fun startDictation() {
+    private suspend fun startDictation() {
         if (recording || _phase.value is DictationPhase.Processing || _phase.value is DictationPhase.Review) return
         idleReleaseJob?.cancel()
+        val requestGeneration = transcriptionGeneration.get()
         if (stt == null) {
             _phase.value = DictationPhase.Initializing
-            scope.launch {
-                initializationMutex.withLock {
-                    val modelDir = resolveModelDir()
-                    if (modelDir == null || !prepareStt(modelDir)) return@withLock
-                    startRecording()
-                }
-            }
-            return
+            val modelDir = resolveModelDir()
+            if (modelDir == null || !prepareStt(modelDir)) return
+            if (requestGeneration != transcriptionGeneration.get()) return
         }
-        startRecording()
+        synchronized(this) {
+            if (requestGeneration != transcriptionGeneration.get()) return
+            startRecording()
+        }
     }
 
     private fun startRecording() {
@@ -377,10 +386,12 @@ class DictationService : Service() {
     }
 
     private fun cancelDictation() {
-        transcriptionGeneration.incrementAndGet()
-        speechActive = false
-        recording = false
-        pendingText = null
+        synchronized(this) {
+            transcriptionGeneration.incrementAndGet()
+            speechActive = false
+            recording = false
+            pendingText = null
+        }
         audio.stop()
         synchronized(this) {
             collected.clear()
@@ -416,6 +427,9 @@ class DictationService : Service() {
                     return@launch resetAfterProcessing()
                 }
                 val dictionary = settingsRepository.settings.first().personalDictionary
+                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
+                    return@launch
+                }
                 pendingText = PersonalDictionary.apply(cleaned, dictionary)
                 _phase.value = DictationPhase.Review
                 overlay.setReviewText(pendingText.orEmpty())
@@ -471,10 +485,12 @@ class DictationService : Service() {
         idleReleaseJob?.cancel()
         idleReleaseJob = scope.launch {
             delay(IDLE_MODEL_RELEASE_MS)
-            if (_phase.value is DictationPhase.Idle && !recording) {
-                stt?.release()
-                stt = null
-                loadedModelId = null
+            initializationMutex.withLock {
+                if (_phase.value is DictationPhase.Idle && !recording) {
+                    stt?.release()
+                    stt = null
+                    loadedModelId = null
+                }
             }
         }
     }
