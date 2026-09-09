@@ -21,7 +21,7 @@ requires an installed Parakeet model. Build the debug APK, then provision an
 already extracted model and run the test on one authorized device:
 
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDebug assembleDebugAndroidTest
 ANDROID_SERIAL=<device-serial> ./scripts/verify-device.sh \
   /path/to/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
 ```
@@ -35,6 +35,10 @@ cold load time, decode time, native heap usage, and checks the sample
 transcript for the expected JFK phrase, including repeated `ask`, `country`,
 and `do` words. The upstream fixture is 24 kHz PCM; the test validates its
 WAV metadata and resamples it to the engine's required 16 kHz input.
+The helper runs instrumentation directly and leaves the app and model installed.
+Grant microphone and overlay permissions first to include the service lifecycle
+test; otherwise that test is skipped. Gradle's `connectedDebugAndroidTest`
+uninstalls the app after the suite and removes the downloaded model.
 
 For acceptance testing, compare the same recordings containing names, slang,
 and punctuation against Samsung Keyboard voice input. Record word error rate,
