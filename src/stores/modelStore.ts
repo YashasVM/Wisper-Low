@@ -174,13 +174,30 @@ export const useModelStore = create<ModelsStore>()(
           }),
         );
         const result = await commands.downloadModel(modelId);
-        if (result.status !== "ok") {
+        if (result.status === "ok") {
+          // The completion event is useful for progress updates, but it can be
+          // missed when the store is still registering listeners during startup.
+          // Reconcile from the backend after the command succeeds so onboarding
+          // cannot remain stuck in its preparing state after a finished download.
+          set(
+            produce((state) => {
+              delete state.downloadingModels[modelId];
+              delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
+              delete state.downloadProgress[modelId];
+              delete state.downloadStats[modelId];
+            }),
+          );
+          await get().loadModels();
+        } else {
           // Fallback cleanup in case the model-download-failed event was not received
           // (e.g. listener not yet registered). The event handler is a no-op if it
           // arrives after this cleanup since deleting missing keys is safe.
           set(
             produce((state) => {
               delete state.downloadingModels[modelId];
+              delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
             }),
@@ -193,10 +210,15 @@ export const useModelStore = create<ModelsStore>()(
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];
+            delete state.verifyingModels[modelId];
+            delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
           }),
         );
+        // Also refresh the model list when IPC itself fails. This clears stale
+        // backend state if the download completed just before the exception.
+        await get().loadModels();
         return false;
       }
     },

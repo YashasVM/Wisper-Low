@@ -51,6 +51,8 @@ export const SUPPORTED_LANGUAGES = Object.keys(resources)
 
 export type SupportedLanguageCode = string;
 
+const isTauriRuntime = "__TAURI_INTERNALS__" in window;
+
 // Check if a language code is supported
 export const getSupportedLanguage = (
   langCode: string | null | undefined,
@@ -102,6 +104,14 @@ i18n.use(initReactI18next).init({
 // Sync language from app settings
 export const syncLanguageFromSettings = async () => {
   try {
+    if (!isTauriRuntime) {
+      const supported = getSupportedLanguage(navigator.language);
+      if (supported && supported !== i18n.language) {
+        await i18n.changeLanguage(supported);
+      }
+      return;
+    }
+
     const result = await commands.getAppSettings();
     if (result.status === "ok" && result.data.app_language) {
       const supported = getSupportedLanguage(result.data.app_language);
