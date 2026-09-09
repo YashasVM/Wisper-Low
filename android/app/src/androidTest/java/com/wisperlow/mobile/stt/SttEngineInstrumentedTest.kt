@@ -1,6 +1,8 @@
 package com.wisperlow.mobile.stt
 
 import android.util.Log
+import android.os.Debug
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -26,12 +28,25 @@ class SttEngineInstrumentedTest {
         repeat(2) { pass ->
             val engine = SttEngine(modelDir)
             try {
+                val loadStarted = SystemClock.elapsedRealtimeNanos()
                 assertTrue("Native recognizer failed to load", engine.load())
+                val loadMs = (SystemClock.elapsedRealtimeNanos() - loadStarted) / 1_000_000
                 // Loading an already initialized engine must be idempotent.
                 assertTrue("Repeated model load was not idempotent", engine.load())
+                val decodeStarted = SystemClock.elapsedRealtimeNanos()
                 val transcript = engine.transcribe(pcm)
-                Log.i(TAG, "Real-model transcript pass ${pass + 1}: $transcript")
+                val decodeMs = (SystemClock.elapsedRealtimeNanos() - decodeStarted) / 1_000_000
+                val normalized = transcript.lowercase()
+                Log.i(
+                    TAG,
+                    "Real-model pass ${pass + 1}: load=${loadMs}ms " +
+                        "decode=${decodeMs}ms nativeHeap=${Debug.getNativeHeapAllocatedSize()} " +
+                        "transcript=$transcript",
+                )
                 assertTrue("The real model returned an empty transcript", transcript.length > 5)
+                assertTrue("Transcript missed 'tribal'", "tribal" in normalized)
+                assertTrue("Transcript missed 'chieftain'", "chieftain" in normalized)
+                assertTrue("Transcript missed the final 'gold'", "gold" in normalized)
                 if (previousTranscript != null) {
                     assertTrue(
                         "Repeated inference changed the transcript",
