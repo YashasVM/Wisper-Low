@@ -19,6 +19,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -54,7 +55,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -81,6 +81,8 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     var onTap: (() -> Unit)? = null
     var onCancelGesture: (() -> Unit)? = null
     var onConfirm: (() -> Unit)? = null
+    /** Called whenever the user edits the review text before insertion. */
+    var onReviewTextChanged: ((String) -> Unit)? = null
 
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -364,12 +366,24 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 confirm = false,
                 onClick = { onCancelGesture?.invoke() },
             )
-            Text(
-                text = reviewTextState.value,
-                color = Color.White.copy(alpha = 0.9f),
+            BasicTextField(
+                value = reviewTextState.value,
+                onValueChange = { text ->
+                    reviewTextState.value = text
+                    onReviewTextChanged?.invoke(text)
+                },
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Color.White.copy(alpha = 0.9f),
+                ),
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 6.dp)
+                    .semantics {
+                        contentDescription = context.getString(
+                            com.wisperlow.mobile.R.string.bubble_review_text,
+                        )
+                    },
             )
             ReviewAction(
                 contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_insert),

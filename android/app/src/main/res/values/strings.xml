@@ -10,6 +10,7 @@
     <string name="bubble_tap_to_start">Start dictation</string>
     <string name="bubble_listening">Dictation listening</string>
     <string name="bubble_processing">Preparing dictation</string>
+    <string name="bubble_review_text">Dictation text. Edit before inserting.</string>
 
     <string name="nav_home">Home</string>
     <string name="nav_dictionary">Dictionary</string>
@@ -24,7 +25,7 @@
     <string name="setup_overlay">Floating bubble</string>
     <string name="setup_overlay_detail">Start dictation over any app</string>
     <string name="setup_accessibility">Text insertion</string>
-    <string name="setup_accessibility_detail">Put words in the focused field</string>
+    <string name="setup_accessibility_detail">Put words in the focused field (optional; clipboard fallback is available)</string>
     <string name="setup_model">Offline speech model</string>
     <string name="setup_model_detail">Download once, then work offline</string>
     <string name="status_ready">Ready</string>

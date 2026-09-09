@@ -72,8 +72,9 @@ data class SetupState(
     val completedCount: Int
         get() = listOf(microphoneReady, overlayReady, accessibilityReady, modelReady).count { it }
 
+    /** Accessibility improves insertion into focused fields but clipboard fallback works without it. */
     val isReady: Boolean
-        get() = completedCount == TOTAL_STEPS
+        get() = microphoneReady && overlayReady && modelReady
 
     companion object {
         const val TOTAL_STEPS = 4
