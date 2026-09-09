@@ -26,7 +26,7 @@ object PersonalDictionary {
                 result.append(replacement)
                 // Keep the historical punctuation behavior: a punctuation mark
                 // already included at the end of a replacement is not duplicated.
-                index = if (replacement.lastOrNull() == text.getOrNull(match.second)) {
+                index = if (replacement.lastOrNull()?.let { !it.isLetterOrDigit() && !it.isWhitespace() && it == text.getOrNull(match.second) } == true) {
                     match.second + 1
                 } else {
                     match.second
@@ -57,6 +57,14 @@ object PersonalDictionary {
         return input
     }
 
-    private fun isWord(character: Char): Boolean = character == '_' || character.isLetterOrDigit()
-    private fun isWord(codePoint: Int): Boolean = codePoint == '_'.code || Character.isLetterOrDigit(codePoint)
+    private fun isWord(character: Char): Boolean = isWord(character.code)
+    private fun isWord(codePoint: Int): Boolean {
+        if (codePoint == '_'.code || Character.isLetterOrDigit(codePoint)) return true
+        return when (Character.getType(codePoint)) {
+            Character.NON_SPACING_MARK.toInt(),
+            Character.COMBINING_SPACING_MARK.toInt(),
+            Character.ENCLOSING_MARK.toInt() -> true
+            else -> false
+        }
+    }
 }

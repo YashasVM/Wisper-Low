@@ -2,7 +2,7 @@ package com.wisperlow.mobile.service
 
 /** Pure lifecycle rules kept separate so capture bounds can be regression-tested without Android. */
 internal object DictationPolicy {
-    const val MAX_CAPTURE_CHUNKS = 9_375 // Five minutes at 512 frames / 16 kHz.
+    const val MAX_CAPTURE_CHUNKS = 1_875 // One minute at 512 frames / 16 kHz.
 
     fun reachedCaptureLimit(chunkCount: Int): Boolean = chunkCount >= MAX_CAPTURE_CHUNKS
 

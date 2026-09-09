@@ -8,7 +8,7 @@ import android.util.Log
 
 class AudioEngine(private val sampleRate: Int = 16000) {
 
-    private var record: AudioRecord? = null
+    @Volatile private var record: AudioRecord? = null
     private var thread: Thread? = null
 
     @Volatile
@@ -85,11 +85,14 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         listener = null
         errorListener = null
         val worker = thread
+        val activeRecord = record
+        record = null
+        thread = null
         // AudioRecord.read() may be blocking. Stop recording first so the
         // worker wakes immediately instead of making every manual stop wait
         // for the join timeout.
         try {
-            record?.stop()
+            activeRecord?.stop()
         } catch (e: IllegalStateException) {
             Log.w(TAG, "AudioRecord.stop failed", e)
         }
@@ -103,9 +106,8 @@ class AudioEngine(private val sampleRate: Int = 16000) {
                 Thread.currentThread().interrupt()
             }
         }
-        thread = null
-        record?.release()
-        record = null
+        // The worker owns release, including when a vendor read exceeds the
+        // join timeout. Never release its native handle while read is active.
     }
 
     private fun readLoop(rec: AudioRecord) {
@@ -120,43 +122,48 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         }
         val chunk = ShortArray(CHUNK_FRAMES)
         var emptyReads = 0
-        while (running) {
-            val n = try {
-                rec.read(chunk, 0, CHUNK_FRAMES, AudioRecord.READ_BLOCKING)
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "AudioRecord.read failed", e)
-                break
-            }
-            if (n == AudioRecord.ERROR_DEAD_OBJECT || n == AudioRecord.ERROR_INVALID_OPERATION) {
-                notifyReadFailure("AudioRecord stopped with read error: $n")
-                break
-            }
-            if (n < 0) {
-                notifyReadFailure("AudioRecord read failed: $n")
-                break
-            }
-            if (n == 0) {
-                // A vendor implementation may occasionally return an empty
-                // blocking read. Avoid a hot loop and fail after a short,
-                // bounded grace period if it never recovers.
-                emptyReads++
-                if (emptyReads >= MAX_EMPTY_READS) {
-                    notifyReadFailure("AudioRecord returned no samples")
+            while (running && record === rec) {
+                val n = try {
+                    rec.read(chunk, 0, CHUNK_FRAMES, AudioRecord.READ_BLOCKING)
+                } catch (e: IllegalStateException) {
+                    notifyReadFailure("AudioRecord.read failed: ${e.message}")
                     break
                 }
-                Thread.sleep(10L)
-                continue
+                if (!running || record !== rec) break
+                if (n == AudioRecord.ERROR_DEAD_OBJECT || n == AudioRecord.ERROR_INVALID_OPERATION) {
+                    notifyReadFailure("AudioRecord stopped with read error: $n")
+                    break
+                }
+                if (n < 0) {
+                    notifyReadFailure("AudioRecord read failed: $n")
+                    break
+                }
+                if (n == 0) {
+                    // A vendor implementation may occasionally return an empty
+                    // blocking read. Avoid a hot loop and fail after a short,
+                    // bounded grace period if it never recovers.
+                    emptyReads++
+                    if (emptyReads >= MAX_EMPTY_READS) {
+                        notifyReadFailure("AudioRecord returned no samples")
+                        break
+                    }
+                    Thread.sleep(10L)
+                    continue
+                }
+                emptyReads = 0
+                var sumSquares = 0.0
+                for (i in 0 until n) {
+                    val s = chunk[i].toDouble()
+                    sumSquares += s * s
+                }
+                val rms = kotlin.math.sqrt(sumSquares / n)
+                val level = (rms / 32767.0).coerceIn(0.0, 1.0)
+                val samples = if (n == CHUNK_FRAMES) chunk else chunk.copyOf(n)
+                listener?.invoke(samples, level.toFloat())
             }
-            emptyReads = 0
-            var sumSquares = 0.0
-            for (i in 0 until n) {
-                val s = chunk[i].toDouble()
-                sumSquares += s * s
-            }
-            val rms = kotlin.math.sqrt(sumSquares / n)
-            val level = (rms / 32767.0).coerceIn(0.0, 1.0)
-            val samples = if (n == CHUNK_FRAMES) chunk else chunk.copyOf(n)
-            listener?.invoke(samples, level.toFloat())
+ {
+            if (record === rec) running = false
+            runCatching { rec.release() }
         }
     }
 

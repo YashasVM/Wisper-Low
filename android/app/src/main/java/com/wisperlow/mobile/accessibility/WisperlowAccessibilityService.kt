@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
 import java.util.ArrayDeque
 
@@ -63,13 +64,14 @@ class WisperlowAccessibilityService : AccessibilityService() {
         // accessibility window. Prefer another app's focused editor so later
         // confirmation can never paste into our review field.
         val target = windows.asSequence()
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
             .filter { it.root?.packageName?.toString() != packageName }
             .filter { it.isActive || it.isFocused }
             .sortedByDescending { (if (it.isActive) 2 else 0) + (if (it.isFocused) 1 else 0) }
             .mapNotNull { window ->
                 val root = try { window.root } catch (_: Exception) { null } ?: return@mapNotNull null
                 findFocusTarget(root)?.takeIf { target ->
-                    target.isEditable && !target.isPassword
+                    target.isEditable && target.isVisibleToUser && !target.isPassword
                 }
             }
             .firstOrNull() ?: return false
@@ -142,7 +144,11 @@ class WisperlowAccessibilityService : AccessibilityService() {
 
     private fun pasteTextImpl(text: String): Boolean {
         return try {
-            val target = capturedTarget ?: findEditableTargetImpl() ?: return false
+            val target = capturedTarget ?: return false
+            capturedTarget = null
+            if (!target.refresh() || !target.isEditable || !target.isVisibleToUser ||
+                target.isPassword || target.packageName?.toString() == packageName
+            ) return false
 
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("wisperlow", text))
@@ -151,10 +157,6 @@ class WisperlowAccessibilityService : AccessibilityService() {
                 true
             } else {
                 setTextAtSelection(target, text)
-            }
-            if (pasted && target === capturedTarget) {
-                capturedTarget = null
-                target.recycle()
             }
             pasted
         } catch (_: Exception) {

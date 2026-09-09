@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -62,9 +64,11 @@ class DictationService : Service() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var transcriptRepository: TranscriptRepository
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val audio = AudioEngine()
     private val initializationMutex = Mutex()
+    private val inferenceMutex = Mutex()
+    private var transcriptionJob: Job? = null
     @Inject lateinit var overlay: BubbleOverlay
     private var vad: VadEngine? = null
     private var stt: SttEngine? = null
@@ -76,8 +80,6 @@ class DictationService : Service() {
     @Volatile private var recording = false
     @Volatile private var speechActive = false
     @Volatile private var pendingText: String? = null
-    private val collected = ArrayList<ShortArray>(256)
-    private val preroll = ArrayDeque<ShortArray>()
     private val fullCapture = ArrayDeque<ShortArray>()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -91,7 +93,12 @@ class DictationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startAsForeground()
+        try {
+            startAsForeground()
+        } catch (error: RuntimeException) {
+            failStartup(error.message ?: "Could not start microphone service")
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 cancelDictation()
@@ -108,10 +115,14 @@ class DictationService : Service() {
     override fun onDestroy() {
         _running.value = false
         transcriptionGeneration.incrementAndGet()
+        transcriptionJob?.cancel()
         idleReleaseJob?.cancel()
+        recording = false
         audio.setListener(null)
         audio.stop()
         vad?.close()
+        vad = null
+        if (_phase.value !is DictationPhase.Error) _phase.value = DictationPhase.Idle
         val engine = stt
         stt = null
         if (engine != null) {
@@ -120,6 +131,12 @@ class DictationService : Service() {
             Thread({ engine.release() }, "wisperlow-stt-release").start()
         }
         overlay.hide()
+        overlay.onTap = null
+        overlay.onCancelGesture = null
+        overlay.onConfirm = null
+        overlay.onReviewTextChanged = null
+        fullCapture.clear()
+        pendingText = null
         scope.cancel()
         super.onDestroy()
     }
@@ -144,13 +161,16 @@ class DictationService : Service() {
         val modelDir = resolveModelDir() ?: run {
             return failStartup("No STT model installed")
         }
-        if (!prepareStt(modelDir)) return
+        // Validate installation at startup; allocate model weights on first dictation.
+        check(modelDir.isDirectory) { "Installed model is unavailable" }
         prepareVad()
         val bubble = overlay
         bubble.onTap = {
-            scope.launch {
-                initializationMutex.withLock {
-                    if (recording) stopDictation() else startDictation()
+            if (_phase.value !is DictationPhase.Initializing) {
+                scope.launch {
+                    initializationMutex.withLock {
+                        if (recording) stopDictation() else startDictation()
+                    }
                 }
             }
         }
@@ -160,7 +180,9 @@ class DictationService : Service() {
         bubble.onConfirm = {
             scope.launch { confirmPendingText() }
         }
-        bubble.onReviewTextChanged = { text -> pendingText = text }
+        bubble.onReviewTextChanged = { text ->
+            if (_phase.value is DictationPhase.Review) pendingText = text
+        }
         bubble.show(BubbleMode.DOT)
         _phase.value = DictationPhase.Idle
         _running.value = true
@@ -172,6 +194,7 @@ class DictationService : Service() {
             try {
                 ensureBubbleReady()
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 android.util.Log.e(TAG, "Dictation initialization failed", error)
                 failStartup(error.message ?: "Dictation initialization failed")
             }
@@ -180,6 +203,7 @@ class DictationService : Service() {
 
     private suspend fun reloadModel() {
         transcriptionGeneration.incrementAndGet()
+        transcriptionJob?.cancel()
         idleReleaseJob?.cancel()
         initializationMutex.withLock {
             recording = false
@@ -187,12 +211,10 @@ class DictationService : Service() {
             pendingText = null
             audio.stop()
             synchronized(this) {
-                collected.clear()
-                preroll.clear()
                 fullCapture.clear()
             }
             overlay.hide()
-            stt?.release()
+            releaseStt()
             stt = null
             loadedModelId = null
             _running.value = false
@@ -200,6 +222,7 @@ class DictationService : Service() {
             try {
                 ensureBubbleReady()
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 android.util.Log.e(TAG, "Model reload failed", error)
                 failStartup(error.message ?: "Model reload failed")
             }
@@ -224,14 +247,14 @@ class DictationService : Service() {
     private suspend fun prepareStt(modelDir: File): Boolean {
         val modelId = modelDir.name
         if (stt == null || loadedModelId != modelId) {
-            stt?.release()
+            releaseStt()
             val engine = SttEngine(modelDir)
             val ok = try {
                 withContext(Dispatchers.Default) { engine.load() }
             } catch (error: Throwable) {
                 // Loading may allocate native weights before a coroutine is
                 // cancelled. Do not strand that allocation on a failed load.
-                engine.release()
+                withContext(NonCancellable + Dispatchers.Default) { engine.release() }
                 throw error
             }
             if (!ok) {
@@ -257,19 +280,33 @@ class DictationService : Service() {
                 }
             }
         }
-        vad = VadEngine(vadFile).also { engine ->
-            check(engine.load()) { "Voice detection model failed to load" }
+        val engine = VadEngine(vadFile)
+        try {
+            withContext(Dispatchers.Default) {
+                check(engine.load()) { "Voice detection model failed to load" }
+            }
+            vad = engine
+        } catch (error: Throwable) {
+            engine.close()
+            throw error
         }
     }
 
     private suspend fun startDictation() {
         if (recording || _phase.value is DictationPhase.Processing || _phase.value is DictationPhase.Review) return
+        if (_phase.value is DictationPhase.Initializing) return
         idleReleaseJob?.cancel()
         val requestGeneration = transcriptionGeneration.get()
         if (stt == null) {
             _phase.value = DictationPhase.Initializing
+            overlay.show(BubbleMode.PROCESSING)
+            updateNotification("Loading speech model…", idle = false)
             val modelDir = resolveModelDir()
-            if (modelDir == null || !prepareStt(modelDir)) return
+            if (modelDir == null) {
+                failStartup("Selected speech model is unavailable")
+                return
+            }
+            if (!prepareStt(modelDir)) return
             if (requestGeneration != transcriptionGeneration.get()) return
         }
         synchronized(this) {
@@ -282,110 +319,82 @@ class DictationService : Service() {
         // Capture the app's input before the review overlay can become the
         // active window. This keeps confirm insertion out of our own editor.
         WisperlowAccessibilityService.captureEditableTarget()
-        collected.clear()
-        preroll.clear()
         fullCapture.clear()
+        vad?.reset()
         speechActive = false
         recording = true
         _phase.value = DictationPhase.Listening
         overlay.show(BubbleMode.LISTENING)
         updateNotification("Listening… speak now", idle = false)
+        val captureGeneration = transcriptionGeneration.incrementAndGet()
         audio.setListener { samples, level ->
-            val now = System.nanoTime()
-            if (now - lastLevelUpdateNanos >= LEVEL_UPDATE_INTERVAL_NANOS) {
-                lastLevelUpdateNanos = now
-                scope.launch(Dispatchers.Main.immediate) { overlay.setLevel(level) }
+            // VAD stays on the capture worker. State and UI transitions run in
+            // order on Main; copy once because AudioRecord reuses its array.
+            val event = vad?.process(samples)
+            val ownedSamples = samples.copyOf()
+            scope.launch {
+                if (!recording || captureGeneration != transcriptionGeneration.get()) return@launch
+                val now = System.nanoTime()
+                if (now - lastLevelUpdateNanos >= LEVEL_UPDATE_INTERVAL_NANOS) {
+                    lastLevelUpdateNanos = now
+                    overlay.setLevel(level)
+                }
+                handleAudio(ownedSamples, event)
             }
-            handleAudio(samples)
         }
         audio.setErrorListener { message ->
             scope.launch {
-                if (!recording) return@launch
+                if (!recording || captureGeneration != transcriptionGeneration.get()) return@launch
                 android.util.Log.w(TAG, message)
                 if (speechActive || synchronized(this@DictationService) { fullCapture.isNotEmpty() }) {
                     finishSpeech(force = true)
                 } else {
-                    recording = false
-                    _phase.value = DictationPhase.Error("Microphone stopped")
-                    overlay.show(BubbleMode.DOT)
-                    updateNotification("Microphone stopped", idle = true)
+                    audio.stop()
+                    resetAfterProcessing()
+                    showToast("Microphone stopped")
                 }
             }
         }
         if (!audio.start()) {
             recording = false
-            _phase.value = DictationPhase.Error("Microphone unavailable")
-            overlay.show(BubbleMode.DOT)
+            resetAfterProcessing()
+            showToast("Microphone unavailable")
         }
     }
 
-    private fun handleAudio(samples: ShortArray) {
+    private fun handleAudio(samples: ShortArray, event: VadEvent?) {
         if (!recording) return
-        var reachedDurationLimit = false
-        val event = synchronized(this) {
-            fullCapture.addLast(samples.copyOf())
-            reachedDurationLimit = DictationPolicy.reachedCaptureLimit(fullCapture.size)
-            if (preroll.size >= PREROLL_CHUNKS) preroll.removeFirst()
-            preroll.addLast(samples.copyOf())
-            vad?.process(samples)
-        }
+        // Keep the entire utterance, including quiet starts and trailing words.
+        // VAD determines when to stop, never which spoken frames to discard.
+        fullCapture.addLast(samples)
         when (event) {
-            VadEvent.SpeechStart -> {
-                speechActive = true
-                synchronized(this) {
-                    collected.addAll(preroll)
-                    preroll.clear()
-                }
-            }
+            VadEvent.SpeechStart -> speechActive = true
             VadEvent.SpeechEnd -> finishSpeech()
-            null -> {
-                if (speechActive) {
-                    synchronized(this) { collected.add(samples.copyOf()) }
-                }
-            }
+            null -> Unit
         }
-        if (reachedDurationLimit) {
-            showToast("Maximum dictation length reached")
+        if (recording && DictationPolicy.reachedCaptureLimit(fullCapture.size)) {
+            showToast("One-minute limit reached; reviewing captured speech")
             finishSpeech(force = true)
         }
     }
 
     private fun finishSpeech(force: Boolean = false) {
-        val shouldFinish = synchronized(this) {
-            if (!recording || (!speechActive && !force)) {
-                false
-            } else {
-                speechActive = false
-                recording = false
-                true
-            }
-        }
-        if (!shouldFinish) return
-        // Stop and join the capture thread before taking the collection lock.
-        // Otherwise a manual stop can wait on a callback that is itself waiting
-        // for this lock, adding a two-second stall to every dictation.
+        if (!recording || (!speechActive && !force)) return
+        recording = false
+        speechActive = false
         audio.stop()
-        val pcm = synchronized(this) {
-            // A manual stop can happen before VAD crosses its speech threshold.
-            // In that case retain any collected frames instead of silently
-            // dropping the whole dictation.
-            val chunks = if (collected.isNotEmpty()) collected else fullCapture.toList()
-            val flat = ShortArray(chunks.sumOf { it.size })
-            var offset = 0
-            for (chunk in chunks) {
-                chunk.copyInto(flat, offset)
-                offset += chunk.size
-            }
-            collected.clear()
-            preroll.clear()
-            fullCapture.clear()
-            flat
+        val pcm = ShortArray(fullCapture.sumOf { it.size })
+        var offset = 0
+        for (chunk in fullCapture) {
+            chunk.copyInto(pcm, offset)
+            offset += chunk.size
         }
+        fullCapture.clear()
         processPcm(pcm)
     }
 
     private fun stopDictation() {
-        val hasCapturedAudio = synchronized(this) { collected.isNotEmpty() || fullCapture.isNotEmpty() }
+        val hasCapturedAudio = synchronized(this) { fullCapture.isNotEmpty() }
         if (speechActive || hasCapturedAudio) {
             finishSpeech(force = true)
         } else {
@@ -400,6 +409,7 @@ class DictationService : Service() {
     }
 
     private fun cancelDictation() {
+        transcriptionJob?.cancel()
         synchronized(this) {
             transcriptionGeneration.incrementAndGet()
             speechActive = false
@@ -408,8 +418,6 @@ class DictationService : Service() {
         }
         audio.stop()
         synchronized(this) {
-            collected.clear()
-            preroll.clear()
             fullCapture.clear()
         }
         overlay.show(BubbleMode.DOT)
@@ -428,10 +436,13 @@ class DictationService : Service() {
         _phase.value = DictationPhase.Processing
         updateNotification("Transcribing…", idle = false)
         val generation = transcriptionGeneration.get()
-        scope.launch {
+        transcriptionJob?.cancel()
+        transcriptionJob = scope.launch {
             try {
                 val engine = stt ?: error("STT not loaded")
-                val raw = withContext(Dispatchers.Default) { engine.transcribe(pcm) }
+                val raw = inferenceMutex.withLock {
+                    withContext(Dispatchers.Default) { engine.transcribe(pcm) }
+                }
                 if (!DictationPolicy.acceptsTranscription(
                         generation,
                         transcriptionGeneration.get(),
@@ -458,6 +469,7 @@ class DictationService : Service() {
                 overlay.show(BubbleMode.REVIEW)
                 updateNotification("Review dictation", idle = false)
             } catch (t: Throwable) {
+                if (t is CancellationException) throw t
                 if (!DictationPolicy.acceptsTranscription(
                         generation,
                         transcriptionGeneration.get(),
@@ -473,7 +485,10 @@ class DictationService : Service() {
     }
 
     private suspend fun confirmPendingText() {
-        val text = pendingText ?: return
+        if (_phase.value !is DictationPhase.Review) return
+        val text = pendingText?.takeIf { it.isNotBlank() } ?: return resetAfterProcessing()
+        _phase.value = DictationPhase.Processing
+        overlay.show(BubbleMode.PROCESSING)
         pendingText = null
         pasteAndSave(text, saveToHistory = true)
     }
@@ -513,12 +528,17 @@ class DictationService : Service() {
             delay(IDLE_MODEL_RELEASE_MS)
             initializationMutex.withLock {
                 if (_phase.value is DictationPhase.Idle && !recording) {
-                    stt?.release()
-                    stt = null
-                    loadedModelId = null
+                    releaseStt()
                 }
             }
         }
+    }
+
+    private suspend fun releaseStt() {
+        val engine = stt
+        stt = null
+        loadedModelId = null
+        if (engine != null) withContext(NonCancellable + Dispatchers.Default) { engine.release() }
     }
 
     private suspend fun watchSettings() {
@@ -571,8 +591,7 @@ class DictationService : Service() {
         private const val TAG = "DictationService"
         private const val CHANNEL_ID = "dictation"
         private const val NOTIFICATION_ID = 1001
-        private const val PREROLL_CHUNKS = 15
-        private const val MIN_PCM_SAMPLES = 8000
+        private const val MIN_PCM_SAMPLES = 1600
         private const val IDLE_MODEL_RELEASE_MS = 120_000L
         private const val LEVEL_UPDATE_INTERVAL_NANOS = 100_000_000L
         const val ACTION_STOP = "com.wisperlow.mobile.action.STOP"
@@ -588,9 +607,7 @@ class DictationService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(
-                Intent(context, DictationService::class.java).setAction(ACTION_STOP),
-            )
+            context.stopService(Intent(context, DictationService::class.java))
         }
 
         fun reloadModel(context: Context) {
