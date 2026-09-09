@@ -9,3 +9,5 @@
 .cxx
 local.properties
 app/libs/*.aar
+
+.kotlin/
