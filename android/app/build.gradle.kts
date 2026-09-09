@@ -6,6 +6,17 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.wisperlow.mobile"
     compileSdk = 35
@@ -14,6 +25,7 @@ android {
         applicationId = "com.wisperlow.mobile"
         minSdk = 33
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 3
         versionName = "0.2.1"
         ndk {
@@ -21,9 +33,20 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -67,6 +90,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
