@@ -38,6 +38,8 @@
     <string name="action_starting">Loading model…</string>
     <string name="action_pause">Pause bubble</string>
     <string name="dictation_error">Dictation unavailable: %1$s</string>
+    <string name="dictation_start_failed">Dictation could not start. Check microphone permission and try again.</string>
+    <string name="system_settings_unavailable">Android settings could not be opened on this device.</string>
     <string name="bubble_ready_title">Your dictation bubble is ready</string>
     <string name="bubble_ready_body">Focus a text field, then tap the bubble and speak.</string>
     <string name="bubble_paused_title">Dictation is paused</string>

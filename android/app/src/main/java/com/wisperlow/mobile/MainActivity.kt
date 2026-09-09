@@ -4,11 +4,13 @@ import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -45,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     private val permissionRefresh = mutableIntStateOf(0)
+    private var startRequestInFlight = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -74,6 +77,12 @@ class MainActivity : ComponentActivity() {
         val servicePhase by DictationService.phase.collectAsState()
         val refresh = permissionRefresh.intValue
 
+        LaunchedEffect(serviceRunning, servicePhase) {
+            if (serviceRunning || servicePhase is DictationPhase.Error) {
+                startRequestInFlight = false
+            }
+        }
+
         LaunchedEffect(Unit) { modelDownloader.refresh() }
 
         val setup = remember(refresh, downloadStates, settings.selectedModelId) {
@@ -96,7 +105,7 @@ class MainActivity : ComponentActivity() {
             history = uiState.history,
             onRequestMicrophone = ::requestCorePermissions,
             onRequestOverlay = {
-                startActivity(
+                openSystemSettings(
                     Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:$packageName"),
@@ -104,7 +113,7 @@ class MainActivity : ComponentActivity() {
                 )
             },
             onRequestAccessibility = {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                openSystemSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
             onDownloadModel = { model ->
                 lifecycleScope.launch {
@@ -136,9 +145,18 @@ class MainActivity : ComponentActivity() {
             onToggleService = {
                 if (serviceRunning) {
                     DictationService.stop(this)
-                } else if (setup.isReady) {
+                } else if (setup.isReady && !startRequestInFlight) {
+                    startRequestInFlight = true
                     lifecycleScope.launch { settingsRepository.setBubbleEnabled(true) }
-                    DictationService.start(this)
+                    try {
+                        DictationService.start(this)
+                    } catch (_: SecurityException) {
+                        startRequestInFlight = false
+                        showToast(R.string.dictation_start_failed)
+                    } catch (_: IllegalStateException) {
+                        startRequestInFlight = false
+                        showToast(R.string.dictation_start_failed)
+                    }
                 }
             },
             onBubbleEnabledChange = { enabled ->
@@ -160,6 +178,20 @@ class MainActivity : ComponentActivity() {
                 if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
             }.toTypedArray(),
         )
+    }
+
+    private fun openSystemSettings(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            showToast(R.string.system_settings_unavailable)
+        } catch (_: SecurityException) {
+            showToast(R.string.system_settings_unavailable)
+        }
+    }
+
+    private fun showToast(messageRes: Int) {
+        Toast.makeText(this, messageRes, Toast.LENGTH_LONG).show()
     }
 
     private fun copyTranscript(entry: TranscriptEntry) {
