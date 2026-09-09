@@ -21,14 +21,28 @@ class SttEngineInstrumentedTest {
         val sample = File(modelDir, "test_wavs/en.wav")
         assertTrue("Install the integration model before running this test", sample.isFile)
 
-        val engine = SttEngine(modelDir)
-        try {
-            assertTrue("Native recognizer failed to load", engine.load())
-            val transcript = engine.transcribe(readPcm16Wav(sample))
-            Log.i(TAG, "Real-model transcript: $transcript")
-            assertTrue("The real model returned an empty transcript", transcript.length > 5)
-        } finally {
-            engine.release()
+        val pcm = readPcm16Wav(sample)
+        var previousTranscript: String? = null
+        repeat(2) { pass ->
+            val engine = SttEngine(modelDir)
+            try {
+                assertTrue("Native recognizer failed to load", engine.load())
+                // Loading an already initialized engine must be idempotent.
+                assertTrue("Repeated model load was not idempotent", engine.load())
+                val transcript = engine.transcribe(pcm)
+                Log.i(TAG, "Real-model transcript pass ${pass + 1}: $transcript")
+                assertTrue("The real model returned an empty transcript", transcript.length > 5)
+                if (previousTranscript != null) {
+                    assertTrue(
+                        "Repeated inference changed the transcript",
+                        previousTranscript == transcript,
+                    )
+                }
+                previousTranscript = transcript
+            } finally {
+                engine.release()
+                assertTrue("Recognizer was not released", !engine.isLoaded)
+            }
         }
     }
 
