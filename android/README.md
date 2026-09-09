@@ -26,11 +26,12 @@ ANDROID_SERIAL=<device-serial> ./scripts/verify-device.sh \
   /path/to/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
 ```
 
-The helper verifies `tokens.txt`, the three Parakeet ONNX files, and the
-`.installed` marker used by `ModelDownloader`, installs the debug APK, copies
-the model into the app's private `files/models/<model-id>` directory, and
-removes its temporary device staging directory when it exits. It never
-downloads a model. The test logs cold load time, decode time, native heap
+The helper verifies `tokens.txt` and the three Parakeet ONNX files, streams
+the model into the app's private `files/models/<model-id>` directory, writes
+the catalog `.installed` marker used by `ModelDownloader`, and removes its
+temporary device staging directory when it exits. It trusts the supplied
+official extracted model directory and never downloads a model. The test logs
+cold load time, decode time, native heap
 usage, and checks the sample transcript for the expected `tribal`,
 `chieftain`, and `gold` words.
 

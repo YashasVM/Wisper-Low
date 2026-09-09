@@ -24,16 +24,25 @@ if [[ ! "$model_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
     echo "model directory name contains unsupported characters: $model_id" >&2
     exit 64
 fi
-for required in tokens.txt encoder.int8.onnx decoder.int8.onnx joiner.int8.onnx .installed; do
+case "$model_id" in
+    sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8) catalog_id="parakeet-tdt-0.6b-v3-int8" ;;
+    sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8) catalog_id="parakeet-tdt-0.6b-v2-int8" ;;
+    *)
+        echo "unsupported model directory: $model_id" >&2
+        echo "expected an official Parakeet v2 or v3 directory name" >&2
+        exit 64
+        ;;
+esac
+for required in tokens.txt encoder.int8.onnx decoder.int8.onnx joiner.int8.onnx; do
     [[ -s "$model_dir/$required" ]] || {
         echo "model is missing a required file: $required" >&2
         exit 66
     }
 done
-[[ "$(<"$model_dir/.installed")" == "$model_id" ]] || {
-    echo ".installed must contain exactly the model directory name ($model_id)" >&2
+if find "$model_dir" -type l -print -quit | grep -q .; then
+    echo "refusing a model containing symbolic links" >&2
     exit 66
-}
+fi
 
 adb_bin="${ANDROID_HOME:-}/platform-tools/adb"
 if [[ ! -x "$adb_bin" ]]; then
@@ -68,19 +77,26 @@ adb wait-for-device
 }
 
 remote_dir="/data/local/tmp/wisperlow-stt-${model_id}-${$}"
+remote_archive="${remote_dir}.tar"
+local_archive="$(mktemp "${TMPDIR:-/tmp}/wisperlow-stt.XXXXXX.tar")"
 cleanup() {
-    adb shell rm -rf "$remote_dir" >/dev/null 2>&1 || true
+    rm -f -- "$local_archive"
+    adb shell rm -rf "$remote_dir" "$remote_archive" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 adb install -r "$APK_PATH"
 adb shell rm -rf "$remote_dir"
 adb shell mkdir -p "$remote_dir"
-adb push "$model_dir/." "$remote_dir/"
-adb shell run-as "$PACKAGE_NAME" rm -rf "files/models/$model_id"
+tar -C "$model_dir" -cf "$local_archive" .
+adb push "$local_archive" "$remote_archive"
 adb shell run-as "$PACKAGE_NAME" mkdir -p "files/models/$model_id"
-adb shell run-as "$PACKAGE_NAME" cp -R "$remote_dir/." "files/models/$model_id/"
-adb shell run-as "$PACKAGE_NAME" test -s "files/models/$model_id/.installed"
+# Stream the archive through the shell into run-as. This avoids relying on
+# cross-UID reads of /data/local/tmp, which are blocked on some Android builds.
+adb shell cat "$remote_archive" | adb shell run-as "$PACKAGE_NAME" tar -xf - -C "files/models/$model_id"
+printf '%s\n' "$catalog_id" | adb shell run-as "$PACKAGE_NAME" sh -c "cat > files/models/$model_id/.installed"
+adb shell run-as "$PACKAGE_NAME" test "\$(cat files/models/$model_id/.installed)" = "$catalog_id"
 
 cd "$ANDROID_DIR"
-./gradlew connectedDebugAndroidTest --tests 'com.wisperlow.mobile.stt.SttEngineInstrumentedTest'
+./gradlew connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.wisperlow.mobile.stt.SttEngineInstrumentedTest
