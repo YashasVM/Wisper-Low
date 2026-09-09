@@ -5,9 +5,8 @@ import android.os.Debug
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.wisperlow.mobile.test.WavTestAudio
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,7 +22,10 @@ class SttEngineInstrumentedTest {
         val sample = File(modelDir, "test_wavs/en.wav")
         assertTrue("Install the integration model before running this test", sample.isFile)
 
-        val pcm = readPcm16Wav(sample)
+        val wav = WavTestAudio.readPcm16(sample)
+        assertTrue("Expected mono test audio", wav.channels == 1)
+        assertTrue("Expected 24 kHz source fixture", wav.sampleRate == 24_000)
+        val pcm = WavTestAudio.readMono16k(sample)
         var previousTranscript: String? = null
         repeat(2) { pass ->
             val engine = SttEngine(modelDir)
@@ -44,9 +46,9 @@ class SttEngineInstrumentedTest {
                         "transcript=$transcript",
                 )
                 assertTrue("The real model returned an empty transcript", transcript.length > 5)
-                assertTrue("Transcript missed 'tribal'", "tribal" in normalized)
-                assertTrue("Transcript missed 'chieftain'", "chieftain" in normalized)
-                assertTrue("Transcript missed the final 'gold'", "gold" in normalized)
+                assertTrue("Transcript missed 'country'", "country" in normalized)
+                assertTrue("Transcript missed repeated 'ask'", normalized.split("ask").size >= 3)
+                assertTrue("Transcript missed 'do'", "do" in normalized)
                 if (previousTranscript != null) {
                     assertTrue(
                         "Repeated inference changed the transcript",
@@ -59,23 +61,6 @@ class SttEngineInstrumentedTest {
                 assertTrue("Recognizer was not released", !engine.isLoaded)
             }
         }
-    }
-
-    private fun readPcm16Wav(file: File): ShortArray {
-        val bytes = file.readBytes()
-        val dataMarker = "data".toByteArray(Charsets.US_ASCII)
-        val dataOffset = bytes.indices.firstOrNull { index ->
-            index + 8 <= bytes.size && dataMarker.indices.all { offset ->
-                bytes[index + offset] == dataMarker[offset]
-            }
-        } ?: error("WAV data chunk missing")
-        val dataSize = ByteBuffer.wrap(bytes, dataOffset + 4, 4)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .int
-            .coerceAtMost(bytes.size - dataOffset - 8)
-        val pcm = ByteBuffer.wrap(bytes, dataOffset + 8, dataSize)
-            .order(ByteOrder.LITTLE_ENDIAN)
-        return ShortArray(dataSize / 2) { pcm.short }
     }
 
     companion object {

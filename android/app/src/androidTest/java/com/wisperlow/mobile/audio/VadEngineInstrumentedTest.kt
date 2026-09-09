@@ -2,9 +2,8 @@ package com.wisperlow.mobile.audio
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.wisperlow.mobile.test.WavTestAudio
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -32,7 +31,7 @@ class VadEngineInstrumentedTest {
             "models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/test_wavs/en.wav",
         )
         assumeTrue("Install the integration sample before running this test", sample.isFile)
-        val pcm = readPcm16Wav(sample)
+        val pcm = WavTestAudio.readMono16k(sample)
 
         repeat(2) {
             val vad = VadEngine(model)
@@ -55,21 +54,9 @@ class VadEngineInstrumentedTest {
     }
 
     private fun feed(vad: VadEngine, pcm: ShortArray, events: MutableList<VadEvent>) {
-        pcm.indices step WINDOW_SIZE
+        (pcm.indices step WINDOW_SIZE)
             .map { start -> pcm.copyOfRange(start, (start + WINDOW_SIZE).coerceAtMost(pcm.size)) }
             .forEach { vad.process(it)?.let(events::add) }
-    }
-
-    private fun readPcm16Wav(file: File): ShortArray {
-        val bytes = file.readBytes()
-        val marker = "data".toByteArray(Charsets.US_ASCII)
-        val offset = bytes.indices.firstOrNull { index ->
-            index + 8 <= bytes.size && marker.indices.all { bytes[index + it] == marker[it] }
-        } ?: error("WAV data chunk missing")
-        val size = ByteBuffer.wrap(bytes, offset + 4, 4)
-            .order(ByteOrder.LITTLE_ENDIAN).int.coerceAtMost(bytes.size - offset - 8)
-        val pcm = ByteBuffer.wrap(bytes, offset + 8, size).order(ByteOrder.LITTLE_ENDIAN)
-        return ShortArray(size / 2) { pcm.short }
     }
 
     companion object {

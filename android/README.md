@@ -32,8 +32,9 @@ the catalog `.installed` marker used by `ModelDownloader`, and removes its
 temporary device staging directory when it exits. It trusts the supplied
 official extracted model directory and never downloads a model. The test logs
 cold load time, decode time, native heap usage, and checks the sample
-transcript for the expected `tribal`,
-`chieftain`, and `gold` words.
+transcript for the expected JFK phrase, including repeated `ask`, `country`,
+and `do` words. The upstream fixture is 24 kHz PCM; the test validates its
+WAV metadata and resamples it to the engine's required 16 kHz input.
 
 For acceptance testing, compare the same recordings containing names, slang,
 and punctuation against Samsung Keyboard voice input. Record word error rate,
