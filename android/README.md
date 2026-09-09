@@ -14,6 +14,34 @@ Install JDK 17 and Android SDK 35, then run:
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Real-model device verification
+
+The instrumented STT test uses the bundled `test_wavs/en.wav` sample and
+requires an installed Parakeet model. Build the debug APK, then provision an
+already extracted model and run the test on one authorized device:
+
+```bash
+./gradlew assembleDebug
+ANDROID_SERIAL=<device-serial> ./scripts/verify-device.sh \
+  /path/to/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
+```
+
+The helper verifies `tokens.txt`, the three Parakeet ONNX files, and the
+`.installed` marker used by `ModelDownloader`, installs the debug APK, copies
+the model into the app's private `files/models/<model-id>` directory, and
+removes its temporary device staging directory when it exits. It never
+downloads a model. The test logs cold load time, decode time, native heap
+usage, and checks the sample transcript for the expected `tribal`,
+`chieftain`, and `gold` words.
+
+The model layout and `nemo_transducer` configuration follow the official
+[sherpa-onnx Parakeet documentation](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html).
+The shipped arm64 native libraries were checked with `readelf`: every
+`PT_LOAD` segment uses `0x4000` alignment, which is suitable for Android
+16 KB page-size devices. Recheck this for any replacement native binaries;
+Android's compatibility guidance is in the
+[16 KB page-size documentation](https://developer.android.com/guide/practices/page-sizes).
+
 ## Device setup
 
 The app guides the user through microphone, notification, floating-overlay,
