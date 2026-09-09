@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -66,6 +68,9 @@ class DictationService : Service() {
     private var vad: VadEngine? = null
     private var stt: SttEngine? = null
     private var loadedModelId: String? = null
+    private var idleReleaseJob: Job? = null
+    private var transcriptionGeneration = 0L
+    @Volatile private var lastLevelUpdateNanos = 0L
 
     @Volatile private var recording = false
     @Volatile private var speechActive = false
@@ -94,11 +99,16 @@ class DictationService : Service() {
             ACTION_RELOAD_MODEL -> scope.launch { reloadModel() }
             else -> Unit
         }
-        return START_STICKY
+        // A killed dictation process must not be recreated with a microphone
+        // foreground service and a loaded model while the user is idle.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         _running.value = false
+        transcriptionGeneration++
+        idleReleaseJob?.cancel()
+        audio.setListener(null)
         audio.stop()
         vad?.close()
         stt?.release()
@@ -142,6 +152,7 @@ class DictationService : Service() {
         bubble.show(BubbleMode.DOT)
         _phase.value = DictationPhase.Idle
         _running.value = true
+        scheduleIdleModelRelease()
     }
 
     private suspend fun initializeBubble() {
@@ -156,6 +167,8 @@ class DictationService : Service() {
     }
 
     private suspend fun reloadModel() {
+        transcriptionGeneration++
+        idleReleaseJob?.cancel()
         initializationMutex.withLock {
             recording = false
             speechActive = false
@@ -231,6 +244,22 @@ class DictationService : Service() {
 
     private fun startDictation() {
         if (recording || _phase.value is DictationPhase.Processing || _phase.value is DictationPhase.Review) return
+        idleReleaseJob?.cancel()
+        if (stt == null) {
+            _phase.value = DictationPhase.Initializing
+            scope.launch {
+                initializationMutex.withLock {
+                    val modelDir = resolveModelDir()
+                    if (modelDir == null || !prepareStt(modelDir)) return@withLock
+                    startRecording()
+                }
+            }
+            return
+        }
+        startRecording()
+    }
+
+    private fun startRecording() {
         collected.clear()
         preroll.clear()
         fullCapture.clear()
@@ -240,7 +269,11 @@ class DictationService : Service() {
         overlay.show(BubbleMode.LISTENING)
         updateNotification("Listening… speak now", idle = false)
         audio.setListener { samples, level ->
-            scope.launch(Dispatchers.Main.immediate) { overlay.setLevel(level) }
+            val now = System.nanoTime()
+            if (now - lastLevelUpdateNanos >= LEVEL_UPDATE_INTERVAL_NANOS) {
+                lastLevelUpdateNanos = now
+                scope.launch(Dispatchers.Main.immediate) { overlay.setLevel(level) }
+            }
             handleAudio(samples)
         }
         if (!audio.start()) {
@@ -252,9 +285,10 @@ class DictationService : Service() {
 
     private fun handleAudio(samples: ShortArray) {
         if (!recording) return
+        var reachedDurationLimit = false
         val event = synchronized(this) {
-            if (fullCapture.size >= MAX_CAPTURE_CHUNKS) fullCapture.removeFirst()
             fullCapture.addLast(samples.copyOf())
+            reachedDurationLimit = fullCapture.size >= MAX_CAPTURE_CHUNKS
             if (preroll.size >= PREROLL_CHUNKS) preroll.removeFirst()
             preroll.addLast(samples.copyOf())
             vad?.process(samples)
@@ -273,6 +307,10 @@ class DictationService : Service() {
                     synchronized(this) { collected.add(samples.copyOf()) }
                 }
             }
+        }
+        if (reachedDurationLimit) {
+            showToast("Maximum dictation length reached")
+            finishSpeech(force = true)
         }
     }
 
@@ -317,12 +355,16 @@ class DictationService : Service() {
         } else {
             recording = false
             audio.stop()
+            vad?.reset()
             overlay.show(BubbleMode.DOT)
+            _phase.value = DictationPhase.Idle
             updateNotification("Tap the bubble to dictate", idle = true)
+            scheduleIdleModelRelease()
         }
     }
 
     private fun cancelDictation() {
+        transcriptionGeneration++
         speechActive = false
         recording = false
         pendingText = null
@@ -333,7 +375,9 @@ class DictationService : Service() {
             fullCapture.clear()
         }
         overlay.show(BubbleMode.DOT)
+        _phase.value = DictationPhase.Idle
         updateNotification("Cancelled", idle = true)
+        scheduleIdleModelRelease()
     }
 
     private fun processPcm(pcm: ShortArray) {
@@ -345,10 +389,14 @@ class DictationService : Service() {
         overlay.show(BubbleMode.PROCESSING)
         _phase.value = DictationPhase.Processing
         updateNotification("Transcribing…", idle = false)
+        val generation = transcriptionGeneration
         scope.launch {
             try {
                 val engine = stt ?: error("STT not loaded")
                 val raw = withContext(Dispatchers.Default) { engine.transcribe(pcm) }
+                if (generation != transcriptionGeneration || _phase.value !is DictationPhase.Processing) {
+                    return@launch
+                }
                 val command = TextCleaner.classifyCommand(raw)
                 if (command != null) {
                     handleCommand(command)
@@ -366,6 +414,9 @@ class DictationService : Service() {
                 overlay.show(BubbleMode.REVIEW)
                 updateNotification("Review dictation", idle = false)
             } catch (t: Throwable) {
+                if (generation != transcriptionGeneration || _phase.value !is DictationPhase.Processing) {
+                    return@launch
+                }
                 android.util.Log.e(TAG, "transcription failed", t)
                 showToast("Transcription failed: ${t.message}")
                 resetAfterProcessing()
@@ -417,11 +468,25 @@ class DictationService : Service() {
     }
 
     private fun resetAfterProcessing() {
+        transcriptionGeneration++
         pendingText = null
         vad?.reset()
         overlay.show(BubbleMode.DOT)
         _phase.value = DictationPhase.Idle
         updateNotification("Tap the bubble to dictate", idle = true)
+        scheduleIdleModelRelease()
+    }
+
+    private fun scheduleIdleModelRelease() {
+        idleReleaseJob?.cancel()
+        idleReleaseJob = scope.launch {
+            delay(IDLE_MODEL_RELEASE_MS)
+            if (_phase.value is DictationPhase.Idle && !recording) {
+                stt?.release()
+                stt = null
+                loadedModelId = null
+            }
+        }
     }
 
     private suspend fun watchSettings() {
@@ -477,6 +542,8 @@ class DictationService : Service() {
         private const val PREROLL_CHUNKS = 15
         private const val MAX_CAPTURE_CHUNKS = 9375 // Five minutes at 512 frames / 16 kHz.
         private const val MIN_PCM_SAMPLES = 8000
+        private const val IDLE_MODEL_RELEASE_MS = 120_000L
+        private const val LEVEL_UPDATE_INTERVAL_NANOS = 100_000_000L
         const val ACTION_STOP = "com.wisperlow.mobile.action.STOP"
         const val ACTION_RELOAD_MODEL = "com.wisperlow.mobile.action.RELOAD_MODEL"
 

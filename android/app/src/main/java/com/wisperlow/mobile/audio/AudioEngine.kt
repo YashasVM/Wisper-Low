@@ -3,6 +3,7 @@ package com.wisperlow.mobile.audio
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Process
 import android.util.Log
 
 class AudioEngine(private val sampleRate: Int = 16000) {
@@ -31,37 +32,42 @@ class AudioEngine(private val sampleRate: Int = 16000) {
             AudioFormat.ENCODING_PCM_16BIT,
         )
         if (minBuffer <= 0) return false
+        var rec: AudioRecord? = null
         val bufferBytes = minBuffer * 4
         return try {
-            val rec = AudioRecord(
+            val created = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 bufferBytes,
             )
-            if (rec.state != AudioRecord.STATE_INITIALIZED) {
-                rec.release()
+            rec = created
+            if (created.state != AudioRecord.STATE_INITIALIZED) {
+                created.release()
                 return false
             }
-            record = rec
+            created.startRecording()
+            record = created
             running = true
-            rec.startRecording()
-            thread = Thread({ readLoop(rec) }, "wisperlow-audio").apply {
-                priority = Thread.MAX_PRIORITY
+            thread = Thread({ readLoop(created) }, "wisperlow-audio").apply {
+                // Audio input needs predictable scheduling, but MAX_PRIORITY
+                // makes inference/UI work compete poorly with the rest of the
+                // device and can increase heat on sustained dictation.
+                priority = Thread.NORM_PRIORITY
                 start()
             }
             true
         } catch (e: SecurityException) {
             Log.e(TAG, "Recording permission denied", e)
             running = false
-            record?.release()
+            runCatching { rec?.release() }
             record = null
             false
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start recording", e)
             running = false
-            record?.release()
+            runCatching { rec?.release() }
             record = null
             false
         }
@@ -69,6 +75,7 @@ class AudioEngine(private val sampleRate: Int = 16000) {
 
     fun stop() {
         running = false
+        listener = null
         val worker = thread
         // AudioRecord.read() may be blocking. Stop recording first so the
         // worker wakes immediately instead of making every manual stop wait
@@ -94,9 +101,27 @@ class AudioEngine(private val sampleRate: Int = 16000) {
     }
 
     private fun readLoop(rec: AudioRecord) {
+        // THREAD_PRIORITY_AUDIO is the scheduler hint intended for a capture
+        // worker. It avoids starving the app while keeping audio callbacks
+        // ahead of ordinary background work.
+        try {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+        } catch (_: SecurityException) {
+            // Some vendor builds reject the priority change; normal priority
+            // is still safe because AudioRecord has its own native buffer.
+        }
         val chunk = ShortArray(CHUNK_FRAMES)
         while (running) {
-            val n = rec.read(chunk, 0, CHUNK_FRAMES)
+            val n = try {
+                rec.read(chunk, 0, CHUNK_FRAMES, AudioRecord.READ_BLOCKING)
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "AudioRecord.read failed", e)
+                break
+            }
+            if (n == AudioRecord.ERROR_DEAD_OBJECT || n == AudioRecord.ERROR_INVALID_OPERATION) {
+                Log.w(TAG, "AudioRecord stopped with read error: $n")
+                break
+            }
             if (n <= 0) continue
             var sumSquares = 0.0
             for (i in 0 until n) {
