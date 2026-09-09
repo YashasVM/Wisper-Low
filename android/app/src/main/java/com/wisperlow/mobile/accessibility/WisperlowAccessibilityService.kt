@@ -57,7 +57,17 @@ class WisperlowAccessibilityService : AccessibilityService() {
     private var capturedTarget: AccessibilityNodeInfo? = null
 
     private fun captureEditableTargetImpl(): Boolean {
-        val target = findEditableTargetImpl() ?: return false
+        // The floating bubble is an application overlay and can be the active
+        // accessibility window. Prefer another app's focused editor so later
+        // confirmation can never paste into our review field.
+        val target = windows.asSequence()
+            .filter { it.root?.packageName?.toString() != packageName }
+            .sortedByDescending { (if (it.isActive) 2 else 0) + (if (it.isFocused) 1 else 0) }
+            .mapNotNull { window ->
+                val root = try { window.root } catch (_: Exception) { null } ?: return@mapNotNull null
+                findFocusTarget(root) ?: findBfsEditableTarget(root)
+            }
+            .firstOrNull() ?: return false
         capturedTarget?.recycle()
         capturedTarget = AccessibilityNodeInfo.obtain(target)
         target.recycle()
