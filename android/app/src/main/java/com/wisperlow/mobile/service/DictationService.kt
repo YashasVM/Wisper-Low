@@ -298,6 +298,20 @@ class DictationService : Service() {
             }
             handleAudio(samples)
         }
+        audio.setErrorListener { message ->
+            scope.launch {
+                if (!recording) return@launch
+                android.util.Log.w(TAG, message)
+                if (speechActive || synchronized(this@DictationService) { fullCapture.isNotEmpty() }) {
+                    finishSpeech(force = true)
+                } else {
+                    recording = false
+                    _phase.value = DictationPhase.Error("Microphone stopped")
+                    overlay.show(BubbleMode.DOT)
+                    updateNotification("Microphone stopped", idle = true)
+                }
+            }
+        }
         if (!audio.start()) {
             recording = false
             _phase.value = DictationPhase.Error("Microphone unavailable")
@@ -310,7 +324,7 @@ class DictationService : Service() {
         var reachedDurationLimit = false
         val event = synchronized(this) {
             fullCapture.addLast(samples.copyOf())
-            reachedDurationLimit = fullCapture.size >= MAX_CAPTURE_CHUNKS
+            reachedDurationLimit = DictationPolicy.reachedCaptureLimit(fullCapture.size)
             if (preroll.size >= PREROLL_CHUNKS) preroll.removeFirst()
             preroll.addLast(samples.copyOf())
             vad?.process(samples)
@@ -418,7 +432,11 @@ class DictationService : Service() {
             try {
                 val engine = stt ?: error("STT not loaded")
                 val raw = withContext(Dispatchers.Default) { engine.transcribe(pcm) }
-                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
+                if (!DictationPolicy.acceptsTranscription(
+                        generation,
+                        transcriptionGeneration.get(),
+                        _phase.value is DictationPhase.Processing,
+                    )) {
                     return@launch
                 }
                 val cleaned = TextCleaner.clean(raw)
@@ -427,7 +445,11 @@ class DictationService : Service() {
                     return@launch resetAfterProcessing()
                 }
                 val dictionary = settingsRepository.settings.first().personalDictionary
-                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
+                if (!DictationPolicy.acceptsTranscription(
+                        generation,
+                        transcriptionGeneration.get(),
+                        _phase.value is DictationPhase.Processing,
+                    )) {
                     return@launch
                 }
                 pendingText = PersonalDictionary.apply(cleaned, dictionary)
@@ -436,7 +458,11 @@ class DictationService : Service() {
                 overlay.show(BubbleMode.REVIEW)
                 updateNotification("Review dictation", idle = false)
             } catch (t: Throwable) {
-                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
+                if (!DictationPolicy.acceptsTranscription(
+                        generation,
+                        transcriptionGeneration.get(),
+                        _phase.value is DictationPhase.Processing,
+                    )) {
                     return@launch
                 }
                 android.util.Log.e(TAG, "transcription failed", t)
@@ -546,7 +572,6 @@ class DictationService : Service() {
         private const val CHANNEL_ID = "dictation"
         private const val NOTIFICATION_ID = 1001
         private const val PREROLL_CHUNKS = 15
-        private const val MAX_CAPTURE_CHUNKS = 9375 // Five minutes at 512 frames / 16 kHz.
         private const val MIN_PCM_SAMPLES = 8000
         private const val IDLE_MODEL_RELEASE_MS = 120_000L
         private const val LEVEL_UPDATE_INTERVAL_NANOS = 100_000_000L

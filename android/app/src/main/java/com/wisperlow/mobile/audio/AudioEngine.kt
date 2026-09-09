@@ -17,11 +17,18 @@ class AudioEngine(private val sampleRate: Int = 16000) {
     @Volatile
     private var listener: ((samples: ShortArray, rmsLevel: Float) -> Unit)? = null
 
+    @Volatile
+    private var errorListener: ((message: String) -> Unit)? = null
+
     val isRunning: Boolean
         get() = running
 
     fun setListener(listener: ((samples: ShortArray, rmsLevel: Float) -> Unit)?) {
         this.listener = listener
+    }
+
+    fun setErrorListener(listener: ((message: String) -> Unit)?) {
+        this.errorListener = listener
     }
 
     fun start(): Boolean {
@@ -76,6 +83,7 @@ class AudioEngine(private val sampleRate: Int = 16000) {
     fun stop() {
         running = false
         listener = null
+        errorListener = null
         val worker = thread
         // AudioRecord.read() may be blocking. Stop recording first so the
         // worker wakes immediately instead of making every manual stop wait
@@ -111,6 +119,7 @@ class AudioEngine(private val sampleRate: Int = 16000) {
             // is still safe because AudioRecord has its own native buffer.
         }
         val chunk = ShortArray(CHUNK_FRAMES)
+        var emptyReads = 0
         while (running) {
             val n = try {
                 rec.read(chunk, 0, CHUNK_FRAMES, AudioRecord.READ_BLOCKING)
@@ -119,10 +128,26 @@ class AudioEngine(private val sampleRate: Int = 16000) {
                 break
             }
             if (n == AudioRecord.ERROR_DEAD_OBJECT || n == AudioRecord.ERROR_INVALID_OPERATION) {
-                Log.w(TAG, "AudioRecord stopped with read error: $n")
+                notifyReadFailure("AudioRecord stopped with read error: $n")
                 break
             }
-            if (n <= 0) continue
+            if (n < 0) {
+                notifyReadFailure("AudioRecord read failed: $n")
+                break
+            }
+            if (n == 0) {
+                // A vendor implementation may occasionally return an empty
+                // blocking read. Avoid a hot loop and fail after a short,
+                // bounded grace period if it never recovers.
+                emptyReads++
+                if (emptyReads >= MAX_EMPTY_READS) {
+                    notifyReadFailure("AudioRecord returned no samples")
+                    break
+                }
+                Thread.sleep(10L)
+                continue
+            }
+            emptyReads = 0
             var sumSquares = 0.0
             for (i in 0 until n) {
                 val s = chunk[i].toDouble()
@@ -135,8 +160,14 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         }
     }
 
+    private fun notifyReadFailure(message: String) {
+        Log.w(TAG, message)
+        errorListener?.invoke(message)
+    }
+
     companion object {
         private const val TAG = "AudioEngine"
         private const val CHUNK_FRAMES = 512
+        private const val MAX_EMPTY_READS = 5
     }
 }

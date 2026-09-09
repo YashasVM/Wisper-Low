@@ -15,7 +15,9 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
 
     private var vad: Vad? = null
 
-    private val pending = ArrayList<Float>(WINDOW_SIZE)
+    private val pending = FloatArray(MAX_PENDING)
+    private val window = FloatArray(WINDOW_SIZE)
+    private var pendingCount = 0
     private var inSpeech = false
     private var speechWindowCount = 0
     private var silenceWindowCount = 0
@@ -31,16 +33,14 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
         ensureVad()
         val nativeVad = vad ?: return null
         for (s in samples) {
-            pending.add(s / 32768f)
+            if (pendingCount == pending.size) break
+            pending[pendingCount++] = s / 32768f
         }
         var event: VadEvent? = null
         var offset = 0
         try {
-            while (offset + WINDOW_SIZE <= pending.size) {
-                val window = FloatArray(WINDOW_SIZE)
-                for (i in 0 until WINDOW_SIZE) {
-                    window[i] = pending[offset + i]
-                }
+            while (offset + WINDOW_SIZE <= pendingCount) {
+                pending.copyInto(window, destinationOffset = 0, startIndex = offset, endIndex = offset + WINDOW_SIZE)
                 offset += WINDOW_SIZE
                 val probability = nativeVad.compute(window)
                 event = step(probability)
@@ -48,21 +48,22 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
             }
         } catch (t: Throwable) {
             Log.e(TAG, "VAD compute failed", t)
-            pending.clear()
+            pendingCount = 0
             return null
         }
         if (offset > 0) {
-            pending.subList(0, offset).clear()
+            pending.copyInto(pending, destinationOffset = 0, startIndex = offset, endIndex = pendingCount)
+            pendingCount -= offset
         }
-        if (pending.size >= MAX_PENDING) {
-            pending.clear()
+        if (pendingCount == pending.size) {
+            pendingCount = 0
         }
         return event
     }
 
     @Synchronized
     fun reset() {
-        pending.clear()
+        pendingCount = 0
         inSpeech = false
         speechWindowCount = 0
         silenceWindowCount = 0
@@ -75,7 +76,7 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
 
     override fun close() {
         synchronized(this) {
-            pending.clear()
+            pendingCount = 0
             try {
                 vad?.release()
             } catch (t: Throwable) {
