@@ -103,6 +103,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
             mainHandler.post { show(mode) }
             return
         }
+        val previousMode = modeState.value
         modeState.value = mode
         if (!Settings.canDrawOverlays(context)) return
 
@@ -116,7 +117,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 detachInternal()
             }
         } else {
-            safeUpdateLayout(existing)
+            updateLayoutForMode(existing, previousMode, mode)
         }
     }
 
@@ -197,14 +198,33 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         params.y = metrics.bounds.height() - DEFAULT_Y_OFFSET_PX
     }
 
-    private fun safeUpdateLayout(target: View) {
+    private fun updateLayoutForMode(
+        target: View,
+        previousMode: BubbleMode,
+        newMode: BubbleMode,
+    ) {
         try {
             val lp = target.layoutParams as? WindowManager.LayoutParams ?: return
-            lp.x = posXState.value
+            val density = context.resources.displayMetrics.density
+            val previousWidth = modeWidth(previousMode) * density
+            val newWidth = modeWidth(newMode) * density
+            val rightEdge = posXState.value + previousWidth.toInt()
+            val screenWidth = windowManager.currentWindowMetrics.bounds.width()
+            lp.x = (rightEdge - newWidth.toInt()).coerceIn(
+                0,
+                (screenWidth - newWidth.toInt()).coerceAtLeast(0),
+            )
             lp.y = posYState.value
+            posXState.value = lp.x
             windowManager.updateViewLayout(target, lp)
         } catch (_: Exception) {
         }
+    }
+
+    private fun modeWidth(mode: BubbleMode): Int = when (mode) {
+        BubbleMode.DOT -> DOT_SIZE
+        BubbleMode.REVIEW -> REVIEW_WIDTH
+        BubbleMode.LISTENING, BubbleMode.PROCESSING -> PILL_WIDTH
     }
 
     private fun detachInternal() {
