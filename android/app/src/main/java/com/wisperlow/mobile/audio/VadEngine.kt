@@ -16,7 +16,9 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
     private var vad: Vad? = null
 
     private val pending = FloatArray(MAX_PENDING)
-    private val window = FloatArray(WINDOW_SIZE)
+    // The bundled Silero v5 model requires the preceding 64 samples followed
+    // by each new 512-sample window when using sherpa's raw compute API.
+    private val window = FloatArray(CONTEXT_SIZE + WINDOW_SIZE)
     private var pendingCount = 0
     private var inSpeech = false
     private var speechWindowCount = 0
@@ -40,9 +42,10 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
         var offset = 0
         try {
             while (offset + WINDOW_SIZE <= pendingCount) {
-                pending.copyInto(window, destinationOffset = 0, startIndex = offset, endIndex = offset + WINDOW_SIZE)
+                pending.copyInto(window, destinationOffset = CONTEXT_SIZE, startIndex = offset, endIndex = offset + WINDOW_SIZE)
                 offset += WINDOW_SIZE
                 val probability = nativeVad.compute(window)
+                window.copyInto(window, destinationOffset = 0, startIndex = WINDOW_SIZE, endIndex = window.size)
                 event = step(probability)
                 if (event != null) break
             }
@@ -64,6 +67,7 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
     @Synchronized
     fun reset() {
         pendingCount = 0
+        window.fill(0f)
         inSpeech = false
         speechWindowCount = 0
         silenceWindowCount = 0
@@ -149,6 +153,7 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
         private const val TAG = "VadEngine"
         private const val SAMPLE_RATE = 16000
         private const val WINDOW_SIZE = 512
+        private const val CONTEXT_SIZE = 64
         private const val SPEECH_START_THRESHOLD = 0.6f
         private const val SILENCE_THRESHOLD = 0.35f
         private const val HANGOVER_SECONDS = 0.7f
