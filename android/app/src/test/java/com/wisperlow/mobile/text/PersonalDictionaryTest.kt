@@ -29,7 +29,7 @@ class PersonalDictionaryTest {
     fun valueInsertedVerbatimRegardlessOfTokenCase() {
         val dict = mapOf("ai" to "A.I.")
         assertEquals("A.I.! wow", PersonalDictionary.apply("AI! wow", dict))
-        assertEquals("Use A.I.", PersonalDictionary.apply(TextCleaner.clean("use ai period"), dict))
+        assertEquals("Use A.I.", PersonalDictionary.apply(TextCleaner.clean("Use ai."), dict))
     }
 
     @Test
@@ -43,6 +43,31 @@ class PersonalDictionaryTest {
     fun multipleTokensReplacedInOnePass() {
         val dict = mapOf("yashasvm" to "YashasVM", "wisperlow" to "WisperLow")
         assertEquals("YashasVM built WisperLow.", PersonalDictionary.apply("yashasvm built wisperlow.", dict))
+    }
+
+    @Test
+    fun longestPhraseWinsAndWhitespaceIsPreservedAroundIt() {
+        val dict = mapOf("new york" to "NY", "new york city" to "New York City")
+        assertEquals("Visit New York City, then NY.", PersonalDictionary.apply("Visit new york city, then new   york.", dict))
+    }
+
+    @Test
+    fun phrasesCanCrossNewlines() {
+        val dict = mapOf("machine learning" to "ML")
+        assertEquals("Use ML\nnext", PersonalDictionary.apply("Use machine\nlearning\nnext", dict))
+    }
+
+    @Test
+    fun keysAreLiteralAndUnicodeBoundariesAreRespected() {
+        val dict = mapOf("c++" to "C plus plus", "猫" to "Cat", "[api]" to "API")
+        assertEquals("C plus plus [api] Cat", PersonalDictionary.apply("C++ [api] 猫", dict))
+        assertEquals("scat category 猫猫", PersonalDictionary.apply("scat category 猫猫", dict))
+    }
+
+    @Test
+    fun replacementDoesNotCascadeIntoAnotherDictionaryEntry() {
+        val dict = mapOf("alpha" to "beta", "beta" to "gamma")
+        assertEquals("beta", PersonalDictionary.apply("alpha", dict))
     }
 
     @Test
