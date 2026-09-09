@@ -57,18 +57,22 @@ class WisperlowAccessibilityService : AccessibilityService() {
     private var capturedTarget: AccessibilityNodeInfo? = null
 
     private fun captureEditableTargetImpl(): Boolean {
+        capturedTarget?.recycle()
+        capturedTarget = null
         // The floating bubble is an application overlay and can be the active
         // accessibility window. Prefer another app's focused editor so later
         // confirmation can never paste into our review field.
         val target = windows.asSequence()
             .filter { it.root?.packageName?.toString() != packageName }
+            .filter { it.isActive || it.isFocused }
             .sortedByDescending { (if (it.isActive) 2 else 0) + (if (it.isFocused) 1 else 0) }
             .mapNotNull { window ->
                 val root = try { window.root } catch (_: Exception) { null } ?: return@mapNotNull null
-                findFocusTarget(root) ?: findBfsEditableTarget(root)
+                findFocusTarget(root)?.takeIf { target ->
+                    target.isEditable && !target.isPassword
+                }
             }
             .firstOrNull() ?: return false
-        capturedTarget?.recycle()
         capturedTarget = AccessibilityNodeInfo.obtain(target)
         target.recycle()
         return true
@@ -148,11 +152,9 @@ class WisperlowAccessibilityService : AccessibilityService() {
             } else {
                 setTextAtSelection(target, text)
             }
-            if (!pasted && target === capturedTarget) {
-                // The app may have recreated its editor while inference ran.
-                // Retry once against the current focused field.
+            if (pasted && target === capturedTarget) {
                 capturedTarget = null
-                return pasteTextImpl(text)
+                target.recycle()
             }
             pasted
         } catch (_: Exception) {
@@ -173,9 +175,9 @@ class WisperlowAccessibilityService : AccessibilityService() {
         val current = target.text?.toString().orEmpty()
         val selectionStart = target.textSelectionStart.takeIf { it in 0..current.length }
             ?: current.length
-        val selectionEnd = target.textSelectionEnd.takeIf { it in selectionStart..current.length }
+        val selectionEnd = target.textSelectionEnd.takeIf { it in 0..current.length }
             ?: selectionStart
-        val replacement = current.replaceRange(selectionStart, selectionEnd, inserted)
+        val replacement = SelectionText.replace(current, selectionStart, selectionEnd, inserted)
         val arguments = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
