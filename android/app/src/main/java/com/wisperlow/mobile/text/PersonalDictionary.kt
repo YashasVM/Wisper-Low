@@ -22,8 +22,15 @@ object PersonalDictionary {
                 result.appendCodePoint(codePoint)
                 index += Character.charCount(codePoint)
             } else {
-                result.append(match.first.value)
-                index = match.second
+                val replacement = match.first.value
+                result.append(replacement)
+                // Keep the historical punctuation behavior: a punctuation mark
+                // already included at the end of a replacement is not duplicated.
+                index = if (replacement.lastOrNull() == text.getOrNull(match.second)) {
+                    match.second + 1
+                } else {
+                    match.second
+                }
             }
         }
         return result.toString()

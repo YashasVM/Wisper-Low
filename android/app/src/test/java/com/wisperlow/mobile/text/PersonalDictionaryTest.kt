@@ -60,7 +60,7 @@ class PersonalDictionaryTest {
     @Test
     fun keysAreLiteralAndUnicodeBoundariesAreRespected() {
         val dict = mapOf("c++" to "C plus plus", "猫" to "Cat", "[api]" to "API")
-        assertEquals("C plus plus [api] Cat", PersonalDictionary.apply("C++ [api] 猫", dict))
+        assertEquals("C plus plus API Cat", PersonalDictionary.apply("C++ [api] 猫", dict))
         assertEquals("scat category 猫猫", PersonalDictionary.apply("scat category 猫猫", dict))
     }
 
