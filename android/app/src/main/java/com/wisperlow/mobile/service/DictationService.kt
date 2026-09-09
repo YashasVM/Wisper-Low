@@ -43,6 +43,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 sealed interface DictationPhase {
@@ -69,7 +70,7 @@ class DictationService : Service() {
     private var stt: SttEngine? = null
     private var loadedModelId: String? = null
     private var idleReleaseJob: Job? = null
-    private var transcriptionGeneration = 0L
+    private val transcriptionGeneration = AtomicLong(0L)
     @Volatile private var lastLevelUpdateNanos = 0L
 
     @Volatile private var recording = false
@@ -106,7 +107,7 @@ class DictationService : Service() {
 
     override fun onDestroy() {
         _running.value = false
-        transcriptionGeneration++
+        transcriptionGeneration.incrementAndGet()
         idleReleaseJob?.cancel()
         audio.setListener(null)
         audio.stop()
@@ -167,7 +168,7 @@ class DictationService : Service() {
     }
 
     private suspend fun reloadModel() {
-        transcriptionGeneration++
+        transcriptionGeneration.incrementAndGet()
         idleReleaseJob?.cancel()
         initializationMutex.withLock {
             recording = false
@@ -364,7 +365,7 @@ class DictationService : Service() {
     }
 
     private fun cancelDictation() {
-        transcriptionGeneration++
+        transcriptionGeneration.incrementAndGet()
         speechActive = false
         recording = false
         pendingText = null
@@ -389,12 +390,12 @@ class DictationService : Service() {
         overlay.show(BubbleMode.PROCESSING)
         _phase.value = DictationPhase.Processing
         updateNotification("Transcribing…", idle = false)
-        val generation = transcriptionGeneration
+        val generation = transcriptionGeneration.get()
         scope.launch {
             try {
                 val engine = stt ?: error("STT not loaded")
                 val raw = withContext(Dispatchers.Default) { engine.transcribe(pcm) }
-                if (generation != transcriptionGeneration || _phase.value !is DictationPhase.Processing) {
+                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
                     return@launch
                 }
                 val command = TextCleaner.classifyCommand(raw)
@@ -414,7 +415,7 @@ class DictationService : Service() {
                 overlay.show(BubbleMode.REVIEW)
                 updateNotification("Review dictation", idle = false)
             } catch (t: Throwable) {
-                if (generation != transcriptionGeneration || _phase.value !is DictationPhase.Processing) {
+                if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
                     return@launch
                 }
                 android.util.Log.e(TAG, "transcription failed", t)
@@ -468,7 +469,7 @@ class DictationService : Service() {
     }
 
     private fun resetAfterProcessing() {
-        transcriptionGeneration++
+        transcriptionGeneration.incrementAndGet()
         pendingText = null
         vad?.reset()
         overlay.show(BubbleMode.DOT)
