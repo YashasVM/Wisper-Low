@@ -164,6 +164,8 @@ class MainActivity : ComponentActivity() {
 
     private fun copyTranscript(entry: TranscriptEntry) {
         val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("Wisperlow transcript", entry.text))
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(getString(R.string.clipboard_transcript_label), entry.text),
+        )
     }
 }

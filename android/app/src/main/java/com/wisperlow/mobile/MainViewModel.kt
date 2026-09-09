@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class MainUiState(
@@ -28,6 +30,7 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     private var dictionaryLoaded = false
+    private var dictionarySaveJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -52,12 +55,20 @@ class MainViewModel @Inject constructor(
 
     fun setDictionaryText(text: String) {
         _uiState.update { it.copy(dictionaryText = text) }
-        viewModelScope.launch {
+        // Text fields can emit once per character. Debounce persistence so typing does
+        // not keep DataStore and its disk writer busy, while still saving promptly.
+        dictionarySaveJob?.cancel()
+        dictionarySaveJob = viewModelScope.launch {
+            delay(DICTIONARY_SAVE_DEBOUNCE_MS)
             settingsRepository.setPersonalDictionary(SettingsRepository.parseDictionary(text))
         }
     }
 
     fun deleteHistory(id: String) {
         viewModelScope.launch { transcriptRepository.delete(id) }
+    }
+
+    private companion object {
+        const val DICTIONARY_SAVE_DEBOUNCE_MS = 350L
     }
 }

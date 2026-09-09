@@ -319,6 +319,12 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
             animationSpec = tween(durationMillis = ANIM_DURATION_MS),
             label = "bubbleCorner"
         )
+        val bubbleDescription = when (mode) {
+            BubbleMode.DOT -> context.getString(com.wisperlow.mobile.R.string.bubble_tap_to_start)
+            BubbleMode.LISTENING -> context.getString(com.wisperlow.mobile.R.string.bubble_listening)
+            BubbleMode.PROCESSING -> context.getString(com.wisperlow.mobile.R.string.bubble_processing)
+            BubbleMode.REVIEW -> context.getString(com.wisperlow.mobile.R.string.bubble_ready_title)
+        }
 
         Box(
             modifier = Modifier
@@ -334,7 +340,11 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                     } else {
                         Modifier.pointerInput(Unit) { handleGestures() }
                     },
-                ),
+                )
+                .semantics {
+                    contentDescription = bubbleDescription
+                    role = Role.Button
+                },
             contentAlignment = Alignment.Center
         ) {
             when (mode) {

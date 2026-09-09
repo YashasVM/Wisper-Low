@@ -6,6 +6,10 @@
     <string name="notif_channel_dictation">Dictation</string>
     <string name="notif_listening_title">Wisperlow listening</string>
     <string name="notif_listening_body">Tap the bubble to stop and insert text.</string>
+    <string name="clipboard_transcript_label">Wisperlow transcript</string>
+    <string name="bubble_tap_to_start">Start dictation</string>
+    <string name="bubble_listening">Dictation listening</string>
+    <string name="bubble_processing">Preparing dictation</string>
 
     <string name="nav_home">Home</string>
     <string name="nav_dictionary">Dictionary</string>
