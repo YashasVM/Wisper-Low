@@ -2,6 +2,8 @@ package com.wisperlow.mobile.overlay
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -23,10 +25,12 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -50,6 +54,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -79,9 +84,11 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
 
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val modeState: MutableState<BubbleMode> = mutableStateOf(BubbleMode.DOT)
     private val levelState: MutableState<Float> = mutableFloatStateOf(0f)
+    private val reviewTextState: MutableState<String> = mutableStateOf("")
     private val posXState: MutableState<Int> = mutableIntStateOf(-1)
     private val posYState: MutableState<Int> = mutableIntStateOf(-1)
 
@@ -92,6 +99,11 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         get() = view != null
 
     fun show(mode: BubbleMode) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { show(mode) }
+            return
+        }
+        val previousMode = modeState.value
         modeState.value = mode
         if (!Settings.canDrawOverlays(context)) return
 
@@ -105,16 +117,32 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 detachInternal()
             }
         } else {
-            safeUpdateLayout(existing)
+            updateLayoutForMode(existing, previousMode, mode)
         }
     }
 
     fun hide() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(::hide)
+            return
+        }
         detachInternal()
     }
 
     fun setLevel(level: Float) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { setLevel(level) }
+            return
+        }
         levelState.value = level.coerceIn(0f, 1f)
+    }
+
+    fun setReviewText(text: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { setReviewText(text) }
+            return
+        }
+        reviewTextState.value = text
     }
 
     private fun attach() {
@@ -170,14 +198,33 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         params.y = metrics.bounds.height() - DEFAULT_Y_OFFSET_PX
     }
 
-    private fun safeUpdateLayout(target: View) {
+    private fun updateLayoutForMode(
+        target: View,
+        previousMode: BubbleMode,
+        newMode: BubbleMode,
+    ) {
         try {
             val lp = target.layoutParams as? WindowManager.LayoutParams ?: return
-            lp.x = posXState.value
+            val density = context.resources.displayMetrics.density
+            val previousWidth = modeWidth(previousMode) * density
+            val newWidth = modeWidth(newMode) * density
+            val rightEdge = posXState.value + previousWidth.toInt()
+            val screenWidth = windowManager.currentWindowMetrics.bounds.width()
+            lp.x = (rightEdge - newWidth.toInt()).coerceIn(
+                0,
+                (screenWidth - newWidth.toInt()).coerceAtLeast(0),
+            )
             lp.y = posYState.value
+            posXState.value = lp.x
             windowManager.updateViewLayout(target, lp)
         } catch (_: Exception) {
         }
+    }
+
+    private fun modeWidth(mode: BubbleMode): Int = when (mode) {
+        BubbleMode.DOT -> DOT_SIZE
+        BubbleMode.REVIEW -> REVIEW_WIDTH
+        BubbleMode.LISTENING, BubbleMode.PROCESSING -> PILL_WIDTH
     }
 
     private fun detachInternal() {
@@ -307,20 +354,13 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 confirm = false,
                 onClick = { onCancelGesture?.invoke() },
             )
-            Canvas(modifier = Modifier.weight(1f).height(28.dp)) {
-                val centerY = size.height / 2f
-                repeat(4) { index ->
-                    val height = if (index == 1 || index == 2) size.height * 0.7f else size.height * 0.38f
-                    val x = size.width * (index + 1) / 5f
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.72f),
-                        start = Offset(x, centerY - height / 2f),
-                        end = Offset(x, centerY + height / 2f),
-                        strokeWidth = 3.dp.toPx(),
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
+            Text(
+                text = reviewTextState.value,
+                color = Color.White.copy(alpha = 0.9f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+            )
             ReviewAction(
                 contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_insert),
                 confirm = true,
@@ -555,7 +595,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     companion object {
         private const val DOT_SIZE = 56
         private const val PILL_WIDTH = 180
-        private const val REVIEW_WIDTH = 208
+        private const val REVIEW_WIDTH = 320
         private const val PILL_HEIGHT = 64
         private const val DOTS_WIDTH = 90
         private const val DOTS_HEIGHT = 24

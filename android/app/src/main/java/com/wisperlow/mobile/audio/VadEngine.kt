@@ -21,6 +21,12 @@ class VadEngine(private val modelFile: File) : AutoCloseable {
     private var silenceWindowCount = 0
 
     @Synchronized
+    fun load(): Boolean {
+        ensureVad()
+        return vad != null
+    }
+
+    @Synchronized
     fun process(samples: ShortArray): VadEvent? {
         ensureVad()
         val nativeVad = vad ?: return null

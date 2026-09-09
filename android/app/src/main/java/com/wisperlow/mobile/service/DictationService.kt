@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -34,12 +36,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.ArrayDeque
 import javax.inject.Inject
 
 sealed interface DictationPhase {
+    data object Initializing : DictationPhase
     data object Idle : DictationPhase
     data object Listening : DictationPhase
     data object Processing : DictationPhase
@@ -56,41 +61,48 @@ class DictationService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val audio = AudioEngine()
-    private val overlay = LazyOverlay()
-    private val phase = MutableStateFlow<DictationPhase>(DictationPhase.Idle)
+    private val initializationMutex = Mutex()
+    @Inject lateinit var overlay: BubbleOverlay
     private var vad: VadEngine? = null
     private var stt: SttEngine? = null
     private var loadedModelId: String? = null
 
-    private var recording = false
-    private var speechActive = false
-    private var pendingText: String? = null
+    @Volatile private var recording = false
+    @Volatile private var speechActive = false
+    @Volatile private var pendingText: String? = null
     private val collected = ArrayList<ShortArray>(256)
     private val preroll = ArrayDeque<ShortArray>()
+    private val fullCapture = ArrayDeque<ShortArray>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        _phase.value = DictationPhase.Initializing
         createChannel()
-        scope.launch { ensureBubbleReady() }
+        scope.launch { initializeBubble() }
         scope.launch { watchSettings() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
         when (intent?.action) {
-            ACTION_STOP -> stopDictation()
+            ACTION_STOP -> {
+                cancelDictation()
+                stopSelf()
+            }
+            ACTION_RELOAD_MODEL -> scope.launch { reloadModel() }
             else -> Unit
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        _running.value = false
         audio.stop()
         vad?.close()
         stt?.release()
-        overlay.get()?.hide()
+        overlay.hide()
         scope.cancel()
         super.onDestroy()
     }
@@ -110,19 +122,14 @@ class DictationService : Service() {
     private suspend fun ensureBubbleReady() {
         val canDraw = android.provider.Settings.canDrawOverlays(this)
         if (!canDraw) {
-            phase.value = DictationPhase.Error("Overlay permission missing")
-            return
+            return failStartup("Overlay permission missing")
         }
         val modelDir = resolveModelDir() ?: run {
-            phase.value = DictationPhase.Error("No STT model installed")
-            return
+            return failStartup("No STT model installed")
         }
         if (!prepareStt(modelDir)) return
         prepareVad()
-        val bubble = overlay.get() ?: run {
-            phase.value = DictationPhase.Error("Bubble unavailable")
-            return
-        }
+        val bubble = overlay
         bubble.onTap = {
             scope.launch { if (recording) stopDictation() else startDictation() }
         }
@@ -133,7 +140,52 @@ class DictationService : Service() {
             scope.launch { confirmPendingText() }
         }
         bubble.show(BubbleMode.DOT)
-        phase.value = DictationPhase.Idle
+        _phase.value = DictationPhase.Idle
+        _running.value = true
+    }
+
+    private suspend fun initializeBubble() {
+        initializationMutex.withLock {
+            try {
+                ensureBubbleReady()
+            } catch (error: Throwable) {
+                android.util.Log.e(TAG, "Dictation initialization failed", error)
+                failStartup(error.message ?: "Dictation initialization failed")
+            }
+        }
+    }
+
+    private suspend fun reloadModel() {
+        initializationMutex.withLock {
+            recording = false
+            speechActive = false
+            pendingText = null
+            audio.stop()
+            synchronized(this) {
+                collected.clear()
+                preroll.clear()
+                fullCapture.clear()
+            }
+            overlay.hide()
+            stt?.release()
+            stt = null
+            loadedModelId = null
+            _running.value = false
+            _phase.value = DictationPhase.Initializing
+            try {
+                ensureBubbleReady()
+            } catch (error: Throwable) {
+                android.util.Log.e(TAG, "Model reload failed", error)
+                failStartup(error.message ?: "Model reload failed")
+            }
+        }
+    }
+
+    private fun failStartup(message: String) {
+        _phase.value = DictationPhase.Error(message)
+        _running.value = false
+        showToast(message, long = true)
+        stopSelf()
     }
 
     private suspend fun resolveModelDir(): File? {
@@ -151,7 +203,7 @@ class DictationService : Service() {
             val engine = SttEngine(modelDir)
             val ok = withContext(Dispatchers.Default) { engine.load() }
             if (!ok) {
-                phase.value = DictationPhase.Error("Failed to load model $modelId")
+                failStartup("Failed to load model $modelId")
                 return false
             }
             stt = engine
@@ -172,32 +224,38 @@ class DictationService : Service() {
                 }
             }
         }
-        vad = VadEngine(vadFile)
+        vad = VadEngine(vadFile).also { engine ->
+            check(engine.load()) { "Voice detection model failed to load" }
+        }
     }
 
     private fun startDictation() {
-        if (recording || phase.value is DictationPhase.Processing || phase.value is DictationPhase.Review) return
+        if (recording || _phase.value is DictationPhase.Processing || _phase.value is DictationPhase.Review) return
         collected.clear()
         preroll.clear()
+        fullCapture.clear()
         speechActive = false
         recording = true
-        phase.value = DictationPhase.Listening
-        overlay.get()?.show(BubbleMode.LISTENING)
+        _phase.value = DictationPhase.Listening
+        overlay.show(BubbleMode.LISTENING)
         updateNotification("Listening… speak now", idle = false)
         audio.setListener { samples, level ->
-            overlay.get()?.setLevel(level)
+            scope.launch(Dispatchers.Main.immediate) { overlay.setLevel(level) }
             handleAudio(samples)
         }
         if (!audio.start()) {
             recording = false
-            phase.value = DictationPhase.Error("Microphone unavailable")
-            overlay.get()?.show(BubbleMode.DOT)
+            _phase.value = DictationPhase.Error("Microphone unavailable")
+            overlay.show(BubbleMode.DOT)
         }
     }
 
     private fun handleAudio(samples: ShortArray) {
+        if (!recording) return
         val event = synchronized(this) {
-            if (preroll.size > PREROLL_CHUNKS) preroll.removeFirst()
+            if (fullCapture.size >= MAX_CAPTURE_CHUNKS) fullCapture.removeFirst()
+            fullCapture.addLast(samples.copyOf())
+            if (preroll.size >= PREROLL_CHUNKS) preroll.removeFirst()
             preroll.addLast(samples.copyOf())
             vad?.process(samples)
         }
@@ -219,35 +277,47 @@ class DictationService : Service() {
     }
 
     private fun finishSpeech(force: Boolean = false) {
-        if (!recording) return
-        if (!speechActive && !force) return
-        speechActive = false
+        val shouldFinish = synchronized(this) {
+            if (!recording || (!speechActive && !force)) {
+                false
+            } else {
+                speechActive = false
+                recording = false
+                true
+            }
+        }
+        if (!shouldFinish) return
+        // Stop and join the capture thread before taking the collection lock.
+        // Otherwise a manual stop can wait on a callback that is itself waiting
+        // for this lock, adding a two-second stall to every dictation.
+        audio.stop()
         val pcm = synchronized(this) {
-            recording = false
-            audio.stop()
             // A manual stop can happen before VAD crosses its speech threshold.
             // In that case retain any collected frames instead of silently
             // dropping the whole dictation.
-            val flat = ShortArray(collected.sumOf { it.size })
+            val chunks = if (collected.isNotEmpty()) collected else fullCapture.toList()
+            val flat = ShortArray(chunks.sumOf { it.size })
             var offset = 0
-            for (chunk in collected) {
+            for (chunk in chunks) {
                 chunk.copyInto(flat, offset)
                 offset += chunk.size
             }
             collected.clear()
+            preroll.clear()
+            fullCapture.clear()
             flat
         }
         processPcm(pcm)
     }
 
     private fun stopDictation() {
-        val hasCollectedAudio = synchronized(this) { collected.isNotEmpty() }
-        if (speechActive || hasCollectedAudio) {
+        val hasCapturedAudio = synchronized(this) { collected.isNotEmpty() || fullCapture.isNotEmpty() }
+        if (speechActive || hasCapturedAudio) {
             finishSpeech(force = true)
         } else {
             recording = false
             audio.stop()
-            overlay.get()?.show(BubbleMode.DOT)
+            overlay.show(BubbleMode.DOT)
             updateNotification("Tap the bubble to dictate", idle = true)
         }
     }
@@ -260,8 +330,9 @@ class DictationService : Service() {
         synchronized(this) {
             collected.clear()
             preroll.clear()
+            fullCapture.clear()
         }
-        overlay.get()?.show(BubbleMode.DOT)
+        overlay.show(BubbleMode.DOT)
         updateNotification("Cancelled", idle = true)
     }
 
@@ -271,29 +342,29 @@ class DictationService : Service() {
             updateNotification("Too short — try again", idle = true)
             return
         }
-        overlay.get()?.show(BubbleMode.PROCESSING)
-        phase.value = DictationPhase.Processing
+        overlay.show(BubbleMode.PROCESSING)
+        _phase.value = DictationPhase.Processing
         updateNotification("Transcribing…", idle = false)
         scope.launch {
             try {
                 val engine = stt ?: error("STT not loaded")
                 val raw = withContext(Dispatchers.Default) { engine.transcribe(pcm) }
+                val command = TextCleaner.classifyCommand(raw)
+                if (command != null) {
+                    handleCommand(command)
+                    return@launch
+                }
                 val cleaned = TextCleaner.clean(raw)
                 if (TextCleaner.looksLikeGibberish(cleaned)) {
                     showToast("Speech not understood")
                     return@launch resetAfterProcessing()
                 }
-                val command = TextCleaner.classifyCommand(cleaned)
-                when (command) {
-                    "cancel", "undo" -> resetAfterProcessing()
-                    else -> {
-                        val dictionary = settingsRepository.settings.first().personalDictionary
-                        pendingText = PersonalDictionary.apply(cleaned, dictionary)
-                        phase.value = DictationPhase.Review
-                        overlay.get()?.show(BubbleMode.REVIEW)
-                        updateNotification("Review dictation", idle = false)
-                    }
-                }
+                val dictionary = settingsRepository.settings.first().personalDictionary
+                pendingText = PersonalDictionary.apply(cleaned, dictionary)
+                _phase.value = DictationPhase.Review
+                overlay.setReviewText(pendingText.orEmpty())
+                overlay.show(BubbleMode.REVIEW)
+                updateNotification("Review dictation", idle = false)
             } catch (t: Throwable) {
                 android.util.Log.e(TAG, "transcription failed", t)
                 showToast("Transcription failed: ${t.message}")
@@ -302,15 +373,43 @@ class DictationService : Service() {
         }
     }
 
+    private suspend fun handleCommand(command: String) {
+        when (command) {
+            "newline" -> pasteAndSave("\n", saveToHistory = false)
+            "paragraph" -> pasteAndSave("\n\n", saveToHistory = false)
+            "send" -> {
+                val sent = withContext(Dispatchers.Main) {
+                    WisperlowAccessibilityService.pressEnter()
+                }
+                if (!sent) {
+                    showToast("Could not send in this text field")
+                }
+                resetAfterProcessing()
+            }
+            "cancel", "undo" -> resetAfterProcessing()
+            else -> resetAfterProcessing()
+        }
+    }
+
     private suspend fun confirmPendingText() {
         val text = pendingText ?: return
         pendingText = null
-        val ok = WisperlowAccessibilityService.pasteText(text)
-        runCatching { transcriptRepository.add(text) }
-            .onFailure { android.util.Log.e(TAG, "history save failed", it) }
+        pasteAndSave(text, saveToHistory = true)
+    }
+
+    private suspend fun pasteAndSave(text: String, saveToHistory: Boolean) {
+        val ok = withContext(Dispatchers.Main) {
+            val clipboard = getSystemService(ClipboardManager::class.java)
+            clipboard.setPrimaryClip(ClipData.newPlainText("Wisperlow transcript", text))
+            WisperlowAccessibilityService.pasteText(text)
+        }
+        if (saveToHistory) {
+            runCatching { transcriptRepository.add(text) }
+                .onFailure { android.util.Log.e(TAG, "history save failed", it) }
+        }
         if (!ok) {
             showToast(
-                "Enable Wisperlow in Accessibility settings so text can be pasted",
+                "Copied to clipboard. Enable Wisperlow Accessibility for automatic insertion",
                 long = true,
             )
         }
@@ -320,17 +419,17 @@ class DictationService : Service() {
     private fun resetAfterProcessing() {
         pendingText = null
         vad?.reset()
-        overlay.get()?.show(BubbleMode.DOT)
-        phase.value = DictationPhase.Idle
+        overlay.show(BubbleMode.DOT)
+        _phase.value = DictationPhase.Idle
         updateNotification("Tap the bubble to dictate", idle = true)
     }
 
     private suspend fun watchSettings() {
         settingsRepository.settings.collect { settings ->
-            if (settings.bubbleEnabled && phase.value is DictationPhase.Idle &&
+            if (settings.bubbleEnabled && _phase.value is DictationPhase.Idle &&
                 android.provider.Settings.canDrawOverlays(this)
             ) {
-                overlay.get()?.show(BubbleMode.DOT)
+                overlay.show(BubbleMode.DOT)
             }
         }
     }
@@ -340,15 +439,6 @@ class DictationService : Service() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(this@DictationService, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    private inner class LazyOverlay {
-        private var instance: BubbleOverlay? = null
-        fun get(): BubbleOverlay? {
-            if (!android.provider.Settings.canDrawOverlays(applicationContext)) return null
-            if (instance == null) instance = BubbleOverlay(applicationContext)
-            return instance
         }
     }
 
@@ -385,23 +475,30 @@ class DictationService : Service() {
         private const val CHANNEL_ID = "dictation"
         private const val NOTIFICATION_ID = 1001
         private const val PREROLL_CHUNKS = 15
+        private const val MAX_CAPTURE_CHUNKS = 9375 // Five minutes at 512 frames / 16 kHz.
         private const val MIN_PCM_SAMPLES = 8000
         const val ACTION_STOP = "com.wisperlow.mobile.action.STOP"
+        const val ACTION_RELOAD_MODEL = "com.wisperlow.mobile.action.RELOAD_MODEL"
 
         val running: StateFlow<Boolean> get() = _running
         private val _running = MutableStateFlow(false)
+        val phase: StateFlow<DictationPhase> get() = _phase
+        private val _phase = MutableStateFlow<DictationPhase>(DictationPhase.Idle)
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, DictationService::class.java))
-            _running.value = true
         }
 
         fun stop(context: Context) {
             context.startService(
                 Intent(context, DictationService::class.java).setAction(ACTION_STOP),
             )
-            context.stopService(Intent(context, DictationService::class.java))
-            _running.value = false
+        }
+
+        fun reloadModel(context: Context) {
+            context.startService(
+                Intent(context, DictationService::class.java).setAction(ACTION_RELOAD_MODEL),
+            )
         }
     }
 }

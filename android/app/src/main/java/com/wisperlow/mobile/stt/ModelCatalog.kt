@@ -7,6 +7,8 @@ data class SttModel(
     val archiveName: String,
     val dirName: String,
     val sizeHintMb: Int,
+    val archiveSizeBytes: Long,
+    val archiveSha256: String,
 )
 
 object ModelCatalog {
@@ -17,6 +19,8 @@ object ModelCatalog {
         archiveName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",
         dirName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
         sizeHintMb = 490,
+        archiveSizeBytes = 487_170_055L,
+        archiveSha256 = "5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf",
     )
 
     val PARAKEET_V2_INT8 = SttModel(
@@ -26,6 +30,8 @@ object ModelCatalog {
         archiveName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
         dirName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
         sizeHintMb = 490,
+        archiveSizeBytes = 482_468_385L,
+        archiveSha256 = "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad",
     )
 
     val all: List<SttModel> = listOf(PARAKEET_V3_INT8, PARAKEET_V2_INT8)

@@ -32,12 +32,12 @@ class TextCleanerTest {
 
     @Test
     fun spokenPeriodBecomesDot() {
-        assertEquals("This is great. really.", TextCleaner.clean("this is great period really"))
+        assertEquals("This is great. Really.", TextCleaner.clean("this is great period really"))
     }
 
     @Test
     fun fullStopAlsoBecomesDot() {
-        assertEquals("Done. next.", TextCleaner.clean("done full stop next"))
+        assertEquals("Done. Next.", TextCleaner.clean("done full stop next"))
     }
 
     @Test
@@ -47,12 +47,12 @@ class TextCleanerTest {
 
     @Test
     fun spokenNewLineBecomesLineBreak() {
-        assertEquals("First line\nsecond line.", TextCleaner.clean("first line new line second line"))
+        assertEquals("First line\nSecond line.", TextCleaner.clean("first line new line second line"))
     }
 
     @Test
     fun spokenNewParagraphBecomesDoubleBreak() {
-        assertEquals("First para\n\nsecond para.", TextCleaner.clean("first para new paragraph second para"))
+        assertEquals("First para\n\nSecond para.", TextCleaner.clean("first para new paragraph second para"))
     }
 
     @Test
@@ -67,6 +67,15 @@ class TextCleanerTest {
     fun capitalizesFirstLetterOnly() {
         assertEquals("Hello world.", TextCleaner.clean("hello world"))
         assertEquals("Iphone stays.", TextCleaner.clean("iphone stays"))
+    }
+
+    @Test
+    fun repairsConservativeBrokenEnglishPatterns() {
+        assertEquals("I am working on an app.", TextCleaner.clean("i is working on a app"))
+        assertEquals("They are better.", TextCleaner.clean("they is more better"))
+        assertEquals("She doesn't return.", TextCleaner.clean("she don't return back"))
+        assertEquals("We can discuss the model.", TextCleaner.clean("we can able to discuss about the model"))
+        assertEquals("I didn't go there.", TextCleaner.clean("i didn't went there"))
     }
 
     @Test

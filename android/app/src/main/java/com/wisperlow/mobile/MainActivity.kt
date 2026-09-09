@@ -13,28 +13,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
 import com.wisperlow.mobile.history.TranscriptEntry
-import com.wisperlow.mobile.history.TranscriptRepository
+import com.wisperlow.mobile.service.DictationPhase
 import com.wisperlow.mobile.service.DictationService
 import com.wisperlow.mobile.settings.SettingsRepository
-import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
 import com.wisperlow.mobile.stt.ModelDownloader
 import com.wisperlow.mobile.ui.SetupState
 import com.wisperlow.mobile.ui.WisperlowAppScreen
 import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -43,7 +41,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var modelDownloader: ModelDownloader
     @Inject lateinit var settingsRepository: SettingsRepository
-    @Inject lateinit var transcriptRepository: TranscriptRepository
+
+    private val viewModel: MainViewModel by viewModels()
 
     private val permissionRefresh = mutableIntStateOf(0)
 
@@ -68,30 +67,16 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun MainScreen() {
-        var settings by remember { mutableStateOf(WisperlowSettings()) }
+        val uiState by viewModel.uiState.collectAsState()
+        val settings = uiState.settings
         val downloadStates by modelDownloader.states.collectAsState()
-        var dictionaryText by remember { mutableStateOf("") }
-        val history by transcriptRepository.entries.collectAsState()
         val serviceRunning by DictationService.running.collectAsState()
-        val scope = rememberCoroutineScope()
+        val servicePhase by DictationService.phase.collectAsState()
         val refresh = permissionRefresh.intValue
 
-        LaunchedEffect(Unit) {
-            settingsRepository.settings.collect { latest ->
-                settings = latest
-                if (dictionaryText.isEmpty()) {
-                    dictionaryText = latest.personalDictionary.entries.joinToString("\n") { (spoken, written) ->
-                        "$spoken=$written"
-                    }
-                }
-            }
-        }
-        LaunchedEffect(Unit) {
-            transcriptRepository.load()
-        }
         LaunchedEffect(Unit) { modelDownloader.refresh() }
 
-        val setup = remember(refresh, downloadStates) {
+        val setup = remember(refresh, downloadStates, settings.selectedModelId) {
             SetupState(
                 microphoneReady = checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED,
@@ -105,9 +90,10 @@ class MainActivity : ComponentActivity() {
             settings = settings,
             setup = setup,
             serviceRunning = serviceRunning,
+            servicePhase = servicePhase,
             downloadStates = downloadStates,
-            dictionaryText = dictionaryText,
-            history = history,
+            dictionaryText = uiState.dictionaryText,
+            history = uiState.history,
             onRequestMicrophone = ::requestCorePermissions,
             onRequestOverlay = {
                 startActivity(
@@ -121,25 +107,29 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
             onDownloadModel = { model ->
-                scope.launch {
+                lifecycleScope.launch {
                     try {
                         modelDownloader.download(model)
                         settingsRepository.setSelectedModel(model.id)
+                        if (DictationService.running.value ||
+                            DictationService.phase.value is DictationPhase.Initializing
+                        ) {
+                            DictationService.reloadModel(this@MainActivity)
+                        }
                     } catch (_: Throwable) {
                         // ModelDownloader publishes the user-visible failure state.
                     }
                 }
             },
             onSelectModel = { model ->
-                scope.launch {
+                lifecycleScope.launch {
                     settingsRepository.setSelectedModel(model.id)
-                    // A running service owns the loaded recognizer. Restart it
-                    // after a model change so the next tap uses the model the
-                    // catalogue shows as active.
-                    if (DictationService.running.value) {
-                        DictationService.stop(this@MainActivity)
-                        delay(250)
-                        DictationService.start(this@MainActivity)
+                    // A running service owns the recognizer, so reload it only
+                    // after the selection has been persisted.
+                    if (DictationService.running.value ||
+                        DictationService.phase.value is DictationPhase.Initializing
+                    ) {
+                        DictationService.reloadModel(this@MainActivity)
                     }
                 }
             },
@@ -147,22 +137,19 @@ class MainActivity : ComponentActivity() {
                 if (serviceRunning) {
                     DictationService.stop(this)
                 } else if (setup.isReady) {
-                    scope.launch { settingsRepository.setBubbleEnabled(true) }
+                    lifecycleScope.launch { settingsRepository.setBubbleEnabled(true) }
                     DictationService.start(this)
                 }
             },
             onBubbleEnabledChange = { enabled ->
-                scope.launch { settingsRepository.setBubbleEnabled(enabled) }
+                lifecycleScope.launch { settingsRepository.setBubbleEnabled(enabled) }
                 if (!enabled && serviceRunning) DictationService.stop(this)
             },
             onDictionaryTextChange = { text ->
-                dictionaryText = text
-                scope.launch {
-                    settingsRepository.setPersonalDictionary(SettingsRepository.parseDictionary(text))
-                }
+                viewModel.setDictionaryText(text)
             },
             onCopyHistory = { entry -> copyTranscript(entry) },
-            onDeleteHistory = { entry -> scope.launch { transcriptRepository.delete(entry.id) } },
+            onDeleteHistory = { entry -> viewModel.deleteHistory(entry.id) },
         )
     }
 

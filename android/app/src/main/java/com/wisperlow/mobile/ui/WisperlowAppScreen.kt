@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.history.TranscriptEntry
+import com.wisperlow.mobile.service.DictationPhase
 import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
 import com.wisperlow.mobile.stt.ModelCatalog
@@ -89,6 +91,7 @@ fun WisperlowAppScreen(
     settings: WisperlowSettings,
     setup: SetupState,
     serviceRunning: Boolean,
+    servicePhase: DictationPhase = DictationPhase.Idle,
     downloadStates: Map<String, DownloadState>,
     dictionaryText: String,
     history: List<TranscriptEntry> = emptyList(),
@@ -116,6 +119,7 @@ fun WisperlowAppScreen(
             AppTab.Home -> HomeScreen(
                 setup = setup,
                 serviceRunning = serviceRunning,
+                servicePhase = servicePhase,
                 modelDownloadState = downloadStates[settings.selectedModelId],
                 onRequestMicrophone = onRequestMicrophone,
                 onRequestOverlay = onRequestOverlay,
@@ -127,6 +131,9 @@ fun WisperlowAppScreen(
                     )
                 },
                 onToggleService = onToggleService,
+                history = history,
+                onCopyHistory = onCopyHistory,
+                onDeleteHistory = onDeleteHistory,
                 modifier = Modifier.padding(contentPadding),
             )
             AppTab.Dictionary -> DictionaryScreen(
@@ -150,12 +157,16 @@ fun WisperlowAppScreen(
 private fun HomeScreen(
     setup: SetupState,
     serviceRunning: Boolean,
+    servicePhase: DictationPhase,
     modelDownloadState: DownloadState?,
     onRequestMicrophone: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
     onDownloadModel: () -> Unit,
     onToggleService: () -> Unit,
+    history: List<TranscriptEntry>,
+    onCopyHistory: (TranscriptEntry) -> Unit,
+    onDeleteHistory: (TranscriptEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ScreenList(modifier) {
@@ -194,6 +205,7 @@ private fun HomeScreen(
             DictationCard(
                 setupReady = setup.isReady,
                 serviceRunning = serviceRunning,
+                servicePhase = servicePhase,
                 onToggleService = onToggleService,
             )
         }
@@ -204,7 +216,56 @@ private fun HomeScreen(
                 style = MaterialTheme.typography.titleLarge,
             )
         }
-        item { EmptyHistoryCard() }
+        if (history.isEmpty()) {
+            item { EmptyHistoryCard() }
+        } else {
+            items(history, key = { it.id }) { entry ->
+                HistoryCard(
+                    entry = entry,
+                    onCopy = { onCopyHistory(entry) },
+                    onDelete = { onDeleteHistory(entry) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryCard(
+    entry: TranscriptEntry,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(entry.text, style = MaterialTheme.typography.bodyLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.history_words, entry.wordCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onCopy) {
+                        Text(stringResource(R.string.history_copy))
+                    }
+                    TextButton(onClick = onDelete) {
+                        Text(stringResource(R.string.history_delete))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -275,13 +336,28 @@ private fun SetupCard(
             SetupRow(
                 title = stringResource(R.string.setup_model),
                 detail = stringResource(R.string.setup_model_detail),
-                actionLabel = stringResource(R.string.action_download),
+                actionLabel = stringResource(
+                    if (modelDownloadState is DownloadState.Failed) {
+                        R.string.action_redownload
+                    } else {
+                        R.string.action_download
+                    },
+                ),
                 complete = setup.modelReady,
                 busy = modelDownloadState.isDownloadInProgress(),
                 onAction = onDownloadModel,
             )
             if (modelDownloadState.isDownloadInProgress()) {
                 modelDownloadState?.let { ModelDownloadProgress(it) }
+            } else if (modelDownloadState is DownloadState.Failed) {
+                Text(
+                    text = stringResource(
+                        R.string.model_download_failed,
+                        modelDownloadState.message,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
@@ -334,9 +410,12 @@ private fun SetupRow(
 private fun DictationCard(
     setupReady: Boolean,
     serviceRunning: Boolean,
+    servicePhase: DictationPhase,
     onToggleService: () -> Unit,
 ) {
     val active = setupReady && serviceRunning
+    val starting = servicePhase is DictationPhase.Initializing
+    val serviceError = (servicePhase as? DictationPhase.Error)?.message
     Surface(
         color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
         contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -376,6 +455,13 @@ private fun DictationCard(
                 ),
                 style = MaterialTheme.typography.headlineMedium,
             )
+            if (serviceError != null) {
+                Text(
+                    text = stringResource(R.string.dictation_error, serviceError),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Text(
                 text = stringResource(
                     if (active) R.string.bubble_ready_body else R.string.bubble_paused_body,
@@ -402,12 +488,16 @@ private fun DictationCard(
             } else {
                 Button(
                     onClick = onToggleService,
-                    enabled = setupReady,
+                    enabled = setupReady && !starting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp),
                 ) {
-                    Text(stringResource(R.string.action_turn_on))
+                    Text(
+                        stringResource(
+                            if (starting) R.string.action_starting else R.string.action_turn_on,
+                        ),
+                    )
                 }
             }
         }

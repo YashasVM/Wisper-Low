@@ -70,6 +70,14 @@ class AudioEngine(private val sampleRate: Int = 16000) {
     fun stop() {
         running = false
         val worker = thread
+        // AudioRecord.read() may be blocking. Stop recording first so the
+        // worker wakes immediately instead of making every manual stop wait
+        // for the join timeout.
+        try {
+            record?.stop()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "AudioRecord.stop failed", e)
+        }
         // VAD can decide that speech ended from inside the audio callback.
         // Joining the callback thread from itself stalls for the full timeout
         // and makes every dictation feel like it hangs after speaking.
@@ -81,11 +89,6 @@ class AudioEngine(private val sampleRate: Int = 16000) {
             }
         }
         thread = null
-        try {
-            record?.stop()
-        } catch (e: IllegalStateException) {
-            Log.w(TAG, "AudioRecord.stop failed", e)
-        }
         record?.release()
         record = null
     }

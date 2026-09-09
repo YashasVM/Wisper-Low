@@ -24,6 +24,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -93,17 +94,17 @@ class ModelDownloader @Inject constructor(
     }
 
     fun installedModels(): List<File> {
-        val root = modelsRoot
-        if (!root.isDirectory) return emptyList()
-        return root.listFiles { file -> isValidModelDirectory(file) }
-            ?.sortedBy { it.name }
-            ?: emptyList()
+        return ModelCatalog.all.mapNotNull { installedDirFor(it.id) }.sortedBy { it.name }
     }
 
     fun installedDirFor(modelId: String): File? {
         val model = ModelCatalog.byId(modelId) ?: return null
         val dir = File(modelsRoot, model.dirName)
-        return dir.takeIf(::isValidModelDirectory)
+        return dir.takeIf { candidate ->
+            isValidModelDirectory(candidate) &&
+                runCatching { File(candidate, MARKER_FILE).readText().trim() == model.id }
+                    .getOrDefault(false)
+        }
     }
 
     /** Starts or attaches to the one operation for this model. */
@@ -147,6 +148,12 @@ class ModelDownloader @Inject constructor(
         try {
             val downloadId = findOrEnqueue(model)
             archive = awaitDownload(downloadId, model)
+            if (archive.length() != model.archiveSizeBytes) {
+                throw IOException(
+                    "Downloaded model has the wrong size (${archive.length()} of ${model.archiveSizeBytes} bytes)",
+                )
+            }
+            verifyChecksum(archive, model)
             setState(model.id, DownloadState.Extracting)
             val installedDir = extract(archive, model)
             setState(model.id, DownloadState.Completed(installedDir))
@@ -185,6 +192,13 @@ class ModelDownloader @Inject constructor(
         val destinationDir = downloadsDir ?: throw IOException("External storage unavailable")
         if (!destinationDir.isDirectory && !destinationDir.mkdirs()) {
             throw IOException("Cannot create download directory")
+        }
+        val requiredBytes = model.archiveSizeBytes * 5L / 2L
+        val internalFreeBytes = modelsRoot.parentFile?.usableSpace ?: 0L
+        if (destinationDir.usableSpace < requiredBytes || internalFreeBytes < requiredBytes) {
+            throw IOException(
+                "Not enough free space. Keep at least ${requiredBytes / (1024L * 1024L)} MB available",
+            )
         }
         val destination = File(destinationDir, model.archiveName)
         if (destination.exists() && !destination.delete()) {
@@ -278,12 +292,28 @@ class ModelDownloader @Inject constructor(
 
         try {
             val destinationCanonical = temporary.canonicalPath + File.separator
-            val stripPrefix = detectRootFolder(archive)
+            var stripPrefix: String? = null
             BZip2CompressorInputStream(BufferedInputStream(FileInputStream(archive))).use { bz ->
                 TarArchiveInputStream(bz).use { tar ->
                     while (true) {
-                        val entry = tar.nextTarEntry ?: break
-                        val relative = entry.name.removePrefix(stripPrefix)
+                        val entry = tar.nextEntry ?: break
+                        val normalizedName = entry.name.trimStart('/')
+                        if (normalizedName.split('/').any { it == ".." }) {
+                            Log.w(TAG, "Skipping suspicious tar entry: ${entry.name}")
+                            continue
+                        }
+                        if (stripPrefix == null && normalizedName.isNotEmpty()) {
+                            // Discover a conventional single archive root while
+                            // streaming, avoiding a second 480 MB decompression.
+                            stripPrefix = if ('/' in normalizedName) {
+                                normalizedName.substringBefore('/') + "/"
+                            } else if (entry.isDirectory) {
+                                "$normalizedName/"
+                            } else {
+                                ""
+                            }
+                        }
+                        val relative = normalizedName.removePrefix(stripPrefix.orEmpty())
                         if (relative.isEmpty()) continue
                         writeEntry(entry, relative, tar, temporary, destinationCanonical)
                     }
@@ -306,20 +336,21 @@ class ModelDownloader @Inject constructor(
         }
     }
 
-    private fun detectRootFolder(archive: File): String {
-        val roots = mutableSetOf<String>()
-        BZip2CompressorInputStream(BufferedInputStream(FileInputStream(archive))).use { bz ->
-            TarArchiveInputStream(bz).use { tar ->
-                while (true) {
-                    val entry = tar.nextTarEntry ?: break
-                    if (entry.name.isNotBlank()) {
-                        roots.add(entry.name.trimStart('/').substringBefore('/'))
-                        if (roots.size > 1) return ""
-                    }
-                }
+    private fun verifyChecksum(archive: File, model: SttModel) {
+        if (model.archiveSha256.isEmpty()) return
+        val digest = MessageDigest.getInstance("SHA-256")
+        BufferedInputStream(FileInputStream(archive)).use { input ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
             }
         }
-        return if (roots.size == 1) "${roots.single()}/" else ""
+        val actual = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+        if (!actual.equals(model.archiveSha256, ignoreCase = true)) {
+            throw IOException("Downloaded model failed its integrity check")
+        }
     }
 
     private fun writeEntry(
@@ -362,7 +393,8 @@ class ModelDownloader @Inject constructor(
         val files = directory.listFiles { file -> file.isFile && file.length() > 0L } ?: return false
         val hasTokens = files.any { it.name == "tokens.txt" }
         val hasTransducer = files.any { it.name.startsWith("encoder") && it.name.endsWith(".onnx") } &&
-            files.any { it.name.startsWith("decoder") && it.name.endsWith(".onnx") }
+            files.any { it.name.startsWith("decoder") && it.name.endsWith(".onnx") } &&
+            files.any { it.name.startsWith("joiner") && it.name.endsWith(".onnx") }
         val hasSingleNemoModel = files.count { it.name.endsWith(".onnx") } == 1
         return hasTokens && (hasTransducer || hasSingleNemoModel)
     }
