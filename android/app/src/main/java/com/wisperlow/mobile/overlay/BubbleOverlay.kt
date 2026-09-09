@@ -159,7 +159,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
 
         composeView.setContent { BubbleContent() }
 
-        val params = buildLayoutParams()
+        val params = buildLayoutParams(modeState.value)
         applyDefaultPosition(params)
 
         composeView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
@@ -177,18 +177,30 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         posYState.value = params.y
     }
 
-    private fun buildLayoutParams(): WindowManager.LayoutParams =
+    private fun buildLayoutParams(mode: BubbleMode): WindowManager.LayoutParams =
         WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            interactionFlags(mode),
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
+            softInputMode = if (mode == BubbleMode.REVIEW) {
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            } else {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+            }
         }
+
+    private fun interactionFlags(mode: BubbleMode): Int {
+        var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        if (mode != BubbleMode.REVIEW) {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        return flags
+    }
 
     private fun applyDefaultPosition(params: WindowManager.LayoutParams) {
         val metrics = try {
@@ -217,6 +229,12 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 (screenWidth - newWidth.toInt()).coerceAtLeast(0),
             )
             lp.y = posYState.value
+            lp.flags = interactionFlags(newMode)
+            lp.softInputMode = if (newMode == BubbleMode.REVIEW) {
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            } else {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+            }
             posXState.value = lp.x
             windowManager.updateViewLayout(target, lp)
         } catch (_: Exception) {

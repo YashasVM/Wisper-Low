@@ -58,7 +58,7 @@
     <string name="dictionary_card_title">Custom words</string>
     <string name="dictionary_help">Add one replacement per line using spoken=written.</string>
     <string name="dictionary_label">Words and replacements</string>
-    <string name="dictionary_example">wisper low=Wisperlow\nyashas vm=YashasVM</string>
+    <string name="dictionary_example">wisper low=Wisperlow\nyashas vm=YashasVM\ngit hub API=GitHub API</string>
     <string name="dictionary_count">%1$d custom terms</string>
     <string name="dictionary_tip_title">A quick tip</string>
     <string name="dictionary_tip_body">Add people, product names, acronyms, and anything speech models often miss.</string>
@@ -67,7 +67,7 @@
     <string name="bubble_setting_title">Dictation bubble</string>
     <string name="bubble_setting_body">Show the floating trigger over text fields.</string>
     <string name="speech_model_title">Speech model</string>
-    <string name="model_size">About %1$d MB · English</string>
+    <string name="model_size">About %1$d MB · English and European languages</string>
     <string name="model_installed">Installed</string>
     <string name="model_active">Active</string>
     <string name="model_downloading">Downloading and preparing…</string>
