@@ -150,6 +150,7 @@ class DictationService : Service() {
         bubble.onConfirm = {
             scope.launch { confirmPendingText() }
         }
+        bubble.onReviewTextChanged = { text -> pendingText = text }
         bubble.show(BubbleMode.DOT)
         _phase.value = DictationPhase.Idle
         _running.value = true
@@ -215,8 +216,16 @@ class DictationService : Service() {
         if (stt == null || loadedModelId != modelId) {
             stt?.release()
             val engine = SttEngine(modelDir)
-            val ok = withContext(Dispatchers.Default) { engine.load() }
+            val ok = try {
+                withContext(Dispatchers.Default) { engine.load() }
+            } catch (error: Throwable) {
+                // Loading may allocate native weights before a coroutine is
+                // cancelled. Do not strand that allocation on a failed load.
+                engine.release()
+                throw error
+            }
             if (!ok) {
+                engine.release()
                 failStartup("Failed to load model $modelId")
                 return false
             }
@@ -261,6 +270,9 @@ class DictationService : Service() {
     }
 
     private fun startRecording() {
+        // Capture the app's input before the review overlay can become the
+        // active window. This keeps confirm insertion out of our own editor.
+        WisperlowAccessibilityService.captureEditableTarget()
         collected.clear()
         preroll.clear()
         fullCapture.clear()
@@ -398,11 +410,6 @@ class DictationService : Service() {
                 if (generation != transcriptionGeneration.get() || _phase.value !is DictationPhase.Processing) {
                     return@launch
                 }
-                val command = TextCleaner.classifyCommand(raw)
-                if (command != null) {
-                    handleCommand(command)
-                    return@launch
-                }
                 val cleaned = TextCleaner.clean(raw)
                 if (TextCleaner.looksLikeGibberish(cleaned)) {
                     showToast("Speech not understood")
@@ -422,24 +429,6 @@ class DictationService : Service() {
                 showToast("Transcription failed: ${t.message}")
                 resetAfterProcessing()
             }
-        }
-    }
-
-    private suspend fun handleCommand(command: String) {
-        when (command) {
-            "newline" -> pasteAndSave("\n", saveToHistory = false)
-            "paragraph" -> pasteAndSave("\n\n", saveToHistory = false)
-            "send" -> {
-                val sent = withContext(Dispatchers.Main) {
-                    WisperlowAccessibilityService.pressEnter()
-                }
-                if (!sent) {
-                    showToast("Could not send in this text field")
-                }
-                resetAfterProcessing()
-            }
-            "cancel", "undo" -> resetAfterProcessing()
-            else -> resetAfterProcessing()
         }
     }
 

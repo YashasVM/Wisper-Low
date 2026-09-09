@@ -22,6 +22,10 @@ class WisperlowAccessibilityService : AccessibilityService() {
         fun findEditableTarget(): AccessibilityNodeInfo? =
             ref?.get()?.findEditableTargetImpl()
 
+        /** Captures the focused app field before the overlay becomes active. */
+        fun captureEditableTarget(): Boolean =
+            ref?.get()?.captureEditableTargetImpl() ?: false
+
         fun pasteText(text: String): Boolean =
             ref?.get()?.pasteTextImpl(text) ?: false
 
@@ -41,12 +45,24 @@ class WisperlowAccessibilityService : AccessibilityService() {
         if (ref?.get() === this) {
             ref = null
         }
+        capturedTarget?.recycle()
+        capturedTarget = null
         super.onDestroy()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() = Unit
+
+    private var capturedTarget: AccessibilityNodeInfo? = null
+
+    private fun captureEditableTargetImpl(): Boolean {
+        val target = findEditableTargetImpl() ?: return false
+        capturedTarget?.recycle()
+        capturedTarget = AccessibilityNodeInfo.obtain(target)
+        target.recycle()
+        return true
+    }
 
     private fun findEditableTargetImpl(): AccessibilityNodeInfo? {
         return try {
@@ -112,16 +128,23 @@ class WisperlowAccessibilityService : AccessibilityService() {
 
     private fun pasteTextImpl(text: String): Boolean {
         return try {
-            val target = findEditableTargetImpl() ?: return false
+            val target = capturedTarget ?: findEditableTargetImpl() ?: return false
 
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("wisperlow", text))
 
-            return if (target.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+            val pasted = if (target.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
                 true
             } else {
                 setTextAtSelection(target, text)
             }
+            if (!pasted && target === capturedTarget) {
+                // The app may have recreated its editor while inference ran.
+                // Retry once against the current focused field.
+                capturedTarget = null
+                return pasteTextImpl(text)
+            }
+            pasted
         } catch (_: Exception) {
             false
         }
