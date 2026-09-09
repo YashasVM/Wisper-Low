@@ -26,10 +26,9 @@ if [[ ! "$model_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 case "$model_id" in
     sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8) catalog_id="parakeet-tdt-0.6b-v3-int8" ;;
-    sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8) catalog_id="parakeet-tdt-0.6b-v2-int8" ;;
     *)
         echo "unsupported model directory: $model_id" >&2
-        echo "expected an official Parakeet v2 or v3 directory name" >&2
+        echo "the focused instrumentation test requires the official Parakeet v3 directory" >&2
         exit 64
         ;;
 esac

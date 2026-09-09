@@ -31,9 +31,16 @@ the model into the app's private `files/models/<model-id>` directory, writes
 the catalog `.installed` marker used by `ModelDownloader`, and removes its
 temporary device staging directory when it exits. It trusts the supplied
 official extracted model directory and never downloads a model. The test logs
-cold load time, decode time, native heap
-usage, and checks the sample transcript for the expected `tribal`,
+cold load time, decode time, native heap usage, and checks the sample
+transcript for the expected `tribal`,
 `chieftain`, and `gold` words.
+
+For acceptance testing, compare the same recordings containing names, slang,
+and punctuation against Samsung Keyboard voice input. Record word error rate,
+technical-term accuracy, cold versus warm load/decode latency, and the
+resulting `adb shell dumpsys meminfo`, `dumpsys thermalservice`, and battery
+statistics. Repeat this on the target Samsung device and at least one lower-
+RAM Android 13+ device before making resource or quality claims.
 
 The model layout and `nemo_transducer` configuration follow the official
 [sherpa-onnx Parakeet documentation](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html).
@@ -48,9 +55,19 @@ Android's compatibility guidance is in the
 The app guides the user through microphone, notification, floating-overlay,
 and Accessibility permissions. Download the default Parakeet model once, turn
 on dictation, focus a text field in any app, and tap the floating bubble.
-After local transcription and cleanup, review the text and tap the check mark.
-If an app blocks Accessibility insertion, Wisperlow still copies the result to
-the clipboard.
+Wisperlow loads the local STT model lazily on the first dictation and releases
+it after 120 seconds idle. Audio capture is limited to one minute per
+dictation; all captured frames are sent to review, including quiet starts and
+trailing words. After local transcription and cleanup, edit the review text
+and tap the check mark. Personal dictionary entries support phrases. The app
+does not turn spoken words into built-in voice commands. Text is inserted only
+into the focused editable target captured when recording starts through the
+Accessibility service; otherwise it is copied to the clipboard.
+
+The current Android target is API 35 with a minimum of API 33 (Android 13).
+The two native STT worker threads reduce contention during inference, but
+battery, thermal, latency, and low-RAM behavior still require measurement on
+real devices.
 
 Model downloads require about 1.2 GB of free space while the compressed archive
 and extracted model coexist. Archives are checked against the upstream byte

@@ -16,6 +16,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
@@ -60,6 +63,8 @@ class ModelDownloader @Inject constructor(
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
+    // Keep only one archive verification/extraction in memory at a time.
+    private val modelInstallMutex = Mutex()
     private val _states = MutableStateFlow<Map<String, DownloadState>>(
         ModelCatalog.all.associate { it.id to DownloadState.NotStarted },
     )
@@ -81,11 +86,15 @@ class ModelDownloader @Inject constructor(
             if (snapshot != null &&
                 (snapshot.status == DownloadManager.STATUS_SUCCESSFUL || snapshot.isActive)
             ) {
-                setState(
-                    model.id,
-                    DownloadState.Downloading(snapshot.downloadedBytes, snapshot.totalBytes),
-                )
-                ensureOperation(model)
+                // A live operation may already be extracting. Preserve its
+                // Extracting state when refresh is called from the UI.
+                if (inFlight[model.id] == null) {
+                    setState(
+                        model.id,
+                        DownloadState.Downloading(snapshot.downloadedBytes, snapshot.totalBytes),
+                    )
+                    ensureOperation(model)
+                }
             } else {
                 clearPersistedDownload(model.id)
                 setState(model.id, DownloadState.NotStarted)
@@ -154,9 +163,11 @@ class ModelDownloader @Inject constructor(
                     "Downloaded model has the wrong size (${archive.length()} of ${model.archiveSizeBytes} bytes)",
                 )
             }
-            verifyChecksum(archive, model)
-            setState(model.id, DownloadState.Extracting)
-            val installedDir = extract(archive, model)
+            val installedDir = modelInstallMutex.withLock {
+                verifyChecksum(archive, model)
+                setState(model.id, DownloadState.Extracting)
+                extract(archive, model)
+            }
             setState(model.id, DownloadState.Completed(installedDir))
             clearPersistedDownload(model.id)
             return installedDir
@@ -410,7 +421,7 @@ class ModelDownloader @Inject constructor(
     }
 
     private fun setState(modelId: String, state: DownloadState) {
-        _states.value = _states.value + (modelId to state)
+        _states.update { states -> states + (modelId to state) }
     }
 
     private fun persistedDownloadId(modelId: String): Long? =
