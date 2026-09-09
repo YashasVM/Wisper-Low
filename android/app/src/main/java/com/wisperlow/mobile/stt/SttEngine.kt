@@ -13,26 +13,32 @@ import java.io.File
 
 class SttEngine(private val modelDir: File) {
 
+    // Loading and native inference both mutate sherpa's native state. Keep the
+    // lifecycle and decode operations serialized so a reload cannot publish a
+    // recognizer while another thread is releasing the previous one.
+    private val lifecycleLock = Any()
     private var recognizer: OfflineRecognizer? = null
 
     val isLoaded: Boolean
-        get() = recognizer != null
+        get() = synchronized(lifecycleLock) { recognizer != null }
 
     suspend fun load(): Boolean = withContext(Dispatchers.Default) {
-        if (recognizer != null) return@withContext true
-        try {
-            val config = buildConfig()
-            recognizer = OfflineRecognizer(assetManager = null, config = config)
-            true
-        } catch (t: Throwable) {
-            Log.e(TAG, "Failed to load model from ${modelDir.absolutePath}", t)
-            recognizer = null
-            false
+        synchronized(lifecycleLock) {
+            if (recognizer != null) return@withContext true
+            try {
+                val config = buildConfig()
+                recognizer = OfflineRecognizer(assetManager = null, config = config)
+                true
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to load model from ${modelDir.absolutePath}", t)
+                recognizer = null
+                false
+            }
         }
     }
 
     fun transcribe(pcm16kMono: ShortArray): String {
-        synchronized(this) {
+        synchronized(lifecycleLock) {
             val rec = recognizer ?: return ""
             if (pcm16kMono.isEmpty()) return ""
             val floats = FloatArray(pcm16kMono.size)
@@ -56,7 +62,7 @@ class SttEngine(private val modelDir: File) {
     }
 
     fun release() {
-        synchronized(this) {
+        synchronized(lifecycleLock) {
             try {
                 recognizer?.release()
             } catch (t: Throwable) {
@@ -117,10 +123,13 @@ class SttEngine(private val modelDir: File) {
     }
 
     private val inferenceThreads: Int
-        get() = Runtime.getRuntime().availableProcessors().coerceIn(2, MAX_THREADS)
+        // Two native workers retain the model's accuracy while avoiding a
+        // thread-per-core burst on modern phones (which otherwise competes
+        // with audio capture and heats the device during longer dictation).
+        get() = MAX_THREADS
 
     companion object {
         private const val TAG = "SttEngine"
-        private const val MAX_THREADS = 4
+        private const val MAX_THREADS = 2
     }
 }

@@ -145,6 +145,7 @@ class ModelDownloader @Inject constructor(
 
     private suspend fun performDownload(model: SttModel): File {
         var archive: File? = null
+        var preserveDownload = false
         try {
             val downloadId = findOrEnqueue(model)
             archive = awaitDownload(downloadId, model)
@@ -160,6 +161,10 @@ class ModelDownloader @Inject constructor(
             clearPersistedDownload(model.id)
             return installedDir
         } catch (cancelled: CancellationException) {
+            // DownloadManager continues independently of this coroutine. Keep
+            // its id and partial archive so a recreated service can resume it;
+            // deleting the destination here races with DownloadManager.
+            preserveDownload = true
             throw cancelled
         } catch (error: Throwable) {
             setState(
@@ -169,9 +174,11 @@ class ModelDownloader @Inject constructor(
             clearPersistedDownload(model.id)
             throw error
         } finally {
-            archive?.let { file ->
-                if (file.exists() && !file.delete()) {
-                    Log.w(TAG, "Failed to delete downloaded archive ${file.name}")
+            if (!preserveDownload) {
+                archive?.let { file ->
+                    if (file.exists() && !file.delete()) {
+                        Log.w(TAG, "Failed to delete downloaded archive ${file.name}")
+                    }
                 }
             }
         }
@@ -322,13 +329,16 @@ class ModelDownloader @Inject constructor(
             if (!isValidModelDirectory(temporary)) {
                 throw IOException("Downloaded archive does not contain a valid speech model")
             }
+            // Write the marker while the extraction is still private. A
+            // process death after the rename can then never expose a model
+            // directory that looks complete but cannot be trusted.
+            File(temporary, MARKER_FILE).writeText(model.id)
             if (destination.exists() && !destination.deleteRecursively()) {
                 throw IOException("Cannot replace existing model directory")
             }
             if (!temporary.renameTo(destination)) {
                 throw IOException("Cannot finalize model extraction")
             }
-            File(destination, MARKER_FILE).writeText(model.id)
             return destination
         } catch (error: Throwable) {
             temporary.deleteRecursively()
