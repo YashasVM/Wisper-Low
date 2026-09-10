@@ -14,6 +14,18 @@ Install JDK 17 and Android SDK 35, then run:
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
+The verified build passes 27 JVM unit tests, Android lint (0 errors), and four
+instrumentation tests on an Android 15 x86_64 emulator: activity recreation,
+real-audio VAD detection/reset, service startup/shutdown, and repeated Parakeet
+recognition. The real-audio suite uses the installed upstream model and has no
+skipped tests in that environment. The debug APK is signed for local installation;
+release distribution still requires your signing configuration below.
+
+These checks do not establish a battery, thermal, or transcription-accuracy win
+over Samsung Keyboard on a physical S24 Ultra. The model is unchanged; the
+resource improvements come from lifecycle management, bounded audio capture,
+fewer inference workers, and reduced VAD allocations.
+
 ## Real-model device verification
 
 The instrumented STT test uses the bundled `test_wavs/en.wav` sample and
