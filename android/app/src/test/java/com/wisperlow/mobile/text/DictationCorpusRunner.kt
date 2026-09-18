@@ -59,7 +59,7 @@ data class CorpusRunReport(
                 ).joinToString("\t", transform = ::escapeTsv),
             )
         }
-    }
+    }.trimEnd('\n')
 
     private fun escapeTsv(value: Any): String = value.toString()
         .replace("\\", "\\\\")
