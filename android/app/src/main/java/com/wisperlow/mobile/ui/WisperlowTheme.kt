@@ -20,6 +20,11 @@ object WisperlowColors {
     val Lilac = Color(0xFFEFEAFF)
     val Canvas = Color(0xFFF8F7FA)
     val Success = Color(0xFF287A57)
+    val BubbleSurface = Color(0xFF211F29)
+    val BubbleListening = Color(0xFF4936A0)
+    val BubbleProcessing = Color(0xFF353039)
+    val BubbleReview = Color(0xFF211F29)
+    val BubbleOutline = Color(0x66FFFFFF)
 }
 
 private val LightColors = lightColorScheme(
