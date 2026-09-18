@@ -5,9 +5,9 @@ object TextCleaner {
     private val horizontalWhitespaceRun = Regex("[^\\S\n]+")
     private val spaceBeforePunct = Regex("\\s+([,.!?;:])")
 
-    // Recognizers commonly emit typographic apostrophes. Keep those inside a
-    // token so contractions such as “don’t” are counted as one spoken word.
-    private val wordToken = Regex("[\\p{L}\\p{M}\\p{N}'’ʼ]+")
+    // Recognizers commonly emit typographic apostrophes. Keep apostrophes
+    // inside real tokens, but do not count standalone punctuation as words.
+    private val wordToken = Regex("[\\p{L}\\p{M}\\p{N}]+(?:['’ʼ][\\p{L}\\p{M}\\p{N}]+)*")
 
     /** Preserve the recognizer's words, case and punctuation; only normalize spacing. */
     fun clean(raw: String): String = normalizeSpaces(raw)
