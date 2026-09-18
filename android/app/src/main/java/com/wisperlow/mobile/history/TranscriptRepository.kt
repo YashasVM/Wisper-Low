@@ -20,6 +20,8 @@ data class TranscriptEntry(
     val timestampMillis: Long,
     val text: String,
     val wordCount: Int = text.wordCount(),
+    val originalText: String = text,
+    val finalText: String = text,
 )
 
 @Singleton
@@ -40,8 +42,25 @@ class TranscriptRepository @Inject constructor(
     }
 
     suspend fun add(text: String, timestampMillis: Long = System.currentTimeMillis()): TranscriptEntry =
+        add(originalText = text, finalText = text, timestampMillis = timestampMillis)
+
+    /**
+     * Saves both the recognizer output and the text the user ultimately reviewed or inserted.
+     * [text] remains the final text so existing history callers keep their current behavior.
+     */
+    suspend fun add(
+        originalText: String,
+        finalText: String,
+        timestampMillis: Long = System.currentTimeMillis(),
+    ): TranscriptEntry =
         withContext(Dispatchers.IO) {
-            val entry = TranscriptEntry(UUID.randomUUID().toString(), timestampMillis, text)
+            val entry = TranscriptEntry(
+                id = UUID.randomUUID().toString(),
+                timestampMillis = timestampMillis,
+                text = finalText,
+                originalText = originalText,
+                finalText = finalText,
+            )
             synchronized(lock) {
                 loadLocked()
                 val updated = TranscriptHistory.bound(listOf(entry) + _entries.value)
@@ -99,23 +118,52 @@ internal object TranscriptHistory {
 }
 
 internal object TranscriptLineCodec {
+    const val CURRENT_VERSION = "v2"
+
     fun encode(entry: TranscriptEntry): String = listOf(
+        CURRENT_VERSION,
         entry.id,
         entry.timestampMillis.toString(),
-        Base64.getEncoder().encodeToString(entry.text.toByteArray(Charsets.UTF_8)),
+        encodeText(entry.originalText),
+        encodeText(entry.text),
     ).joinToString("\t")
 
     fun decode(line: String): TranscriptEntry? {
-        val parts = line.split('\t')
-        if (parts.size != 3 || parts[0].isBlank()) return null
-        return runCatching {
-            TranscriptEntry(
-                id = parts[0],
-                timestampMillis = parts[1].toLong(),
-                text = String(Base64.getDecoder().decode(parts[2]), Charsets.UTF_8),
-            )
-        }.getOrNull()
+        val parts = line.split('\t', limit = 6)
+        return when {
+            parts.size == 3 -> decodeLegacy(parts)
+            parts.size == 5 && parts[0] == CURRENT_VERSION -> decodeVersioned(parts)
+            else -> null
+        }
     }
+
+    private fun decodeLegacy(parts: List<String>): TranscriptEntry? = runCatching {
+        val text = decodeText(parts[2])
+        TranscriptEntry(
+            id = parts[0].takeIf(String::isNotBlank) ?: return@runCatching null,
+            timestampMillis = parts[1].toLong(),
+            text = text,
+            originalText = text,
+            finalText = text,
+        )
+    }.getOrNull()
+
+    private fun decodeVersioned(parts: List<String>): TranscriptEntry? = runCatching {
+        val finalText = decodeText(parts[4])
+        TranscriptEntry(
+            id = parts[1].takeIf(String::isNotBlank) ?: return@runCatching null,
+            timestampMillis = parts[2].toLong(),
+            text = finalText,
+            originalText = decodeText(parts[3]),
+            finalText = finalText,
+        )
+    }.getOrNull()
+
+    private fun encodeText(text: String): String =
+        Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))
+
+    private fun decodeText(text: String): String =
+        String(Base64.getDecoder().decode(text), Charsets.UTF_8)
 }
 
 private fun String.wordCount(): Int = trim().split(Regex("\\s+")).count { it.isNotEmpty() }
