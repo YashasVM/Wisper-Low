@@ -80,7 +80,13 @@ class SttEngine(private val modelDir: File) {
         val joiner = files.firstOrNull { it.name.startsWith("joiner") && it.name.endsWith(".onnx") }
         val tokens = files.firstOrNull { it.name == "tokens.txt" }
 
-        if (encoder != null && decoder != null) {
+        val hasTransducerComponent = encoder != null || decoder != null || joiner != null
+        if (hasTransducerComponent) {
+            if (encoder == null || decoder == null || joiner == null) {
+                throw IllegalArgumentException(
+                    "Incomplete transducer layout: encoder, decoder, and joiner models are required",
+                )
+            }
             if (tokens == null) {
                 throw IllegalArgumentException("Transducer layout found but tokens.txt missing")
             }
@@ -90,7 +96,7 @@ class SttEngine(private val modelDir: File) {
                     transducer = OfflineTransducerModelConfig(
                         encoder = encoder.absolutePath,
                         decoder = decoder.absolutePath,
-                        joiner = joiner?.absolutePath ?: "",
+                        joiner = joiner.absolutePath,
                     ),
                     tokens = tokens.absolutePath,
                     numThreads = inferenceThreads,

@@ -41,6 +41,10 @@ class TextCleanerTest {
         assertEquals(3, TextCleaner.wordCount("hello world again"))
         assertEquals(6, TextCleaner.wordCount("hello, don't stop-it 42 now"))
         assertEquals(2, TextCleaner.wordCount("हिंदी भाषा"))
+        assertEquals(3, TextCleaner.wordCount("I don’t know"))
+        assertEquals(2, TextCleaner.wordCount("weʼre ready"))
+        assertEquals(2, TextCleaner.wordCount("' hello ’ world ʼ"))
+        assertEquals(2, TextCleaner.wordCount("James' notes"))
     }
 
 }
