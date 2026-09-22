@@ -1,5 +1,5 @@
 import React from "react";
-import ResetIcon from "../icons/ResetIcon";
+import { RotateCcw } from "lucide-react";
 
 interface ResetButtonProps {
   onClick: () => void;
@@ -22,7 +22,7 @@ export const ResetButton: React.FC<ResetButtonProps> = React.memo(
       onClick={onClick}
       disabled={disabled}
     >
-      {children ?? <ResetIcon />}
+      {children ?? <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />}
     </button>
   ),
 );
