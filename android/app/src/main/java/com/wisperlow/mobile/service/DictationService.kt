@@ -299,7 +299,7 @@ class DictationService : Service() {
         val requestGeneration = transcriptionGeneration.get()
         if (stt == null) {
             _phase.value = DictationPhase.Initializing
-            overlay.show(BubbleMode.PROCESSING)
+            overlay.show(BubbleMode.TRANSCRIBING)
             updateNotification("Loading speech model…", idle = false)
             val modelDir = resolveModelDir()
             if (modelDir == null) {
@@ -432,7 +432,7 @@ class DictationService : Service() {
             updateNotification("Too short — try again", idle = true)
             return
         }
-        overlay.show(BubbleMode.PROCESSING)
+        overlay.show(BubbleMode.TRANSCRIBING)
         _phase.value = DictationPhase.Processing
         updateNotification("Transcribing…", idle = false)
         val generation = transcriptionGeneration.get()
@@ -488,7 +488,7 @@ class DictationService : Service() {
         if (_phase.value !is DictationPhase.Review) return
         val text = pendingText?.takeIf { it.isNotBlank() } ?: return resetAfterProcessing()
         _phase.value = DictationPhase.Processing
-        overlay.show(BubbleMode.PROCESSING)
+        overlay.show(BubbleMode.TRANSCRIBING)
         pendingText = null
         pasteAndSave(text, saveToHistory = true)
     }
