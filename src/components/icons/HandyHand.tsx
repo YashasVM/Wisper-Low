@@ -1,15 +1,20 @@
 const WisperlowMark = ({
   width,
   height,
+  size,
+  className = "",
 }: {
   width?: number | string;
   height?: number | string;
+  size?: number | string;
+  className?: string;
 }) => (
   <svg
-    width={width || 126}
-    height={height || 135}
+    width={size ?? width ?? 126}
+    height={size ?? height ?? 135}
     viewBox="0 0 126 135"
-    className="fill-text stroke-text"
+    className={`fill-text stroke-text ${className}`}
+    aria-hidden="true"
     xmlns="http://www.w3.org/2000/svg"
   >
     <g stroke="currentColor" strokeWidth="6" strokeLinecap="round">
