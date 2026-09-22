@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./RecordingOverlay.css";
 import { commands, events } from "@/bindings";
@@ -189,14 +190,7 @@ const RecordingOverlay: React.FC = () => {
       aria-label="cancel"
       onClick={() => commands.cancelOperation()}
     >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path
-          d="M4 4 L12 12 M12 4 L4 12"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
+      <X size={14} strokeWidth={2} aria-hidden="true" />
     </button>
   );
 
