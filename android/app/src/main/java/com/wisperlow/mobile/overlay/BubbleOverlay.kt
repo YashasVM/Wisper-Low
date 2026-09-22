@@ -25,8 +25,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -36,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -77,7 +81,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sin
 
-enum class BubbleMode { DOT, LISTENING, PROCESSING, REVIEW }
+enum class BubbleMode { DOT, LISTENING, TRANSCRIBING, POLISHING, REVIEW }
 
 @Singleton
 class BubbleOverlay @Inject constructor(@ApplicationContext private val context: Context) {
@@ -85,6 +89,9 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     var onTap: (() -> Unit)? = null
     var onCancelGesture: (() -> Unit)? = null
     var onConfirm: (() -> Unit)? = null
+    var onCopy: (() -> Unit)? = null
+    var onUseOriginal: (() -> Unit)? = null
+    var onRetryPolish: (() -> Unit)? = null
     /** Called whenever the user edits the review text before insertion. */
     var onReviewTextChanged: ((String) -> Unit)? = null
 
@@ -95,6 +102,8 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     private val modeState: MutableState<BubbleMode> = mutableStateOf(BubbleMode.DOT)
     private val levelState: MutableState<Float> = mutableFloatStateOf(0f)
     private val reviewTextState: MutableState<String> = mutableStateOf("")
+    private val showOriginalState: MutableState<Boolean> = mutableStateOf(false)
+    private val allowRetryState: MutableState<Boolean> = mutableStateOf(false)
     private val posXState: MutableState<Int> = mutableIntStateOf(-1)
     private val posYState: MutableState<Int> = mutableIntStateOf(-1)
 
@@ -141,6 +150,15 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
             return
         }
         levelState.value = level.coerceIn(0f, 1f)
+    }
+
+    fun setReviewOptions(showOriginal: Boolean, allowRetry: Boolean) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { setReviewOptions(showOriginal, allowRetry) }
+            return
+        }
+        showOriginalState.value = showOriginal
+        allowRetryState.value = allowRetry
     }
 
     fun setReviewText(text: String) {
@@ -250,7 +268,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     private fun modeWidth(mode: BubbleMode): Int = when (mode) {
         BubbleMode.DOT -> DOT_SIZE
         BubbleMode.REVIEW -> REVIEW_WIDTH
-        BubbleMode.LISTENING, BubbleMode.PROCESSING -> PILL_WIDTH
+        BubbleMode.LISTENING, BubbleMode.TRANSCRIBING, BubbleMode.POLISHING -> PILL_WIDTH
     }
 
     private fun detachInternal() {
@@ -328,6 +346,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         }
         val targetHeight = when (mode) {
             BubbleMode.DOT -> DOT_SIZE.dp
+            BubbleMode.REVIEW -> REVIEW_HEIGHT.dp
             else -> PILL_HEIGHT.dp
         }
 
@@ -361,13 +380,14 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         val bubbleDescription = when (mode) {
             BubbleMode.DOT -> context.getString(com.wisperlow.mobile.R.string.bubble_tap_to_start)
             BubbleMode.LISTENING -> context.getString(com.wisperlow.mobile.R.string.bubble_listening)
-            BubbleMode.PROCESSING -> context.getString(com.wisperlow.mobile.R.string.bubble_processing)
+            BubbleMode.TRANSCRIBING -> context.getString(R.string.bubble_transcribing)
+            BubbleMode.POLISHING -> context.getString(R.string.bubble_polishing)
             BubbleMode.REVIEW -> context.getString(com.wisperlow.mobile.R.string.bubble_ready_title)
         }
         val bubbleColor = when (mode) {
             BubbleMode.DOT -> WisperlowColors.BubbleSurface
             BubbleMode.LISTENING -> WisperlowColors.BubbleListening
-            BubbleMode.PROCESSING -> WisperlowColors.BubbleProcessing
+            BubbleMode.TRANSCRIBING, BubbleMode.POLISHING -> WisperlowColors.BubbleProcessing
             BubbleMode.REVIEW -> WisperlowColors.BubbleReview
         }
         val bubbleShape = RoundedCornerShape(cornerRadius)
@@ -405,8 +425,12 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                         )
                     },
                 )
-                BubbleMode.PROCESSING -> StatePill(
-                    label = context.getString(R.string.bubble_processing),
+                BubbleMode.TRANSCRIBING -> StatePill(
+                    label = context.getString(R.string.bubble_transcribing),
+                    visual = { PulsingDots(animationsEnabled = animationsEnabled) },
+                )
+                BubbleMode.POLISHING -> StatePill(
+                    label = context.getString(R.string.bubble_polishing),
                     visual = { PulsingDots(animationsEnabled = animationsEnabled) },
                 )
                 BubbleMode.REVIEW -> ReviewControls()
@@ -448,37 +472,68 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
 
     @Composable
     private fun ReviewControls() {
-        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            ReviewAction(
-                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_cancel),
-                confirm = false,
-                onClick = { onCancelGesture?.invoke() },
-            )
-            BasicTextField(
-                value = reviewTextState.value,
-                onValueChange = { text ->
-                    reviewTextState.value = text
-                    onReviewTextChanged?.invoke(text)
-                },
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    color = Color.White,
-                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
-                ),
-                maxLines = 3,
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp)
-                    .semantics {
-                        contentDescription = context.getString(
-                            com.wisperlow.mobile.R.string.bubble_review_text,
-                        )
+                    .fillMaxWidth()
+                    .height(PILL_HEIGHT.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReviewAction(
+                    contentDescription = context.getString(R.string.bubble_cancel),
+                    confirm = false,
+                    onClick = { onCancelGesture?.invoke() },
+                )
+                BasicTextField(
+                    value = reviewTextState.value,
+                    onValueChange = { text ->
+                        reviewTextState.value = text
+                        onReviewTextChanged?.invoke(text)
                     },
-            )
-            ReviewAction(
-                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_insert),
-                confirm = true,
-                onClick = { onConfirm?.invoke() },
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
+                    ),
+                    maxLines = 3,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                        .semantics {
+                            contentDescription = context.getString(R.string.bubble_review_text)
+                        },
+                )
+                ReviewAction(
+                    contentDescription = context.getString(R.string.bubble_insert),
+                    confirm = true,
+                    onClick = { onConfirm?.invoke() },
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(REVIEW_ACTION_HEIGHT.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showOriginalState.value) {
+                    ReviewTextAction(R.string.bubble_use_original) { onUseOriginal?.invoke() }
+                }
+                if (allowRetryState.value) {
+                    ReviewTextAction(R.string.bubble_retry_cleanup) { onRetryPolish?.invoke() }
+                }
+                ReviewTextAction(R.string.bubble_copy) { onCopy?.invoke() }
+            }
+        }
+    }
+
+    @Composable
+    private fun ReviewTextAction(labelRes: Int, onClick: () -> Unit) {
+        TextButton(onClick = onClick, modifier = Modifier.height(REVIEW_ACTION_HEIGHT.dp)) {
+            Text(
+                text = context.getString(labelRes),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
     }
@@ -654,6 +709,8 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         private const val PILL_WIDTH = 180
         private const val REVIEW_WIDTH = 320
         private const val PILL_HEIGHT = 64
+        private const val REVIEW_ACTION_HEIGHT = 48
+        private const val REVIEW_HEIGHT = PILL_HEIGHT + REVIEW_ACTION_HEIGHT
         private const val DOTS_WIDTH = 90
         private const val DOTS_HEIGHT = 24
         private const val BACKGROUND_ALPHA = 0.95f
