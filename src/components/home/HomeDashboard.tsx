@@ -135,9 +135,18 @@ export default function HomeDashboard({
               className={`record-button ${isRecording ? "record-button-active" : ""}`}
               onClick={toggleRecording}
               aria-pressed={isRecording}
+              aria-label={
+                isRecording
+                  ? t("dashboard.stopSpeaking")
+                  : t("dashboard.startSpeaking")
+              }
             >
               <span className="record-button-icon">
-                {isRecording ? <AudioWaveform size={26} /> : <Mic size={26} />}
+                {isRecording ? (
+                  <AudioWaveform size={26} strokeWidth={2} aria-hidden="true" />
+                ) : (
+                  <Mic size={26} strokeWidth={2} aria-hidden="true" />
+                )}
               </span>
               <span>
                 <strong>
@@ -168,7 +177,7 @@ export default function HomeDashboard({
           <div className="dashboard-orb-ring dashboard-orb-ring-one" />
           <div className="dashboard-orb-ring dashboard-orb-ring-two" />
           <div className="dashboard-orb-core">
-            <AudioWaveform size={48} strokeWidth={1.5} />
+            <AudioWaveform size={48} strokeWidth={1.5} aria-hidden="true" />
           </div>
         </div>
       </section>
