@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-18",
+  "corpus_source": "android/app/src/test/java/com/wisperlow/mobile/text/DictationCorpus.kt",
+  "corpus_case_count": 48,
+  "license_note": "The ONNX conversion repositories do not carry an SPDX license field in their model card. They identify the Qwen source model; verify and ship the source Qwen Apache-2.0 license with any redistributed artifact.",
+  "runtime_evidence": {
+    "classic_onnxruntime_android": {
+      "status": "preferred_trial_runtime",
+      "reason": "Microsoft's official Android Qwen example uses onnxruntime-android for both candidates and documents offline generation without network calls or telemetry.",
+      "source": "https://github.com/microsoft/onnxruntime-inference-examples/tree/main/mobile/examples/Qwen_QA/Android"
+    },
+    "onnxruntime_genai_android": {
+      "version": "0.15.2",
+      "source_revision": "ed5f4e8",
+      "aar": {
+        "url": "https://github.com/microsoft/onnxruntime-genai/releases/download/v0.15.2/onnxruntime-genai-android-0.15.2.aar",
+        "size_bytes": 21570052,
+        "sha256": "f507ddbf0f635554ab12fcbf7dcfb115981eb664b925d90f28ed598dd8eb2ee7"
+      },
+      "status": "not_acceptable_as_shipped",
+      "reason": "The official Android telemetry manifest adds INTERNET and ACCESS_NETWORK_STATE, and official packages enable telemetry by default.",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime-genai/v0.15.2/src/java/src/main/android/AndroidManifest.xml",
+      "privacy_source": "https://github.com/microsoft/onnxruntime-genai/blob/main/docs/Privacy.md",
+      "no_telemetry_source_build": {
+        "commands": [
+          "python build.py --android --android_abi arm64-v8a --build_java --no_telemetry --skip_tests",
+          "cmake -DENABLE_TELEMETRY=OFF ..."
+        ],
+        "status": "requires_source_build_and_android_verification",
+        "source": "https://github.com/microsoft/onnxruntime-genai/blob/main/docs/Privacy.md"
+      }
+    }
+  },
+  "models": [
+    {
+      "id": "qwen2.5-0.5b-instruct",
+      "base_model": {
+        "repo": "Qwen/Qwen2.5-0.5B-Instruct",
+        "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+        "license": "Apache-2.0",
+        "model_safetensors": {
+          "size_bytes": 988097824,
+          "sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe"
+        },
+        "source": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/tree/7ae557604adf67be50417f59c2c2f167def9a775"
+      },
+      "runtime_artifact": {
+        "repo": "onnx-community/Qwen2.5-0.5B-Instruct",
+        "revision": "cc5cc01a65cc3ff17bdb73a7de33d879f62599b",
+        "model_path": "onnx/model_q4f16.onnx",
+        "model_size_bytes": 483003582,
+        "model_sha256": "b11c1dd99efd57e6c6e5bc4443a019931a5fbd5dd500d48644d8225f5ce0b2cb",
+        "tokenizer_path": "tokenizer.json",
+        "tokenizer_size_bytes": 7031673,
+        "tokenizer_sha256": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+        "source": "https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct/tree/cc5cc01a65cc3ff17bdb73a7de33d879f62599b"
+      },
+      "notes": "The ONNX conversion is pinned separately from the Qwen source checkpoint. Its model card points back to the Qwen base model and does not declare a separate license."
+    },
+    {
+      "id": "qwen3-0.6b",
+      "base_model": {
+        "repo": "Qwen/Qwen3-0.6B",
+        "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+        "license": "Apache-2.0",
+        "model_safetensors": {
+          "size_bytes": 1503300328,
+          "sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b"
+        },
+        "source": "https://huggingface.co/Qwen/Qwen3-0.6B/tree/c1899de289a04d12100db370d81485cdf75e47ca"
+      },
+      "runtime_artifact": {
+        "repo": "onnx-community/Qwen3-0.6B-ONNX",
+        "revision": "da1453100cf3ff33ef56d17983fc7a8648706db6",
+        "model_path": "onnx/model_q4f16.onnx",
+        "model_size_bytes": 569789750,
+        "model_sha256": "9e33a5911974174761d0dfdcc0bec975d9c45af0eae5e9eb647b8ba9442a8f91",
+        "tokenizer_path": "tokenizer.json",
+        "tokenizer_size_bytes": 9117040,
+        "tokenizer_sha256": "e7a95fce95bf5b0946d0ddb3f9d7caa030b7e850bbe92b0edb26bcf563e9f3d5",
+        "source": "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/tree/da1453100cf3ff33ef56d17983fc7a8648706db6"
+      },
+      "notes": "The ONNX conversion is pinned separately from the Qwen source checkpoint. Qwen3 supports a thinking mode; the cleanup trial must disable reasoning and compare plain transcript edits only."
+    }
+  ]
+}

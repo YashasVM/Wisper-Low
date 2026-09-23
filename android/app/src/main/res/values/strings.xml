@@ -10,6 +10,8 @@
     <string name="bubble_tap_to_start">Start dictation</string>
     <string name="bubble_listening">Dictation listening</string>
     <string name="bubble_processing">Preparing dictation</string>
+    <string name="bubble_transcribing">Transcribing…</string>
+    <string name="bubble_polishing">Polishing…</string>
     <string name="bubble_review_text">Dictation text. Edit before inserting.</string>
 
     <string name="nav_home">Home</string>
@@ -46,6 +48,9 @@
     <string name="bubble_paused_body">Turn it on when you want the bubble available in other apps.</string>
     <string name="bubble_cancel">Cancel dictation</string>
     <string name="bubble_insert">Insert dictation</string>
+    <string name="bubble_use_original">Original</string>
+    <string name="bubble_retry_cleanup">Retry cleanup</string>
+    <string name="bubble_copy">Copy</string>
     <string name="on_device_badge">ON DEVICE</string>
     <string name="privacy_card_title">Private by default</string>
     <string name="privacy_card_body">Audio and transcripts are processed locally. Nothing is uploaded for recognition.</string>

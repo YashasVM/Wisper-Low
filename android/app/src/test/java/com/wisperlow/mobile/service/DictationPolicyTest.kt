@@ -1,5 +1,7 @@
 package com.wisperlow.mobile.service
 
+import com.wisperlow.mobile.settings.InsertionPreference
+import com.wisperlow.mobile.text.PolishResult
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,5 +19,39 @@ class DictationPolicyTest {
         assertTrue(DictationPolicy.acceptsTranscription(4, 4, processing = true))
         assertFalse(DictationPolicy.acceptsTranscription(4, 5, processing = true))
         assertFalse(DictationPolicy.acceptsTranscription(4, 4, processing = false))
+    }
+
+    @Test
+    fun quickInsertRequiresExplicitPreferenceAndSafeResult() {
+        assertTrue(
+            DictationPolicy.shouldQuickInsert(
+                InsertionPreference.QUICK_INSERT,
+                PolishResult.Unchanged("original"),
+            ),
+        )
+        assertTrue(
+            DictationPolicy.shouldQuickInsert(
+                InsertionPreference.QUICK_INSERT,
+                PolishResult.Polished("raw", "Polished.", requiresReview = false),
+            ),
+        )
+        assertFalse(
+            DictationPolicy.shouldQuickInsert(
+                InsertionPreference.REVIEW_FIRST,
+                PolishResult.Polished("raw", "Polished.", requiresReview = false),
+            ),
+        )
+        assertFalse(
+            DictationPolicy.shouldQuickInsert(
+                InsertionPreference.QUICK_INSERT,
+                PolishResult.Polished("raw", "Changed 5 to 6.", requiresReview = true),
+            ),
+        )
+        assertFalse(
+            DictationPolicy.shouldQuickInsert(
+                InsertionPreference.QUICK_INSERT,
+                PolishResult.Unavailable("raw", "model missing"),
+            ),
+        )
     }
 }

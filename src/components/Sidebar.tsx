@@ -6,11 +6,11 @@ import {
   History,
   Info,
   LayoutDashboard,
+  SlidersHorizontal,
   Sparkles,
   Cpu,
 } from "lucide-react";
 import HandyTextLogo from "./icons/HandyTextLogo";
-import HandyHand from "./icons/HandyHand";
 import { useSettings } from "../hooks/useSettings";
 import {
   GeneralSettings,
@@ -48,7 +48,7 @@ export const SECTIONS_CONFIG = {
   },
   general: {
     labelKey: "sidebar.general",
-    icon: HandyHand,
+    icon: SlidersHorizontal,
     component: GeneralSettings,
     enabled: () => true,
   },
@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
               onClick={() => onSectionChange(section.id)}
             >
-              <Icon width={24} height={24} className="shrink-0" />
+              <Icon size={20} className="shrink-0" aria-hidden="true" />
               <p
                 className="text-sm font-medium truncate"
                 title={t(section.labelKey)}

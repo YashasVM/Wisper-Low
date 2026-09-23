@@ -28,10 +28,14 @@ class WisperlowAccessibilityService : AccessibilityService() {
             ref?.get()?.captureEditableTargetImpl() ?: false
 
         fun pasteText(text: String): Boolean =
-            ref?.get()?.pasteTextImpl(text) ?: false
+            ref?.get()?.pasteTextImpl(text, requireFocusedTarget = false) ?: false
+
+        /** Inserts only while the field captured at recording start still owns input focus. */
+        fun pasteTextIfTargetFocused(text: String): Boolean =
+            ref?.get()?.pasteTextImpl(text, requireFocusedTarget = true) ?: false
 
         fun pasteNewline(): Boolean =
-            ref?.get()?.pasteTextImpl("\n") ?: false
+            ref?.get()?.pasteTextImpl("\n", requireFocusedTarget = false) ?: false
 
         fun pressEnter(): Boolean =
             ref?.get()?.pressEnterImpl() ?: false
@@ -142,11 +146,12 @@ class WisperlowAccessibilityService : AccessibilityService() {
             className.contains("EditText", ignoreCase = true)
     }
 
-    private fun pasteTextImpl(text: String): Boolean {
+    private fun pasteTextImpl(text: String, requireFocusedTarget: Boolean): Boolean {
         return try {
             val target = capturedTarget ?: return false
             capturedTarget = null
             if (!target.refresh() || !target.isEditable || !target.isVisibleToUser ||
+                (requireFocusedTarget && !target.isFocused) ||
                 target.isPassword || target.packageName?.toString() == packageName
             ) return false
 

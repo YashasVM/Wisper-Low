@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.overlay
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
@@ -13,25 +14,32 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -40,21 +48,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -67,13 +73,15 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.wisperlow.mobile.R
+import com.wisperlow.mobile.ui.WisperlowColors
+import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.min
 import kotlin.math.sin
 
-enum class BubbleMode { DOT, LISTENING, PROCESSING, REVIEW }
+enum class BubbleMode { DOT, LISTENING, TRANSCRIBING, POLISHING, REVIEW }
 
 @Singleton
 class BubbleOverlay @Inject constructor(@ApplicationContext private val context: Context) {
@@ -81,6 +89,9 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     var onTap: (() -> Unit)? = null
     var onCancelGesture: (() -> Unit)? = null
     var onConfirm: (() -> Unit)? = null
+    var onCopy: (() -> Unit)? = null
+    var onUseOriginal: (() -> Unit)? = null
+    var onRetryPolish: (() -> Unit)? = null
     /** Called whenever the user edits the review text before insertion. */
     var onReviewTextChanged: ((String) -> Unit)? = null
 
@@ -91,6 +102,8 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     private val modeState: MutableState<BubbleMode> = mutableStateOf(BubbleMode.DOT)
     private val levelState: MutableState<Float> = mutableFloatStateOf(0f)
     private val reviewTextState: MutableState<String> = mutableStateOf("")
+    private val showOriginalState: MutableState<Boolean> = mutableStateOf(false)
+    private val allowRetryState: MutableState<Boolean> = mutableStateOf(false)
     private val posXState: MutableState<Int> = mutableIntStateOf(-1)
     private val posYState: MutableState<Int> = mutableIntStateOf(-1)
 
@@ -139,6 +152,15 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         levelState.value = level.coerceIn(0f, 1f)
     }
 
+    fun setReviewOptions(showOriginal: Boolean, allowRetry: Boolean) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { setReviewOptions(showOriginal, allowRetry) }
+            return
+        }
+        showOriginalState.value = showOriginal
+        allowRetryState.value = allowRetry
+    }
+
     fun setReviewText(text: String) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { setReviewText(text) }
@@ -157,7 +179,9 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         composeView.setViewTreeViewModelStoreOwner(owner)
         composeView.setViewTreeSavedStateRegistryOwner(owner)
 
-        composeView.setContent { BubbleContent() }
+        composeView.setContent {
+            WisperlowTheme { BubbleContent() }
+        }
 
         val params = buildLayoutParams(modeState.value)
         applyDefaultPosition(params)
@@ -244,7 +268,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     private fun modeWidth(mode: BubbleMode): Int = when (mode) {
         BubbleMode.DOT -> DOT_SIZE
         BubbleMode.REVIEW -> REVIEW_WIDTH
-        BubbleMode.LISTENING, BubbleMode.PROCESSING -> PILL_WIDTH
+        BubbleMode.LISTENING, BubbleMode.TRANSCRIBING, BubbleMode.POLISHING -> PILL_WIDTH
     }
 
     private fun detachInternal() {
@@ -313,6 +337,7 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     @Composable
     private fun BubbleContent() {
         val mode by modeState
+        val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
 
         val targetWidth = when (mode) {
             BubbleMode.DOT -> DOT_SIZE.dp
@@ -321,39 +346,61 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         }
         val targetHeight = when (mode) {
             BubbleMode.DOT -> DOT_SIZE.dp
+            BubbleMode.REVIEW -> REVIEW_HEIGHT.dp
             else -> PILL_HEIGHT.dp
         }
 
         val animatedWidth by animateDpAsState(
             targetValue = targetWidth,
-            animationSpec = tween(durationMillis = ANIM_DURATION_MS),
+            animationSpec = if (animationsEnabled) {
+                tween(durationMillis = ANIM_DURATION_MS)
+            } else {
+                snap()
+            },
             label = "bubbleWidth"
         )
         val animatedHeight by animateDpAsState(
             targetValue = targetHeight,
-            animationSpec = tween(durationMillis = ANIM_DURATION_MS),
+            animationSpec = if (animationsEnabled) {
+                tween(durationMillis = ANIM_DURATION_MS)
+            } else {
+                snap()
+            },
             label = "bubbleHeight"
         )
         val cornerRadius by animateDpAsState(
             targetValue = targetWidth.coerceAtMost(targetHeight) / 2f,
-            animationSpec = tween(durationMillis = ANIM_DURATION_MS),
+            animationSpec = if (animationsEnabled) {
+                tween(durationMillis = ANIM_DURATION_MS)
+            } else {
+                snap()
+            },
             label = "bubbleCorner"
         )
         val bubbleDescription = when (mode) {
             BubbleMode.DOT -> context.getString(com.wisperlow.mobile.R.string.bubble_tap_to_start)
             BubbleMode.LISTENING -> context.getString(com.wisperlow.mobile.R.string.bubble_listening)
-            BubbleMode.PROCESSING -> context.getString(com.wisperlow.mobile.R.string.bubble_processing)
+            BubbleMode.TRANSCRIBING -> context.getString(R.string.bubble_transcribing)
+            BubbleMode.POLISHING -> context.getString(R.string.bubble_polishing)
             BubbleMode.REVIEW -> context.getString(com.wisperlow.mobile.R.string.bubble_ready_title)
         }
+        val bubbleColor = when (mode) {
+            BubbleMode.DOT -> WisperlowColors.BubbleSurface
+            BubbleMode.LISTENING -> WisperlowColors.BubbleListening
+            BubbleMode.TRANSCRIBING, BubbleMode.POLISHING -> WisperlowColors.BubbleProcessing
+            BubbleMode.REVIEW -> WisperlowColors.BubbleReview
+        }
+        val bubbleShape = RoundedCornerShape(cornerRadius)
 
         Box(
             modifier = Modifier
                 .width(animatedWidth)
                 .height(animatedHeight)
                 .background(
-                    color = Color(0xFF0A0A0A).copy(alpha = BACKGROUND_ALPHA),
-                    shape = RoundedCornerShape(cornerRadius)
+                    color = bubbleColor.copy(alpha = BACKGROUND_ALPHA),
+                    shape = bubbleShape,
                 )
+                .border(1.dp, WisperlowColors.BubbleOutline, bubbleShape)
                 .then(
                     if (mode == BubbleMode.REVIEW) {
                         Modifier
@@ -368,45 +415,125 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
             contentAlignment = Alignment.Center
         ) {
             when (mode) {
-                BubbleMode.DOT -> MicGlyph(modifier = Modifier.size(DOT_SIZE.dp))
-                BubbleMode.LISTENING -> Waveform(modifier = Modifier.fillMaxSize())
-                BubbleMode.PROCESSING -> PulsingDots()
+                BubbleMode.DOT -> BrandMark()
+                BubbleMode.LISTENING -> StatePill(
+                    label = context.getString(R.string.bubble_listening),
+                    visual = {
+                        Waveform(
+                            modifier = Modifier.width(56.dp).height(48.dp),
+                            animationsEnabled = animationsEnabled,
+                        )
+                    },
+                )
+                BubbleMode.TRANSCRIBING -> StatePill(
+                    label = context.getString(R.string.bubble_transcribing),
+                    visual = { PulsingDots(animationsEnabled = animationsEnabled) },
+                )
+                BubbleMode.POLISHING -> StatePill(
+                    label = context.getString(R.string.bubble_polishing),
+                    visual = { PulsingDots(animationsEnabled = animationsEnabled) },
+                )
                 BubbleMode.REVIEW -> ReviewControls()
             }
         }
     }
 
     @Composable
-    private fun ReviewControls() {
-        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            ReviewAction(
-                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_cancel),
-                confirm = false,
-                onClick = { onCancelGesture?.invoke() },
-            )
-            BasicTextField(
-                value = reviewTextState.value,
-                onValueChange = { text ->
-                    reviewTextState.value = text
-                    onReviewTextChanged?.invoke(text)
-                },
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    color = Color.White.copy(alpha = 0.9f),
-                ),
+    private fun BrandMark() {
+        Icon(
+            painter = painterResource(R.drawable.ic_brand_mark),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(32.dp),
+        )
+    }
+
+    @Composable
+    private fun StatePill(label: String, visual: @Composable () -> Unit) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            visual()
+            Text(
+                text = label,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 6.dp)
-                    .semantics {
-                        contentDescription = context.getString(
-                            com.wisperlow.mobile.R.string.bubble_review_text,
-                        )
-                    },
+                    .padding(start = 6.dp),
             )
-            ReviewAction(
-                contentDescription = context.getString(com.wisperlow.mobile.R.string.bubble_insert),
-                confirm = true,
-                onClick = { onConfirm?.invoke() },
+        }
+    }
+
+    @Composable
+    private fun ReviewControls() {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PILL_HEIGHT.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReviewAction(
+                    contentDescription = context.getString(R.string.bubble_cancel),
+                    confirm = false,
+                    onClick = { onCancelGesture?.invoke() },
+                )
+                BasicTextField(
+                    value = reviewTextState.value,
+                    onValueChange = { text ->
+                        reviewTextState.value = text
+                        onReviewTextChanged?.invoke(text)
+                    },
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
+                    ),
+                    maxLines = 3,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                        .semantics {
+                            contentDescription = context.getString(R.string.bubble_review_text)
+                        },
+                )
+                ReviewAction(
+                    contentDescription = context.getString(R.string.bubble_insert),
+                    confirm = true,
+                    onClick = { onConfirm?.invoke() },
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(REVIEW_ACTION_HEIGHT.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showOriginalState.value) {
+                    ReviewTextAction(R.string.bubble_use_original) { onUseOriginal?.invoke() }
+                }
+                if (allowRetryState.value) {
+                    ReviewTextAction(R.string.bubble_retry_cleanup) { onRetryPolish?.invoke() }
+                }
+                ReviewTextAction(R.string.bubble_copy) { onCopy?.invoke() }
+            }
+        }
+    }
+
+    @Composable
+    private fun ReviewTextAction(labelRes: Int, onClick: () -> Unit) {
+        TextButton(onClick = onClick, modifier = Modifier.height(REVIEW_ACTION_HEIGHT.dp)) {
+            Text(
+                text = context.getString(labelRes),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
     }
@@ -427,95 +554,33 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.size(40.dp)) {
-                drawCircle(
-                    color = if (confirm) Color(0xFF8E78FF) else Color.White.copy(alpha = 0.12f),
-                )
-                val strokeWidth = 2.5.dp.toPx()
-                if (confirm) {
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(size.width * 0.27f, size.height * 0.52f),
-                        end = Offset(size.width * 0.43f, size.height * 0.68f),
-                        strokeWidth = strokeWidth,
-                        cap = StrokeCap.Round,
-                    )
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(size.width * 0.43f, size.height * 0.68f),
-                        end = Offset(size.width * 0.74f, size.height * 0.34f),
-                        strokeWidth = strokeWidth,
-                        cap = StrokeCap.Round,
-                    )
-                } else {
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(size.width * 0.34f, size.height * 0.34f),
-                        end = Offset(size.width * 0.66f, size.height * 0.66f),
-                        strokeWidth = strokeWidth,
-                        cap = StrokeCap.Round,
-                    )
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(size.width * 0.66f, size.height * 0.34f),
-                        end = Offset(size.width * 0.34f, size.height * 0.66f),
-                        strokeWidth = strokeWidth,
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun MicGlyph(modifier: Modifier) {
-        Canvas(modifier = modifier.alpha(1f)) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val strokeW = size.width * 0.075f
-            val bodyWidth = size.width * 0.17f
-            val bodyHeight = size.height * 0.30f
-            val bodyTop = cy - bodyHeight - size.height * 0.06f
-
-            drawRoundRect(
-                color = Color.White.copy(alpha = 0.85f),
-                topLeft = Offset(cx - bodyWidth / 2f, bodyTop),
-                size = Size(bodyWidth, bodyHeight),
-                cornerRadius = CornerRadius(bodyWidth / 2f, bodyWidth / 2f)
-            )
-            val arcRadius = size.width * 0.20f
-            drawArc(
-                color = Color.White.copy(alpha = 0.85f),
-                startAngle = 0f,
-                sweepAngle = 180f,
-                useCenter = false,
-                topLeft = Offset(cx - arcRadius, cy - arcRadius * 0.45f),
-                size = Size(arcRadius * 2f, arcRadius * 1.7f),
-                style = Stroke(width = strokeW, cap = StrokeCap.Round)
-            )
-            drawLine(
-                color = Color.White.copy(alpha = 0.85f),
-                start = Offset(cx, cy + arcRadius * 1.25f),
-                end = Offset(cx, cy + arcRadius * 1.9f),
-                strokeWidth = strokeW,
-                cap = StrokeCap.Round
+            Icon(
+                painter = painterResource(if (confirm) R.drawable.ic_check else R.drawable.ic_close),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
             )
         }
     }
 
     @Composable
-    private fun Waveform(modifier: Modifier) {
+    private fun Waveform(modifier: Modifier, animationsEnabled: Boolean) {
         val level by levelState
-        val transition = rememberInfiniteTransition(label = "waveform")
-        val phase by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = (2f * Math.PI.toFloat()) * 2f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = WAVE_DURATION_MS, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "wavePhase"
-        )
+        val phase = if (animationsEnabled) {
+            val transition = rememberInfiniteTransition(label = "waveform")
+            val animatedPhase by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = (2f * Math.PI.toFloat()) * 2f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = WAVE_DURATION_MS, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "wavePhase",
+            )
+            animatedPhase
+        } else {
+            0f
+        }
         Canvas(modifier = modifier) {
             val barCount = 5
             val slot = size.width / (barCount + 1f)
@@ -541,17 +606,22 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
     }
 
     @Composable
-    private fun PulsingDots() {
-        val transition = rememberInfiniteTransition(label = "dots")
-        val pulse by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = PULSE_DURATION_MS, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "dotPulse"
-        )
+    private fun PulsingDots(animationsEnabled: Boolean) {
+        val pulse = if (animationsEnabled) {
+            val transition = rememberInfiniteTransition(label = "dots")
+            val animatedPulse by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = PULSE_DURATION_MS, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "dotPulse",
+            )
+            animatedPulse
+        } else {
+            0.5f
+        }
         Canvas(modifier = Modifier.size(width = DOTS_WIDTH.dp, height = DOTS_HEIGHT.dp)) {
             val dotRadius = size.height * 0.22f
             val spacing = size.width / 4f
@@ -639,6 +709,8 @@ class BubbleOverlay @Inject constructor(@ApplicationContext private val context:
         private const val PILL_WIDTH = 180
         private const val REVIEW_WIDTH = 320
         private const val PILL_HEIGHT = 64
+        private const val REVIEW_ACTION_HEIGHT = 48
+        private const val REVIEW_HEIGHT = PILL_HEIGHT + REVIEW_ACTION_HEIGHT
         private const val DOTS_WIDTH = 90
         private const val DOTS_HEIGHT = 24
         private const val BACKGROUND_ALPHA = 0.95f
