@@ -48,5 +48,8 @@ jobs:
       - name: Run ESLint
         run: bun run lint
 
+      - name: Build frontend and check TypeScript
+        run: bun run build
+
       - name: Run prettier
         run: bun run format:check

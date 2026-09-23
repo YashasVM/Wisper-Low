@@ -631,11 +631,13 @@
     "open": "Otwórz",
     "copy": "Kopiuj",
     "clear": "Wyczyść",
-    "noOptionsFound": "Nie znaleziono opcji"
+    "noOptionsFound": "Nie znaleziono opcji",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow potrzebuje uprawnień dostępności, aby wpisywać transkrybowany tekst.",
-    "openSettings": "Otwórz ustawienia systemowe"
+    "openSettings": "Otwórz ustawienia systemowe",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Błąd wczytywania katalogu: {{error}}",

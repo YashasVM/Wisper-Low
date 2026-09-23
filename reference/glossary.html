@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wisper-Low Glossary</title>
+<style>body{font-family:system-ui,sans-serif;max-width:44rem;margin:0 auto;padding:2rem 1.2rem;line-height:1.6;color:#1a1a18;background:#fafaf8}h1{font-size:1.4rem}table{width:100%;border-collapse:collapse;font-size:.88rem}th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid #e5e2d9}code{font-size:.82em;background:#f1efe7;padding:.08em .35em;border-radius:5px}</style>
+</head>
+<body>
+<h1>Wisper-Low glossary</h1>
+<table>
+<tr><th>Term</th><th>Means</th><th>Lives in</th></tr>
+<tr><td>VAD</td><td>Voice Activity Detection — keeps speech, drops silence/noise</td><td><code>audio_toolkit/vad/</code></td></tr>
+<tr><td>Manager</td><td>Long-lived backend owner of one domain (audio/model/transcription/history)</td><td><code>managers/</code></td></tr>
+<tr><td>StreamRouter</td><td>Channel feeding live mic frames to the streaming engine</td><td><code>managers/transcription.rs</code></td></tr>
+<tr><td>Command</td><td>Frontend-callable Rust function (frontend → backend)</td><td><code>commands/</code>, <code>lib.rs</code></td></tr>
+<tr><td>Event</td><td>Backend broadcast the UI subscribes to (backend → frontend)</td><td><code>collect_events!</code> in <code>lib.rs</code></td></tr>
+<tr><td>bindings.ts</td><td>Auto-generated TS types for commands/events — never hand-edit</td><td><code>src/bindings.ts</code></td></tr>
+<tr><td>HandyKeys</td><td>Default global-shortcut backend on macOS/Windows</td><td><code>shortcut/handy_keys.rs</code></td></tr>
+<tr><td>Overlay</td><td>Floating pill shown while recording (None/Minimal/Live)</td><td><code>overlay.rs</code></td></tr>
+<tr><td>Post-process</td><td>Optional LLM polish pass after transcription</td><td><code>llm_client.rs</code></td></tr>
+<tr><td>Headless</td><td>Transcribe a WAV from CLI with no window/mic</td><td><code>lib.rs::run_headless_transcription</code></td></tr>
+</table>
+<p><a href="../lessons/0001-how-wisperlow-works.html">← back to lesson 001</a></p>
+</body>
+</html>

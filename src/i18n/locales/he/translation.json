@@ -631,11 +631,13 @@
     "open": "פתח",
     "copy": "העתק",
     "clear": "נקה",
-    "noOptionsFound": "לא נמצאו אפשרויות"
+    "noOptionsFound": "לא נמצאו אפשרויות",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow צריך הרשאות נגישות כדי להקליד את הטקסט המתומלל.",
-    "openSettings": "פתח את הגדרות המערכת"
+    "openSettings": "פתח את הגדרות המערכת",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "שגיאה בטעינת תיקייה: {{error}}",

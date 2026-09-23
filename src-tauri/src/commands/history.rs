@@ -40,6 +40,16 @@ pub async fn get_audio_file_path(
     history_manager: State<'_, Arc<HistoryManager>>,
     file_name: String,
 ) -> Result<String, String> {
+    // History rows contain filenames, never arbitrary paths. Enforce that at
+    // this IPC boundary so a malformed renderer request cannot escape the
+    // recordings directory through `..` or an absolute path.
+    let mut components = std::path::Path::new(&file_name).components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err("Invalid recording file name".to_string());
+    }
+
     let path = history_manager.get_audio_file_path(&file_name);
     path.to_str()
         .ok_or_else(|| "Invalid file path".to_string())

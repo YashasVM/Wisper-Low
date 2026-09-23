@@ -631,11 +631,13 @@
     "open": "Mở",
     "copy": "Sao chép",
     "clear": "Xóa",
-    "noOptionsFound": "Không tìm thấy tùy chọn"
+    "noOptionsFound": "Không tìm thấy tùy chọn",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow cần quyền truy cập để gõ văn bản đã chuyển đổi.",
-    "openSettings": "Mở Cài đặt Hệ thống"
+    "openSettings": "Mở Cài đặt Hệ thống",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Lỗi khi tải thư mục: {{error}}",

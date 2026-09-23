@@ -178,6 +178,13 @@ const settingUpdaters: {
     commands.changeExtraRecordingBufferSetting(value as number),
 };
 
+// A failed older request must not roll back a newer optimistic value for the
+// same setting. The sequence also handles concurrent writes of the same value.
+const settingUpdateSequence = new Map<keyof Settings, number>();
+const settingUpdatePending = new Map<string, number>();
+const settingUpdateQueues = new Map<keyof Settings, Promise<void>>();
+const persistedSettingValues = new Map<keyof Settings, unknown>();
+
 export const useSettingsStore = create<SettingsStore>()(
   subscribeWithSelector((set, get) => ({
     settings: null,
@@ -297,7 +304,13 @@ export const useSettingsStore = create<SettingsStore>()(
     ) => {
       const { settings, setUpdating } = get();
       const updateKey = String(key);
-      const originalValue = settings?.[key];
+      if (!persistedSettingValues.has(key) && settings) {
+        persistedSettingValues.set(key, settings[key]);
+      }
+      const sequence = (settingUpdateSequence.get(key) ?? 0) + 1;
+      settingUpdateSequence.set(key, sequence);
+      const pending = (settingUpdatePending.get(updateKey) ?? 0) + 1;
+      settingUpdatePending.set(updateKey, pending);
 
       setUpdating(updateKey, true);
 
@@ -306,19 +319,51 @@ export const useSettingsStore = create<SettingsStore>()(
           settings: state.settings ? { ...state.settings, [key]: value } : null,
         }));
 
-        const updater = settingUpdaters[key];
-        if (updater) {
-          await updater(value);
-        } else if (key !== "bindings" && key !== "selected_model") {
-          console.warn(`No handler for setting: ${String(key)}`);
+        const previousUpdate =
+          settingUpdateQueues.get(key) ?? Promise.resolve();
+        const update = previousUpdate
+          .catch(() => {})
+          .then(async () => {
+            const updater = settingUpdaters[key];
+            if (updater) {
+              await updater(value);
+            } else if (key !== "bindings" && key !== "selected_model") {
+              console.warn(`No handler for setting: ${String(key)}`);
+            }
+            persistedSettingValues.set(key, value);
+          });
+        settingUpdateQueues.set(key, update);
+        try {
+          await update;
+        } finally {
+          if (settingUpdateQueues.get(key) === update) {
+            settingUpdateQueues.delete(key);
+          }
         }
       } catch (error) {
         console.error(`Failed to update setting ${String(key)}:`, error);
-        if (settings) {
-          set({ settings: { ...settings, [key]: originalValue } });
+        if (
+          settings &&
+          settingUpdateSequence.get(key) === sequence &&
+          persistedSettingValues.has(key)
+        ) {
+          set((state) => ({
+            settings: state.settings
+              ? {
+                  ...state.settings,
+                  [key]: persistedSettingValues.get(key) as Settings[K],
+                }
+              : null,
+          }));
         }
       } finally {
-        setUpdating(updateKey, false);
+        const remaining = (settingUpdatePending.get(updateKey) ?? 1) - 1;
+        if (remaining <= 0) {
+          settingUpdatePending.delete(updateKey);
+          setUpdating(updateKey, false);
+        } else {
+          settingUpdatePending.set(updateKey, remaining);
+        }
       }
     },
 

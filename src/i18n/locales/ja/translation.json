@@ -631,11 +631,13 @@
     "open": "開く",
     "copy": "コピー",
     "clear": "クリア",
-    "noOptionsFound": "オプションが見つかりません"
+    "noOptionsFound": "オプションが見つかりません",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow が文字起こしテキストを入力するには、アクセシビリティ権限が必要です。",
-    "openSettings": "システム設定を開く"
+    "openSettings": "システム設定を開く",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "ディレクトリの読み込みエラー: {{error}}",

@@ -408,7 +408,13 @@ impl AudioRecordingManager {
 
         // Always-on?  Open immediately.
         if matches!(mode, MicrophoneMode::AlwaysOn) {
-            manager.start_microphone_stream()?;
+            // A denied permission, disconnected device, or temporary audio
+            // backend failure must not prevent the app itself from starting.
+            // try_start_recording() retries opening the stream when the user
+            // next records.
+            if let Err(error) = manager.start_microphone_stream() {
+                warn!("Could not start always-on microphone stream: {error}");
+            }
         }
 
         Ok(manager)
@@ -614,6 +620,13 @@ impl AudioRecordingManager {
     }
 
     pub fn start_microphone_stream(&self) -> Result<(), anyhow::Error> {
+        self.start_microphone_stream_with_fallback(false)
+    }
+
+    fn start_microphone_stream_with_fallback(
+        &self,
+        strict_selected_device: bool,
+    ) -> Result<(), anyhow::Error> {
         let mut open_flag = self.is_open.lock().unwrap();
         if *open_flag {
             // `is_open` only records that we opened a stream at some point, not
@@ -680,6 +693,16 @@ impl AudioRecordingManager {
         let mut resolution = self.resolve_microphone_device(&settings);
         let resolve_elapsed = resolve_started.elapsed();
 
+        // During a user-initiated device change, do not silently turn a
+        // missing named selection into the system default. The caller needs
+        // an error so it can restore the old preference and working stream.
+        let regular_selection_is_active = settings.selected_microphone.is_some()
+            && !(settings.clamshell_microphone.is_some()
+                && clamshell::is_clamshell().unwrap_or(false));
+        if strict_selected_device && regular_selection_is_active && resolution.device.is_none() {
+            anyhow::bail!("The selected microphone is unavailable");
+        }
+
         // Ensure VAD is loaded if it wasn't for whatever reason
         let vad_started = Instant::now();
         self.preload_vad()?;
@@ -689,6 +712,12 @@ impl AudioRecordingManager {
         let mut recorder_opt = self.recorder.lock().unwrap();
         if let Some(rec) = recorder_opt.as_mut() {
             if let Err(first_err) = rec.open(resolution.device.clone()) {
+                if strict_selected_device {
+                    return Err(anyhow::anyhow!(
+                        "Failed to open selected microphone: {}",
+                        first_err
+                    ));
+                }
                 // A cached device or config may have gone stale (unplugged,
                 // rate/format changed). Re-resolve from a fresh enumeration and
                 // retry once before surfacing the error.
@@ -840,15 +869,60 @@ impl AudioRecordingManager {
         }
     }
 
-    pub fn update_selected_device(&self) -> Result<(), anyhow::Error> {
-        // Device settings changed; re-enumerate the device and restart capture.
-        self.invalidate_device_cache();
-        let was_open = *self.is_open.lock().unwrap();
-        if was_open {
-            self.close_generation.fetch_add(1, Ordering::SeqCst);
-            self.stop_microphone_stream();
-            self.start_microphone_stream()?;
+    pub fn update_selected_device(
+        &self,
+        selected_microphone: Option<String>,
+    ) -> Result<(), anyhow::Error> {
+        // Serialize device changes against recording start/stop. A device
+        // switch closes the active cpal stream, so reject it while recording.
+        let state = self.state.lock().unwrap();
+        if !matches!(*state, RecordingState::Idle) {
+            return Err(anyhow::anyhow!(
+                "Cannot change the microphone while recording"
+            ));
         }
+
+        let previous_settings = get_settings(&self.app_handle);
+        let previous_device = previous_settings.selected_microphone.clone();
+        if previous_device == selected_microphone {
+            return Ok(());
+        }
+
+        let was_open = *self.is_open.lock().unwrap();
+        let mut updated_settings = previous_settings.clone();
+        updated_settings.selected_microphone = selected_microphone;
+        write_settings(&self.app_handle, updated_settings);
+
+        if !was_open {
+            self.invalidate_device_cache();
+            return Ok(());
+        }
+
+        self.close_generation.fetch_add(1, Ordering::SeqCst);
+        self.stop_microphone_stream();
+        self.invalidate_device_cache();
+        if let Err(switch_error) = self.start_microphone_stream_with_fallback(true) {
+            // Restore only this setting, preserving unrelated settings that
+            // may have changed while the stream was being reopened.
+            let mut settings = get_settings(&self.app_handle);
+            settings.selected_microphone = previous_device;
+            write_settings(&self.app_handle, settings);
+            self.invalidate_device_cache();
+
+            if let Err(recovery_error) = self.start_microphone_stream() {
+                error!(
+                    "Microphone switch failed ({switch_error}); reopening previous microphone also failed ({recovery_error})"
+                );
+                return Err(anyhow::anyhow!(
+                    "Microphone switch failed: {switch_error}; previous microphone could not be reopened: {recovery_error}"
+                ));
+            }
+            return Err(anyhow::anyhow!(
+                "Microphone switch failed; previous microphone restored: {switch_error}"
+            ));
+        }
+
+        drop(state);
         Ok(())
     }
 

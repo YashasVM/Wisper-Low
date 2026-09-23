@@ -634,11 +634,13 @@
     "open": "खोल्नुहोस्",
     "copy": "कपी गर्नुहोस्",
     "clear": "खाली गर्नुहोस्",
-    "noOptionsFound": "कुनै विकल्प भेटिएन"
+    "noOptionsFound": "कुनै विकल्प भेटिएन",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "ट्रान्सक्राइब गरिएको टेक्स्ट टाइप गर्न Wisperlow लाई एक्सेसिबिलिटी अनुमति चाहिन्छ।",
-    "openSettings": "सिस्टम सेटिङहरू खोल्नुहोस्"
+    "openSettings": "सिस्टम सेटिङहरू खोल्नुहोस्",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "डाइरेक्टरी लोड गर्दा त्रुटि: {{error}}",

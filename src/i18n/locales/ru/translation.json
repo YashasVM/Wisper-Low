@@ -631,11 +631,13 @@
     "open": "Открыть",
     "copy": "Копировать",
     "clear": "Очистить",
-    "noOptionsFound": "Вариантов не найдено"
+    "noOptionsFound": "Вариантов не найдено",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow необходимы разрешения на доступ для ввода расшифрованного текста.",
-    "openSettings": "Открыть настройки системы"
+    "openSettings": "Открыть настройки системы",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Ошибка загрузки каталога: {{error}}.",

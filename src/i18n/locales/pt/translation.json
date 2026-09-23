@@ -631,11 +631,13 @@
     "open": "Abrir",
     "copy": "Copiar",
     "clear": "Limpar",
-    "noOptionsFound": "Nenhuma opção encontrada"
+    "noOptionsFound": "Nenhuma opção encontrada",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "O Wisperlow precisa de permissões de acessibilidade para digitar o texto transcrito.",
-    "openSettings": "Abrir Configurações do Sistema"
+    "openSettings": "Abrir Configurações do Sistema",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Erro ao carregar diretório: {{error}}",

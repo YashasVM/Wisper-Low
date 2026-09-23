@@ -631,11 +631,13 @@
     "open": "Öppna",
     "copy": "Kopiera",
     "clear": "Rensa",
-    "noOptionsFound": "Inga alternativ hittades"
+    "noOptionsFound": "Inga alternativ hittades",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow behöver behörighet för hjälpmedel för att kunna skriva transkriberad text.",
-    "openSettings": "Öppna systeminställningar"
+    "openSettings": "Öppna systeminställningar",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Fel vid laddning av mapp: {{error}}",

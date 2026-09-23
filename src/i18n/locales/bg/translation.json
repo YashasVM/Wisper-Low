@@ -631,11 +631,13 @@
     "open": "Отваряне",
     "copy": "Копиране",
     "clear": "Изчистване",
-    "noOptionsFound": "Няма намерени опции"
+    "noOptionsFound": "Няма намерени опции",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow се нуждае от разрешения за достъпност, за да въвежда транскрибирания текст.",
-    "openSettings": "Отваряне на системните настройки"
+    "openSettings": "Отваряне на системните настройки",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Грешка при зареждане на папката: {{error}}",

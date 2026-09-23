@@ -54,85 +54,111 @@ const RecordingOverlay: React.FC = () => {
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
+    let disposed = false;
+    let unlisteners: Array<() => void> = [];
+
     const setupEventListeners = async () => {
-      const unlistenShow = await listen("show-overlay", async (event) => {
-        const overlayState = event.payload as OverlayState;
-        // Reset synchronously before settings I/O. A fast microphone can emit
-        // recording-ready while the awaits below are in flight; resetting after
-        // them would overwrite that event and leave the overlay stuck arming.
-        if (overlayState === "recording" || overlayState === "streaming") {
-          setCaptureReady(false);
-          smoothedLevelsRef.current = Array(16).fill(0);
-          setLevels(Array(WAVE_BARS).fill(0));
-          setStreamText({ committed: "", tentative: "" });
+      const register = async (listener: Promise<() => void>) => {
+        const unlisten = await listener;
+        if (disposed) {
+          unlisten();
+        } else {
+          unlisteners.push(unlisten);
         }
-
-        await syncLanguageFromSettings();
-        // The Live panel flows downward from a top overlay and upward from a
-        // bottom one; read the placement so the layout can flip to match.
-        try {
-          const settings = await commands.getAppSettings();
-          if (settings.status === "ok") {
-            setPosition(
-              settings.data.overlay_position === "top" ? "top" : "bottom",
-            );
-          }
-        } catch {
-          // Keep the previous/default placement if settings can't be read.
-        }
-        setState(overlayState);
-        if (overlayState === "streaming") {
-          setPhase("listening");
-          setWorkKind("transcribing");
-          setElapsed(0);
-          setSession((s) => s + 1); // remount the card fresh for this session
-        }
-        setIsVisible(true);
-      });
-
-      const unlistenHide = await listen("hide-overlay", () => {
-        setIsVisible(false);
-        setCaptureReady(false);
-      });
-
-      const unlistenReady = await listen("recording-ready", () => {
-        setElapsed(0);
-        setCaptureReady(true);
-      });
-
-      const unlistenLevel = await listen<number[]>("mic-level", (event) => {
-        const newLevels = event.payload as number[];
-        // Exponential smoothing across the 16 buckets, then take the first N
-        // bars for the shared waveform.
-        const smoothed = smoothedLevelsRef.current.map((prev, i) => {
-          const target = newLevels[i] || 0;
-          return prev * 0.7 + target * 0.3;
-        });
-        smoothedLevelsRef.current = smoothed;
-        setLevels(smoothed.slice(0, WAVE_BARS));
-      });
-
-      const unlistenStream = await events.streamTextEvent.listen((event) => {
-        setStreamText(event.payload);
-      });
-
-      const unlistenPhase = await events.streamPhaseEvent.listen((event) => {
-        const payload: StreamPhaseEvent = event.payload;
-        setPhase(payload.phase);
-        if (payload.kind) setWorkKind(payload.kind);
-      });
-
-      return () => {
-        unlistenShow();
-        unlistenHide();
-        unlistenReady();
-        unlistenLevel();
-        unlistenStream();
-        unlistenPhase();
       };
+
+      try {
+        await register(
+          listen("show-overlay", async (event) => {
+            const overlayState = event.payload as OverlayState;
+            // Reset synchronously before settings I/O. A fast microphone can emit
+            // recording-ready while the awaits below are in flight; resetting after
+            // them would overwrite that event and leave the overlay stuck arming.
+            if (overlayState === "recording" || overlayState === "streaming") {
+              setCaptureReady(false);
+              smoothedLevelsRef.current = Array(16).fill(0);
+              setLevels(Array(WAVE_BARS).fill(0));
+              setStreamText({ committed: "", tentative: "" });
+            }
+
+            await syncLanguageFromSettings();
+            // The Live panel flows downward from a top overlay and upward from a
+            // bottom one; read the placement so the layout can flip to match.
+            try {
+              const settings = await commands.getAppSettings();
+              if (settings.status === "ok") {
+                setPosition(
+                  settings.data.overlay_position === "top" ? "top" : "bottom",
+                );
+              }
+            } catch {
+              // Keep the previous/default placement if settings can't be read.
+            }
+            setState(overlayState);
+            if (overlayState === "streaming") {
+              setPhase("listening");
+              setWorkKind("transcribing");
+              setElapsed(0);
+              setSession((s) => s + 1); // remount the card fresh for this session
+            }
+            setIsVisible(true);
+          }),
+        );
+
+        await register(
+          listen("hide-overlay", () => {
+            setIsVisible(false);
+            setCaptureReady(false);
+          }),
+        );
+
+        await register(
+          listen("recording-ready", () => {
+            setElapsed(0);
+            setCaptureReady(true);
+          }),
+        );
+
+        await register(
+          listen<number[]>("mic-level", (event) => {
+            const newLevels = event.payload as number[];
+            // Exponential smoothing across the 16 buckets, then take the first N
+            // bars for the shared waveform.
+            const smoothed = smoothedLevelsRef.current.map((prev, i) => {
+              const target = newLevels[i] || 0;
+              return prev * 0.7 + target * 0.3;
+            });
+            smoothedLevelsRef.current = smoothed;
+            setLevels(smoothed.slice(0, WAVE_BARS));
+          }),
+        );
+
+        await register(
+          events.streamTextEvent.listen((event) => {
+            setStreamText(event.payload);
+          }),
+        );
+
+        await register(
+          events.streamPhaseEvent.listen((event) => {
+            const payload: StreamPhaseEvent = event.payload;
+            setPhase(payload.phase);
+            if (payload.kind) setWorkKind(payload.kind);
+          }),
+        );
+      } catch (error) {
+        unlisteners.forEach((unlisten) => unlisten());
+        unlisteners = [];
+        console.error("Failed to register recording overlay listeners:", error);
+      }
     };
 
     setupEventListeners();
+
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
   }, []);
 
   // Elapsed capture timer starts only once microphone samples are flowing.
@@ -187,7 +213,7 @@ const RecordingOverlay: React.FC = () => {
   const cancelBtn = (
     <button
       className="sx"
-      aria-label="cancel"
+      aria-label={t("tray.cancel")}
       onClick={() => commands.cancelOperation()}
     >
       <X size={14} strokeWidth={2} aria-hidden="true" />

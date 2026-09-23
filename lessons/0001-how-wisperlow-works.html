@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Wisper-Low Works — One Page</title>
+<meta name="description" content="A minimalist, single-file tour of the Wisper-Low repo: shortcut to pasted text.">
+<style>
+  :root{
+    --bg:#fafaf8; --ink:#1a1a18; --muted:#6f6e69; --line:#e5e2d9;
+    --card:#ffffff; --accent:#2f5d3a; --accent-bg:#edf3ec; --code-bg:#f1efe7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    line-height:1.65;max-width:46rem;margin:0 auto;padding:3rem 1.25rem 5rem}
+  header{text-align:center;margin-bottom:3rem}
+  .kicker{color:var(--accent);font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;font-weight:600}
+  h1{font-size:2rem;font-weight:650;margin:.6rem 0 .4rem;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:.95rem;max-width:34rem;margin:0 auto}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:1.1rem 1.3rem;margin:2rem 0}
+  nav.toc ol{margin-left:1.2rem;font-size:.9rem}
+  nav.toc li{margin:.25rem 0}
+  a{color:var(--accent)}
+  section{margin:2.8rem 0}
+  h2{font-size:1.3rem;font-weight:650;margin-bottom:.9rem;padding-bottom:.35rem;
+    border-bottom:1px solid var(--line)}
+  h2 .n{color:var(--accent);margin-right:.45rem;font-weight:600}
+  h3{font-size:1rem;margin:1.4rem 0 .4rem}
+  p,li{font-size:.93rem}
+  p{margin:.6rem 0}
+  ul,ol{margin:.5rem 0 .5rem 1.3rem}
+  li{margin:.3rem 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:1rem 1.15rem;margin:.8rem 0}
+  .card b{display:block;font-size:.9rem;margin-bottom:.15rem}
+  .card p{font-size:.87rem;color:#3c3b37;margin:.2rem 0}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.82em;background:var(--code-bg);border-radius:5px;padding:.08em .35em}
+  pre{background:#141412;color:#ece9df;border-radius:10px;padding:1rem 1.15rem;
+    overflow-x:auto;font-size:.8rem;line-height:1.55;margin:.8rem 0}
+  pre code{background:none;color:inherit;padding:0}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.8rem 0}
+  th,td{text-align:left;padding:.55rem .65rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+  .flow{background:var(--accent-bg);border:1px solid #d5e0d3;border-radius:10px;
+    padding:1rem 1.2rem;font-size:.88rem;margin:1rem 0}
+  .quiz{background:var(--card);border:1px dashed var(--accent);border-radius:10px;
+    padding:1rem 1.2rem;margin-top:1rem}
+  .quiz button{all:unset;cursor:pointer;display:block;width:100%;text-align:left;
+    font-size:.88rem;padding:.45rem .6rem;border-radius:7px;margin:.25rem 0;
+    background:var(--bg);border:1px solid var(--line)}
+  .quiz button:hover{border-color:var(--accent)}
+  .quiz .fb{font-size:.85rem;margin-top:.5rem;min-height:1.4em;color:var(--accent);font-weight:600}
+  footer{margin-top:3.5rem;padding-top:1.2rem;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.8rem;text-align:center}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}h1{font-size:1.6rem}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Wisper-Low &bull; Lesson 001 &bull; Read-only tour</div>
+  <h1>How Wisper-Low Works</h1>
+  <p class="sub">A private, on-device speech-to-text app. Press a shortcut, speak,
+  and your words are typed into whatever app is focused. One page, zero dependencies,
+  every claim cites a file you can open.</p>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#idea">The idea in 30 seconds</a></li>
+    <li><a href="#journey">A keypress's journey (the pipeline)</a></li>
+    <li><a href="#backend">Backend: the four managers</a></li>
+    <li><a href="#audio">Audio &amp; voice detection</a></li>
+    <li><a href="#transcribe">Transcription engines &amp; cleanup</a></li>
+    <li><a href="#frontend">Frontend: React + store</a></li>
+    <li><a href="#bridge">The bridge: commands &amp; events</a></li>
+    <li><a href="#plumbing">Plumbing: settings, shortcuts, tray, overlay, paste</a></li>
+    <li><a href="#cli">CLI, single instance &amp; headless mode</a></li>
+    <li><a href="#dev">Run it yourself + repo map</a></li>
+    <li><a href="#quiz">Check yourself (quiz)</a></li>
+  </ol>
+</nav>
+
+<section id="idea">
+  <h2><span class="n">01</span>The idea in 30 seconds</h2>
+  <p><b>Wisperlow</b> (<code>README.md:1-3</code>) is a cross-platform dictation app:
+  record with a global hotkey, transcribe <b>locally on your machine</b> (audio never
+  goes to a cloud transcription service), and insert the text into the active app via
+  clipboard/paste. It starts minimized to the tray (<code>src-tauri/src/lib.rs:963-973</code>).</p>
+  <div class="grid2">
+    <div class="card"><b>Rust backend</b><p><code>src-tauri/src/</code> — recording, models, transcription, history. Tauri 2.x, binary name <code>handy</code> (<code>src-tauri/src/cli.rs:5</code>).</p></div>
+    <div class="card"><b>React frontend</b><p><code>src/</code> — React 18 + TypeScript + Vite + Tailwind 4 + Zustand + i18next (<code>package.json</code>, v0.9.5).</p></div>
+  </div>
+  <p>Primary sources: <code>README.md</code>, <code>AGENTS.md</code>, <code>package.json</code>.</p>
+</section>
+
+<section id="journey">
+  <h2><span class="n">02</span>A keypress's journey</h2>
+  <p>Follow one dictation from hotkey to pasted text. This is the only diagram you need:</p>
+  <div class="flow">
+    <code>hotkey</code> → <code>TranscriptionCoordinator</code> → <code>AudioRecordingManager</code>
+    → <code>cpal mic</code> → <code>resample 16&nbsp;kHz</code> → <code>Silero VAD</code>
+    → <code>stop</code> → <code>save .wav</code> → <code>TranscriptionManager</code>
+    → <code>cleanup + history</code> → <code>clipboard paste</code>
+  </div>
+  <p>In code that is <code>src-tauri/src/actions.rs</code> +
+  <code>transcription_coordinator.rs</code>: preload model &amp; VAD in parallel → start
+  recording → on stop, save the WAV while finalizing the stream (or batch-transcribing) →
+  <code>process_transcription_output()</code> → <code>HistoryManager::save_entry</code> →
+  <code>clipboard::paste()</code> on the main thread.</p>
+</section>
+
+<section id="backend">
+  <h2><span class="n">03</span>Backend: the four managers</h2>
+  <p>Created once at startup in <code>initialize_core_logic()</code>
+  (<code>src-tauri/src/lib.rs:149-183</code>) and shared via Tauri state. Each owns one job:</p>
+  <div class="card"><b>Audio — <code>managers/audio.rs</code></b><p><code>AudioRecordingManager</code>: idle / recording / stopping states, mic open &amp; mute, device cache, extra tail buffer, pads clips shorter than ~1.25&nbsp;s.</p></div>
+  <div class="card"><b>Models — <code>managers/model.rs</code></b><p><code>ModelManager</code>: registry of every model (<code>ModelInfo</code>: id, file, engine, size, translation/streaming support). Seeds Whisper <code>small / medium / turbo / large</code> + ONNX families, discovers custom <code>.bin / .gguf</code> files, downloads via <code>hf-hub</code>, cancels and deletes.</p></div>
+  <div class="card"><b>Transcription — <code>managers/transcription.rs</code></b><p><code>TranscriptionManager</code>: loads one engine at a time, <code>transcribe(samples) → String</code>, live streaming via <code>StreamRouter</code>, idle-unloads models on a timer, emits <code>model-state-changed</code>.</p></div>
+  <div class="card"><b>History — <code>managers/history.rs</code></b><p><code>HistoryManager</code>: every dictation saves <code>recordings/wisperlow-*.wav</code> + a row in <code>history.db</code> (sqlite). Emits <code>HistoryUpdatePayload::{Added, Updated, Deleted, Toggled}</code>.</p></div>
+</section>
+
+<section id="audio">
+  <h2><span class="n">04</span>Audio &amp; voice detection</h2>
+  <p>Low-level audio lives in <code>src-tauri/src/audio_toolkit/</code>:</p>
+  <ul>
+    <li><b>Capture</b> (<code>audio/recorder.rs</code>, <code>audio/device.rs</code>): <code>cpal</code> lists devices, opens the selected mic, downmixes channels, and <code>rubato</code> resamples everything to <b>16&nbsp;kHz mono, 30&nbsp;ms frames</b>.</li>
+    <li><b>Voice activity</b> (<code>vad/silero.rs</code>, <code>vad/smoothed.rs</code>): the Silero VAD v4 ONNX model (<code>src-tauri/resources/models/silero_vad_v4.onnx</code>, threshold 0.3) wrapped in a smoother with prefill/hangover, so keyboard clicks don't chop words. Policy is <code>VadPolicy::{Disabled, Offline, Streaming}</code> — streaming models keep VAD live.</li>
+    <li><b>Levels</b> (<code>audio/visualizer.rs</code>): an FFT visualizer feeds <code>mic-level</code> events at ~30&nbsp;fps for the overlay.</li>
+  </ul>
+  <p>Mic modes (<code>managers/audio.rs</code>): <code>AlwaysOn</code> keeps the stream warm for instant start; <code>OnDemand</code> opens it per dictation. Recording only signals "ready" after the first real chunk, which hides Bluetooth/USB latency.</p>
+</section>
+
+<section id="transcribe">
+  <h2><span class="n">05</span>Transcription engines &amp; cleanup</h2>
+  <h3>Two engine families (<code>managers/transcription.rs</code>, <code>Cargo.toml</code>)</h3>
+  <ul>
+    <li><b><code>transcribe-cpp</code></b> — Whisper-family GGML/GGUF with GPU acceleration (Metal on macOS, Vulkan elsewhere). Handles translate tasks and language selection.</li>
+    <li><b><code>transcribe-rs</code> (ONNX)</b> — Parakeet v2/v3, Moonshine (+streaming), SenseVoice, GigaAM, Canary, Cohere.</li>
+  </ul>
+  <h3>Live streaming</h3>
+  <p>The recorder feeds a <code>StreamRouter</code> directly; the worker emits
+  <code>StreamTextEvent{committed, tentative}</code> + <code>StreamPhaseEvent{Listening, Working}</code>
+  to the overlay. If streaming yields nothing, it falls back to batch.</p>
+  <h3>Cleanup after raw text (<code>audio_toolkit/text.rs</code>, <code>actions.rs</code>, <code>llm_client.rs</code>)</h3>
+  <ul>
+    <li>Fuzzy <b>custom words</b> (Levenshtein + Soundex, threshold 0.18).</li>
+    <li><b>Filler removal</b> (<code>uh / umm / hmm…</code>, language-aware gating).</li>
+    <li>Stutter collapse + whitespace normalize; OpenCC conversion for Simplified/Traditional Chinese.</li>
+    <li>Optional <b>LLM polish</b> (OpenAI, Anthropic, Groq, OpenRouter, Bedrock, Apple Intelligence on ARM Macs).</li>
+  </ul>
+</section>
+
+<section id="frontend">
+  <h2><span class="n">06</span>Frontend: React + store</h2>
+  <p><code>src/App.tsx:31,39-80</code> — onboarding is <code>accessibility → model → done</code>;
+  returning users skip model picking. After onboarding it calls
+  <code>initializeEnigo() + initializeShortcuts()</code> and refreshes audio devices.
+  Layout: <code>Sidebar + HomeDashboard | settings + Footer + Toaster + WhatsNewGate</code>.</p>
+  <ul>
+    <li><b>Components</b> (<code>src/components/</code>): ~40 settings panels (mic, language, accelerators, paste, post-processing, VAD…), <code>model-selector/</code>, <code>onboarding/</code>, <code>overlay/RecordingOverlay.tsx</code>, <code>update-checker/</code>, <code>home/HomeDashboard</code>.</li>
+    <li><b>State</b> (<code>src/stores/settingsStore.ts:1-60</code>): Zustand + <code>subscribeWithSelector</code>, optimistic <code>updateSetting → commands.*</code>, listens for <code>model-state-changed / settings-changed</code>.</li>
+    <li><b>Types</b>: <code>src/bindings.ts</code> is auto-generated by <code>tauri-specta</code> — never hand-edit it.</li>
+    <li><b>Languages</b> (<code>src/i18n/</code>): English source + 20+ locales; ESLint forbids hardcoded JSX strings. Debug panel: <code>Ctrl/⌘ + Shift + D</code>.</li>
+  </ul>
+</section>
+
+<section id="bridge">
+  <h2><span class="n">07</span>The bridge: commands &amp; events</h2>
+  <p>Some ~80 commands are collected in <code>src-tauri/src/lib.rs:616-737</code>
+  (<code>collect_commands!</code>) and events via <code>collect_events![HistoryUpdatePayload, StreamTextEvent, StreamPhaseEvent]</code>.</p>
+  <table>
+    <tr><th>Direction</th><th>How</th><th>Examples</th></tr>
+    <tr><td>Frontend → backend</td><td><code>commands.*</code> Tauri commands</td><td><code>toggle_transcription</code>, model download/delete/activate, mic select, history CRUD, shortcut rebinding</td></tr>
+    <tr><td>Backend → frontend</td><td><code>emit</code> events</td><td><code>model-state-changed</code>, <code>model-download-progress</code>, <code>mic-level</code>, <code>show/hide-overlay</code>, <code>recording-error</code></td></tr>
+  </table>
+  <p>Hotkeys funnel through <code>TranscriptionCoordinator::send_input()</code>
+  (<code>transcription_coordinator.rs</code>): single-threaded <code>Idle / Recording / Processing</code>
+  with 30&nbsp;ms debounce and a 50&nbsp;ms push-to-talk release grace.</p>
+</section>
+
+<section id="plumbing">
+  <h2><span class="n">08</span>Plumbing: settings, shortcuts, tray, overlay, paste</h2>
+  <ul>
+    <li><b>Settings</b> (<code>settings.rs</code>): ~50 fields in <code>settings_store.json</code> via <code>tauri-plugin-store</code>, schema-version migrations, secrets redacted, portable mode supported (<code>portable.rs</code>).</li>
+    <li><b>Shortcuts</b> (<code>shortcut/</code>): transcribe <code>Opt/Ctrl+Space</code>, with post-processing <code>Opt/Ctrl+Shift+Space</code>, cancel <code>Esc</code>. Backends: Tauri (Linux default) vs HandyKeys (macOS/Windows default), plus a Carbon fallback when macOS Secure Input sticks (<code>secure_input.rs</code>).</li>
+    <li><b>Tray</b> (<code>tray.rs</code>): Idle / Recording / Transcribing icons, model submenu, copy-last-transcript, unload model.</li>
+    <li><b>Overlay</b> (<code>overlay.rs</code>): <code>None / Minimal / Live</code> pill (256×46) or streaming view (400×120); NSPanel on macOS, gtk-layer-shell on Linux, topmost window on Windows.</li>
+    <li><b>Paste</b> (<code>clipboard.rs</code>, <code>input.rs</code>, <code>paste_tx/</code>): save/restore clipboard, paste methods (<code>CtrlV / Direct / ShiftInsert / ExternalScript / None</code>), typing tools (<code>wtype / xdotool…</code>), <code>enigo</code> initialized only after permissions (<code>lib.rs:149-153</code>).</li>
+  </ul>
+</section>
+
+<section id="cli">
+  <h2><span class="n">09</span>CLI, single instance &amp; headless mode</h2>
+  <p>Flags are defined in <code>src-tauri/src/cli.rs:6-63</code> and are <b>runtime-only</b> (never persisted):</p>
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--toggle-transcription</code> / <code>--toggle-post-process</code> / <code>--cancel</code></td><td>Sent to the running instance via <code>tauri_plugin_single_instance</code> (<code>lib.rs:816-828</code>), then the second process exits.</td></tr>
+    <tr><td><code>--start-hidden</code> / <code>--no-tray</code> / <code>--debug</code></td><td>Launch behavior + Trace logging overrides.</td></tr>
+    <tr><td><code>--transcribe-file f.wav [--model id] [--device-index N] [--repeat N] [--json]</code></td><td>Headless one-shot: same <code>TranscriptionManager::transcribe</code>, no mic/VAD/download (<code>lib.rs:401-587</code>). WAV must be 16&nbsp;kHz mono 16-bit PCM.</td></tr>
+    <tr><td><code>--list-devices</code> / <code>--list-models</code></td><td>Print compute devices / model registry and exit (scripts love <code>--json</code>).</td></tr>
+  </table>
+  <p>Unix signals (<code>signal_handle.rs</code>): <code>SIGUSR2</code> → transcribe everywhere; <code>SIGUSR1</code> → post-process on macOS only (Linux reserves it for WebKitGTK).</p>
+</section>
+
+<section id="dev">
+  <h2><span class="n">10</span>Run it yourself + repo map</h2>
+  <pre><code>bun install
+mkdir -p src-tauri/resources/models
+curl -o src-tauri/resources/models/silero_vad_v4.onnx \
+  https://blob.handy.computer/silero_vad_v4.onnx
+bun run tauri dev        # desktop app
+bun run dev              # frontend only (Vite)
+bun run lint             # ESLint (i18n enforced)
+bun run format           # Prettier + cargo fmt
+bun run tauri build      # production bundle</code></pre>
+  <table>
+    <tr><th>Path</th><th>Lives here</th></tr>
+    <tr><td><code>src-tauri/src/managers/</code></td><td>audio, model, transcription, history</td></tr>
+    <tr><td><code>src-tauri/src/audio_toolkit/</code></td><td>recorder, devices, resampler, VAD, text cleanup</td></tr>
+    <tr><td><code>src-tauri/src/commands/</code></td><td>Tauri command handlers (frontend-callable)</td></tr>
+    <tr><td><code>src-tauri/src/{shortcut,overlay,tray,settings,cli,signal_handle}.rs</code></td><td>plumbing around the managers</td></tr>
+    <tr><td><code>src/{App,components,hooks,stores,bindings,i18n,overlay}/</code></td><td>React frontend</td></tr>
+  </table>
+  <p>Conventional commits (<code>feat: / fix: / docs: / refactor: / chore:</code>), <code>cargo clippy</code> before pushing, no <code>unwrap</code> in production Rust.</p>
+</section>
+
+<section id="quiz">
+  <h2><span class="n">11</span>Check yourself</h2>
+  <p>Click an answer — feedback is instant. Then ask me anything unclear; I'm your teacher.</p>
+  <div class="quiz" data-answer="1">
+    <p><b>Q1.</b> Where does the microphone audio become 16 kHz mono?</p>
+    <button data-i="0">In the React settings store</button>
+    <button data-i="1">In audio_toolkit via rubato</button>
+    <button data-i="2">Inside the Whisper model file</button>
+    <div class="fb"></div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <p><b>Q2.</b> Who decides which transcription engine is loaded?</p>
+    <button data-i="0">The TranscriptionManager backend</button>
+    <button data-i="1">The Tailwind CSS stylesheet</button>
+    <button data-i="2">The i18next locale JSON files</button>
+    <div class="fb"></div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p><b>Q3.</b> How does the frontend learn a model finished loading?</p>
+    <button data-i="0">By polling the SQLite database</button>
+    <button data-i="1">By reading the WAV file header</button>
+    <button data-i="2">Via the model-state-changed event</button>
+    <div class="fb"></div>
+  </div>
+  <p style="margin-top:1rem">Primary source to read next: <code>src-tauri/src/lib.rs</code> (<code>initialize_core_logic</code> + <code>run</code>) — it's the table of contents of the whole backend.</p>
+</section>
+
+<footer>
+  Lesson 001 &bull; Wisper-Low repo tour &bull; grounded in files actually read &bull;
+  generated 2026-09-22 &bull; ask your teacher follow-ups anytime
+</footer>
+
+<script>
+document.querySelectorAll('.quiz').forEach(function(q){
+  var ans = q.getAttribute('data-answer');
+  var fb = q.querySelector('.fb');
+  q.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      if(b.getAttribute('data-i') === ans){ fb.textContent = 'Correct — nice retrieval.'; }
+      else { fb.textContent = 'Not quite — re-read the section above and try again.'; }
+    });
+  });
+});
+</script>
+
+</body>
+</html>

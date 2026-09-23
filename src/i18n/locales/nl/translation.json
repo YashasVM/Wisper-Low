@@ -634,11 +634,13 @@
     "open": "Openen",
     "copy": "Kopiëren",
     "clear": "Wissen",
-    "noOptionsFound": "Geen opties gevonden"
+    "noOptionsFound": "Geen opties gevonden",
+    "notAvailable": "Not available"
   },
   "accessibility": {
     "permissionsDescription": "Wisperlow heeft toegankelijkheidsmachtigingen nodig om getranscribeerde tekst te kunnen typen.",
-    "openSettings": "Systeeminstellingen openen"
+    "openSettings": "Systeeminstellingen openen",
+    "moreInformation": "More information"
   },
   "errors": {
     "loadDirectory": "Fout bij laden van map: {{error}}",

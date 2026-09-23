@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Info } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 
@@ -23,6 +24,7 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
   disabled = false,
   tooltipPosition = "top",
 }) => {
+  const { t } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +74,7 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
               <Info
                 size={16}
                 className="text-mid-gray cursor-help hover:text-logo-primary transition-colors duration-200 select-none"
-                aria-label="More information"
+                aria-label={t("accessibility.moreInformation")}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -136,7 +138,7 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
               <Info
                 size={16}
                 className="text-mid-gray cursor-help hover:text-logo-primary transition-colors duration-200 select-none"
-                aria-label="More information"
+                aria-label={t("accessibility.moreInformation")}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
