@@ -78,7 +78,7 @@
       }
     },
     "windows": {
-        "nsis": {
+      "nsis": {
         "template": "nsis/installer.nsi"
       }
     }

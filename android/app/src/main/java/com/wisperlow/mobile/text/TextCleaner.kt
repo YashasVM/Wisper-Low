@@ -5,7 +5,11 @@ object TextCleaner {
     private val horizontalWhitespaceRun = Regex("[^\\S\n]+")
     private val spaceBeforePunct = Regex("\\s+([,.!?;:])")
 
-    private val wordToken = Regex("[\\p{L}\\p{M}\\p{N}']+")
+    // Recognizers commonly emit typographic apostrophes. U+02BC (ʼ) is itself
+    // classified as a Unicode letter, so explicitly exclude apostrophe forms
+    // from the base character class and only allow them between real token parts.
+    private const val wordPart = "[\\p{L}\\p{M}\\p{N}&&[^'’ʼ]]+"
+    private val wordToken = Regex("$wordPart(?:['’ʼ]$wordPart)*")
 
     /** Preserve the recognizer's words, case and punctuation; only normalize spacing. */
     fun clean(raw: String): String = normalizeSpaces(raw)
