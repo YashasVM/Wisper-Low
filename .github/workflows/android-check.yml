@@ -39,10 +39,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make Gradle wrapper executable
-        run: chmod +x android/gradlew android/scripts/verify-polish-runtime.sh
-
-      - name: Verify offline polish runtime
-        run: android/scripts/verify-polish-runtime.sh
+        run: chmod +x android/gradlew
 
       - name: Run Android tests, lint, and debug build
         working-directory: android
@@ -64,6 +61,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: ignore
           retention-days: 14

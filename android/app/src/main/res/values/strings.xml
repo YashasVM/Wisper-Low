@@ -2,87 +2,240 @@
 <resources>
     <string name="app_name">Wisperlow</string>
     <string name="accessibility_service_label">Wisperlow Dictation</string>
-    <string name="accessibility_service_description">Detects focused text fields so the Wisperlow bubble can appear and paste your dictated text.</string>
-    <string name="notif_channel_dictation">Dictation</string>
-    <string name="notif_listening_title">Wisperlow listening</string>
-    <string name="notif_listening_body">Tap the bubble to stop and insert text.</string>
-    <string name="clipboard_transcript_label">Wisperlow transcript</string>
-    <string name="bubble_tap_to_start">Start dictation</string>
-    <string name="bubble_listening">Dictation listening</string>
-    <string name="bubble_processing">Preparing dictation</string>
-    <string name="bubble_transcribing">Transcribing…</string>
-    <string name="bubble_polishing">Polishing…</string>
-    <string name="bubble_review_text">Dictation text. Edit before inserting.</string>
+    <string name="accessibility_service_description">Lets Wisperlow type your dictated words into the text field you are using, and show the bubble only while your keyboard is open. Wisperlow only looks at the focused text field and never sends anything off your phone.</string>
+    <string name="clipboard_transcript_label">Wisperlow dictation</string>
 
-    <string name="nav_home">Home</string>
-    <string name="nav_dictionary">Dictionary</string>
-    <string name="nav_settings">Settings</string>
-    <string name="local_dictation_label">LOCAL DICTATION</string>
-    <string name="home_title">Speak naturally.\nType anywhere.</string>
-    <string name="home_subtitle">Fast, polished dictation that stays on your phone.</string>
-    <string name="setup_title">Finish setup</string>
-    <string name="setup_progress">%1$d of %2$d ready</string>
-    <string name="setup_microphone">Microphone</string>
-    <string name="setup_microphone_detail">Hear your voice while dictating</string>
-    <string name="setup_overlay">Floating bubble</string>
-    <string name="setup_overlay_detail">Start dictation over any app</string>
-    <string name="setup_accessibility">Text insertion</string>
-    <string name="setup_accessibility_detail">Put words in the focused field (optional; clipboard fallback is available)</string>
-    <string name="setup_model">Offline speech model</string>
-    <string name="setup_model_detail">Download once, then work offline</string>
-    <string name="status_ready">Ready</string>
-    <string name="status_needs_setup">Needs setup</string>
-    <string name="action_allow">Allow</string>
-    <string name="action_open">Open</string>
-    <string name="action_download">Download</string>
-    <string name="action_select">Use model</string>
-    <string name="action_turn_on">Turn on dictation</string>
-    <string name="action_starting">Loading model…</string>
-    <string name="action_pause">Pause bubble</string>
-    <string name="dictation_error">Dictation unavailable: %1$s</string>
-    <string name="dictation_start_failed">Dictation could not start. Check microphone permission and try again.</string>
-    <string name="system_settings_unavailable">Android settings could not be opened on this device.</string>
-    <string name="bubble_ready_title">Your dictation bubble is ready</string>
-    <string name="bubble_ready_body">Focus a text field, then tap the bubble and speak.</string>
-    <string name="bubble_paused_title">Dictation is paused</string>
-    <string name="bubble_paused_body">Turn it on when you want the bubble available in other apps.</string>
-    <string name="bubble_cancel">Cancel dictation</string>
-    <string name="bubble_insert">Insert dictation</string>
-    <string name="bubble_use_original">Original</string>
-    <string name="bubble_retry_cleanup">Retry cleanup</string>
+    <!-- Notifications -->
+    <string name="notif_channel_dictation">Dictation bubble</string>
+    <string name="notif_channel_restart">Bubble restart</string>
+    <string name="notif_ready_title">Dictation bubble is on</string>
+    <string name="notif_ready_body">Tap a text field in any app, then tap the bubble to talk.</string>
+    <string name="notif_listening_title">Wisperlow is listening</string>
+    <string name="notif_listening_body">Pause when you are done, or tap the bubble to finish.</string>
+    <string name="notif_action_turn_off">Turn off</string>
+    <string name="notif_restart_title">Turn your dictation bubble back on</string>
+    <string name="notif_restart_body">Android paused it after a restart or update. Tap to bring it back.</string>
+
+    <!-- Bubble -->
+    <string name="bubble_tap_to_start">Start dictation</string>
+    <string name="bubble_listening">Listening…</string>
+    <string name="bubble_listening_description">Listening. Tap to finish, long-press to cancel.</string>
+    <string name="bubble_loading_keep_talking">Listening… (getting ready)</string>
+    <string name="bubble_tap_to_finish">Tap to finish · hold to cancel</string>
+    <string name="bubble_transcribing">Writing it down…</string>
+    <string name="bubble_review_title">Check before inserting</string>
+    <string name="bubble_review_text">Dictated text. Edit before inserting.</string>
+    <string name="bubble_cancel">Discard</string>
     <string name="bubble_copy">Copy</string>
-    <string name="on_device_badge">ON DEVICE</string>
-    <string name="privacy_card_title">Private by default</string>
-    <string name="privacy_card_body">Audio and transcripts are processed locally. Nothing is uploaded for recognition.</string>
-    <string name="recent_dictations">Recent dictations</string>
-    <string name="recent_empty_title">Your words will show up here</string>
-    <string name="recent_empty_body">Complete setup and dictate in any app. History will stay on this device.</string>
-    <string name="history_copy">Copy</string>
-    <string name="history_delete">Delete</string>
-    <string name="history_words">%1$d words</string>
-    <string name="dictionary_title">Dictionary</string>
-    <string name="dictionary_subtitle">Teach Wisperlow the names and terms you use.</string>
-    <string name="dictionary_card_title">Custom words</string>
-    <string name="dictionary_help">Add one replacement per line using spoken=written.</string>
-    <string name="dictionary_label">Words and replacements</string>
-    <string name="dictionary_example">wisper low=Wisperlow\nyashas vm=YashasVM\ngit hub API=GitHub API</string>
-    <string name="dictionary_count">%1$d custom terms</string>
-    <string name="dictionary_tip_title">A quick tip</string>
-    <string name="dictionary_tip_body">Add people, product names, acronyms, and anything speech models often miss.</string>
+    <string name="bubble_insert">Insert</string>
+    <string name="bubble_inserted">Typed it</string>
+    <string name="bubble_copied">Copied</string>
+    <string name="bubble_copied_no_field">No text field found. Copied, so you can paste it.</string>
+    <string name="bubble_copied_no_accessibility">Copied. Turn on Wisperlow in Accessibility to type automatically.</string>
+    <string name="bubble_cancelled">Cancelled</string>
+    <string name="bubble_drop_to_hide">Drop here to hide</string>
+    <string name="bubble_snoozed">Bubble hidden. It comes back the next time you open a keyboard.</string>
+    <string name="bubble_turned_off">Bubble turned off. Turn it back on from Wisperlow.</string>
+
+    <!-- Errors -->
+    <string name="error_no_model">Download a speech model in Wisperlow first</string>
+    <string name="error_model_load">Could not load the speech model</string>
+    <string name="error_mic_permission">Allow the microphone in Wisperlow</string>
+    <string name="error_mic_busy">Microphone is in use by another app</string>
+    <string name="error_nothing_heard">Didn’t catch that. Try again a little louder.</string>
+    <string name="error_busy">Already listening</string>
+    <string name="system_settings_unavailable">This screen could not be opened on your phone. Open Android Settings and search for it.</string>
+
+    <!-- Common -->
+    <string name="action_next">Next</string>
+    <string name="action_back">Back</string>
+    <string name="action_skip">Skip for now</string>
+    <string name="action_done">Done</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_open_settings">Open settings</string>
+    <string name="action_allow">Allow</string>
+    <string name="action_fix">Fix</string>
+    <string name="status_done">Done</string>
+    <string name="copied">Copied</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_history">History</string>
+    <string name="nav_words">Words</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_step">Step %1$d of %2$d</string>
+    <string name="welcome_title">Talk instead of type, in any app</string>
+    <string name="welcome_body">Wisperlow puts a small microphone bubble next to your keyboard. Tap it, speak, and your words are typed for you.</string>
+    <string name="welcome_point_private">Everything runs on your phone. Your voice never leaves it.</string>
+    <string name="welcome_point_keyboard">Keep your keyboard. Works alongside Gboard, Samsung Keyboard and others.</string>
+    <string name="welcome_point_offline">Works offline once the speech model is downloaded.</string>
+    <string name="welcome_setup_time">Setup takes about two minutes. We’ll walk you through each switch.</string>
+    <string name="welcome_start">Let’s set it up</string>
+
+    <string name="how_title">How it works</string>
+    <string name="how_body">Three steps, every time:</string>
+    <string name="how_step1_title">Tap any text field</string>
+    <string name="how_step1_body">When your keyboard opens, the Wisperlow bubble appears at the edge of the screen.</string>
+    <string name="how_step2_title">Tap the bubble and speak</string>
+    <string name="how_step2_body">It turns purple while it listens. Your words appear in it as you talk.</string>
+    <string name="how_step3_title">Pause, and it types for you</string>
+    <string name="how_step3_body">After a short pause, the text goes straight into the field. Tap the bubble to finish sooner.</string>
+
+    <string name="model_step_title">Download the speech model</string>
+    <string name="model_step_body">This is the brain that turns speech into text. It is downloaded once and then works offline.</string>
+    <string name="model_step_background">You can continue while it downloads.</string>
+    <string name="model_recommended">Recommended</string>
+    <string name="model_kind_multilingual">Most accurate. English and 24 European languages. Needs about 1 GB of free memory.</string>
+    <string name="model_kind_english">Very accurate, English only. Needs about 1 GB of free memory.</string>
+    <string name="model_kind_fast">Fast and light, English only. Best for older phones.</string>
+    <string name="model_size_mb">%1$d MB</string>
+    <string name="model_download">Download</string>
+    <string name="model_use">Use this</string>
+    <string name="model_in_use">In use</string>
+    <string name="model_installed">Downloaded</string>
+    <string name="model_delete">Delete</string>
+    <string name="model_delete_title">Delete %1$s?</string>
+    <string name="model_delete_body">This frees %1$d MB. You can download it again later.</string>
+    <string name="model_cancel_download">Stop download</string>
+    <string name="model_downloading">Downloading… %1$d%%</string>
+    <string name="model_downloading_indeterminate">Starting download…</string>
+    <string name="model_waiting_wifi">Waiting for Wi-Fi…</string>
+    <string name="model_use_mobile_data">Use mobile data instead</string>
+    <string name="model_extracting">Unpacking… almost ready</string>
+    <string name="model_failed">Download failed: %1$s</string>
+    <string name="model_retry">Try again</string>
+    <string name="metered_title">You’re on mobile data</string>
+    <string name="metered_body">The model is %1$d MB. Download it now over mobile data, or wait until you are on Wi-Fi?</string>
+    <string name="metered_wait">Wait for Wi-Fi</string>
+    <string name="metered_now">Download now</string>
+
+    <string name="mic_step_title">Allow the microphone</string>
+    <string name="mic_step_body">Wisperlow only listens while the bubble is purple, after you tap it. Audio is processed on your phone and thrown away.</string>
+    <string name="mic_step_notifications">We’ll also ask to show a quiet notification. Android requires it while the bubble is on, and it gives you a one-tap “Turn off”.</string>
+    <string name="mic_step_denied">Permission was denied. Open app settings, tap Permissions, then allow Microphone.</string>
+    <string name="mic_step_open_app_settings">Open app settings</string>
+
+    <string name="overlay_step_title">Let the bubble float over apps</string>
+    <string name="overlay_step_body">Android calls this “Display over other apps”. It lets the bubble sit next to your keyboard in any app.</string>
+    <string name="overlay_step_1">Tap <b>Open settings</b> below.</string>
+    <string name="overlay_step_2">Find <b>Wisperlow</b> in the list (if a list appears).</string>
+    <string name="overlay_step_3">Turn on <b>Allow display over other apps</b>.</string>
+    <string name="overlay_step_4">Press Back to return here.</string>
+
+    <string name="a11y_step_title">Let Wisperlow type for you</string>
+    <string name="a11y_step_body">Turning on the Wisperlow Accessibility service lets it put text straight into the field you’re typing in, and show the bubble only while your keyboard is open.</string>
+    <string name="a11y_step_privacy">Android will warn that the service can see your screen. Wisperlow only looks for the text field you’re in, has no internet access for your data, and never records anything unless you tap the bubble.</string>
+    <string name="a11y_step_1">Tap <b>Open settings</b> below.</string>
+    <string name="a11y_step_2">Tap <b>Installed apps</b> or <b>Downloaded apps</b> (the name varies by phone).</string>
+    <string name="a11y_step_3">Tap <b>Wisperlow Dictation</b>.</string>
+    <string name="a11y_step_4">Turn it <b>on</b>, then tap <b>Allow</b>.</string>
+    <string name="a11y_restricted_title">Switch greyed out, or “Restricted setting”?</string>
+    <string name="a11y_restricted_body">Android blocks this for apps installed outside the Play Store until you allow it:\n1. Tap <b>Open App info</b> below.\n2. Tap the <b>⋮</b> menu in the top corner.\n3. Tap <b>Allow restricted settings</b> and confirm.\n4. Come back and tap <b>Open settings</b> again.</string>
+    <string name="a11y_open_app_info">Open App info</string>
+    <string name="a11y_skip_note">Without it, Wisperlow copies your words so you can paste them yourself.</string>
+
+    <string name="try_step_title">Try it here</string>
+    <string name="try_step_body">Tap the microphone and say something like “Hey Sam, I’m running ten minutes late, see you soon.” Then pause.</string>
+    <string name="try_field_label">Your words appear here</string>
+    <string name="try_start">Tap to talk</string>
+    <string name="try_listening">Listening… pause when done</string>
+    <string name="try_loading">Listening… (getting ready)</string>
+    <string name="try_finishing">Writing it down…</string>
+    <string name="try_needs_model">The speech model is still downloading. Try again when it’s ready.</string>
+    <string name="try_clear">Clear</string>
+
+    <string name="done_title">You’re all set</string>
+    <string name="done_body">Open any app, tap a text field, then tap the bubble. A few handy moves:</string>
+    <string name="tip_tap">Tap the bubble to start. Tap again to finish early.</string>
+    <string name="tip_pause">Just pause when you’re done. It types automatically.</string>
+    <string name="tip_hold">Hold the bubble to cancel what you said.</string>
+    <string name="tip_drag">Drag the bubble to move it. Drop it on the ✕ to hide it.</string>
+    <string name="tip_words">Add names and jargon in <b>Words</b> so they’re always spelled right.</string>
+    <string name="tip_restart">After restarting your phone, tap the Wisperlow notification to bring the bubble back.</string>
+    <string name="done_start">Turn on the bubble</string>
+    <string name="done_missing">Some steps are unfinished. The bubble will work once they’re done.</string>
+
+    <!-- Home -->
+    <string name="home_on_title">Bubble is on</string>
+    <string name="home_on_body">Tap a text field in any app, then tap the bubble to talk.</string>
+    <string name="home_off_title">Bubble is off</string>
+    <string name="home_off_body">Turn it on to dictate in other apps.</string>
+    <string name="home_turn_on">Turn on</string>
+    <string name="home_turn_off">Turn off</string>
+    <string name="home_needs_setup">Finish setup to use the bubble</string>
+    <string name="home_fix_mic">Microphone not allowed</string>
+    <string name="home_fix_overlay">“Display over other apps” is off</string>
+    <string name="home_fix_accessibility">Accessibility is off, so text is copied instead of typed</string>
+    <string name="home_fix_model">No speech model downloaded</string>
+    <string name="home_fix_notifications">Notifications are off, so the “Turn off” shortcut is hidden</string>
+    <string name="home_guide">Setup guide</string>
+    <string name="home_tips_title">How to use</string>
+    <string name="home_recent">Recent</string>
+    <string name="home_see_all">See all</string>
+
+    <!-- History -->
+    <string name="history_title">History</string>
+    <string name="history_search">Search your dictations</string>
+    <string name="history_empty_title">Nothing here yet</string>
+    <string name="history_empty_body">Everything you dictate shows up here, saved only on this phone.</string>
+    <string name="history_off">History is off. New dictations are not saved.</string>
+    <string name="history_clear_all">Clear all</string>
+    <string name="history_clear_title">Clear all history?</string>
+    <string name="history_clear_body">This removes every saved dictation from this phone.</string>
+    <string name="history_deleted">Dictation deleted</string>
+    <string name="history_no_results">No dictations match “%1$s”</string>
+
+    <!-- Words -->
+    <string name="words_title">Words</string>
+    <string name="words_body">Teach Wisperlow names, brands and jargon. Whenever it hears the first form, it types the second.</string>
+    <string name="words_add">Add word</string>
+    <string name="words_edit">Edit word</string>
+    <string name="words_spoken">When I say</string>
+    <string name="words_spoken_hint">e.g. wisper low</string>
+    <string name="words_written">Type this</string>
+    <string name="words_written_hint">e.g. Wisperlow</string>
+    <string name="words_empty_title">No custom words yet</string>
+    <string name="words_empty_body">Add people’s names, product names and acronyms the model tends to get wrong.</string>
+
+    <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="settings_subtitle">Keep dictation fast, local, and ready when you need it.</string>
-    <string name="bubble_setting_title">Dictation bubble</string>
-    <string name="bubble_setting_body">Show the floating trigger over text fields.</string>
-    <string name="speech_model_title">Speech model</string>
-    <string name="model_size">About %1$d MB · English and European languages</string>
-    <string name="model_installed">Installed</string>
-    <string name="model_active">Active</string>
-    <string name="model_downloading">Downloading and preparing…</string>
-    <string name="model_downloading_short">Downloading…</string>
-    <string name="model_extracting">Preparing model for offline use…</string>
-    <string name="model_progress_percentage">%1$d%%</string>
-    <string name="model_download_failed">Download failed: %1$s</string>
-    <string name="action_redownload">Redownload</string>
-    <string name="local_storage_title">Local storage only</string>
-    <string name="local_storage_body">Models, dictionary entries, and dictations remain in this app’s private storage.</string>
+    <string name="settings_section_bubble">Bubble</string>
+    <string name="settings_bubble_on">Dictation bubble</string>
+    <string name="settings_bubble_on_body">Show the bubble in other apps.</string>
+    <string name="settings_only_typing">Only while typing</string>
+    <string name="settings_only_typing_body">Show the bubble only when a keyboard is open.</string>
+    <string name="settings_only_typing_needs_a11y">Needs the Accessibility service. Until then the bubble always shows.</string>
+    <string name="settings_reset_position">Reset bubble position</string>
+    <string name="settings_reset_position_done">Bubble moved back to the side</string>
+    <string name="settings_section_dictation">Dictation</string>
+    <string name="settings_auto_stop">Finish after a pause of</string>
+    <string name="auto_stop_short">1 second (quick notes)</string>
+    <string name="auto_stop_normal">1.5 seconds (recommended)</string>
+    <string name="auto_stop_relaxed">2.5 seconds (thinking time)</string>
+    <string name="auto_stop_long">4 seconds (long pauses)</string>
+    <string name="auto_stop_manual">Never, I’ll tap to finish</string>
+    <string name="settings_review">Review before inserting</string>
+    <string name="settings_review_body">Show an editable preview instead of typing right away.</string>
+    <string name="settings_keep_loaded">Keep model ready</string>
+    <string name="settings_keep_loaded_body">Instant start every time, but uses about 1 GB of memory in the background. Otherwise it’s freed after 5 idle minutes.</string>
+    <string name="settings_section_model">Speech model</string>
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_history">Save history</string>
+    <string name="settings_history_body">Keep your dictations on this phone so you can copy them later.</string>
+    <string name="settings_privacy_note">Speech recognition runs entirely on your phone. Wisperlow only goes online to download a speech model.</string>
+    <string name="settings_section_help">Help</string>
+    <string name="settings_guide">Setup guide</string>
+    <string name="settings_guide_body">Walk through permissions and how to use Wisperlow again.</string>
+    <string name="settings_permissions">Permissions and access</string>
+    <string name="settings_version">Version %1$s</string>
+    <plurals name="history_words">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
 </resources>

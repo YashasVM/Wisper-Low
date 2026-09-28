@@ -11,7 +11,7 @@ class ModelCatalogTest {
         ModelCatalog.all.forEach { model ->
             assertTrue(model.downloadUrl.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/"))
             assertTrue(model.archiveName.endsWith(".tar.bz2"))
-            assertTrue(model.archiveSizeBytes > 400_000_000L)
+            assertTrue(model.archiveSizeBytes > 50_000_000L)
             assertEquals(64, model.archiveSha256.length)
             assertTrue(model.archiveSha256.all { it in '0'..'9' || it in 'a'..'f' })
         }

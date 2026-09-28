@@ -7,11 +7,9 @@ import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 
-class SttEngine(private val modelDir: File) {
+class SttEngine(val modelDir: File) {
 
     // Loading and native inference both mutate sherpa's native state. Keep the
     // lifecycle and decode operations serialized so a reload cannot publish a
@@ -22,17 +20,18 @@ class SttEngine(private val modelDir: File) {
     val isLoaded: Boolean
         get() = synchronized(lifecycleLock) { recognizer != null }
 
-    suspend fun load(): Boolean = withContext(Dispatchers.Default) {
+    /** Allocates the native recognizer. Blocking; call from a worker thread. */
+    fun load(): Boolean {
         synchronized(lifecycleLock) {
-            if (recognizer != null) return@withContext true
+            if (recognizer != null) return true
             try {
                 val config = buildConfig()
                 recognizer = OfflineRecognizer(assetManager = null, config = config)
-                true
+                return true
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to load model from ${modelDir.absolutePath}", t)
                 recognizer = null
-                false
+                return false
             }
         }
     }

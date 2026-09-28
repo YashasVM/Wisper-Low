@@ -1,11 +1,13 @@
 package com.wisperlow.mobile
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Intent
-import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,188 +18,149 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
-import com.wisperlow.mobile.history.TranscriptEntry
-import com.wisperlow.mobile.service.DictationPhase
 import com.wisperlow.mobile.service.DictationService
-import com.wisperlow.mobile.settings.SettingsRepository
-import com.wisperlow.mobile.stt.DownloadState
-import com.wisperlow.mobile.stt.ModelDownloader
-import com.wisperlow.mobile.ui.SetupState
-import com.wisperlow.mobile.ui.WisperlowAppScreen
+import com.wisperlow.mobile.ui.AppActions
+import com.wisperlow.mobile.ui.WisperlowRoot
 import com.wisperlow.mobile.ui.WisperlowTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject lateinit var modelDownloader: ModelDownloader
-    @Inject lateinit var settingsRepository: SettingsRepository
-
     private val viewModel: MainViewModel by viewModels()
-
-    private val permissionRefresh = mutableIntStateOf(0)
-    private var startRequestInFlight = false
+    private val prefs by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { permissionRefresh.intValue++ }
+    ) { refreshAccess() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splash.setKeepOnScreenCondition { !viewModel.uiState.value.settingsLoaded }
         enableEdgeToEdge()
+        val actions = AppActions(
+            requestMicrophone = ::requestMicrophone,
+            openOverlaySettings = {
+                open(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            },
+            openAccessibilitySettings = ::openAccessibilitySettings,
+            openAppInfo = ::openAppInfo,
+            startBubble = ::startBubble,
+            stopBubble = ::stopBubble,
+            copyText = ::copyText,
+            isMetered = {
+                getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: false
+            },
+        )
         setContent {
             WisperlowTheme {
-                MainScreen()
+                val state by viewModel.uiState.collectAsStateWithLifecycle()
+                val level by viewModel.level.collectAsStateWithLifecycle()
+                WisperlowRoot(state = state, level = level, viewModel = viewModel, actions = actions)
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        permissionRefresh.intValue++
-    }
-
-    @Composable
-    private fun MainScreen() {
-        val uiState by viewModel.uiState.collectAsState()
-        val settings = uiState.settings
-        val downloadStates by modelDownloader.states.collectAsState()
-        val serviceRunning by DictationService.running.collectAsState()
-        val servicePhase by DictationService.phase.collectAsState()
-        val refresh = permissionRefresh.intValue
-
-        LaunchedEffect(serviceRunning, servicePhase) {
-            if (serviceRunning || servicePhase is DictationPhase.Error) {
-                startRequestInFlight = false
+        refreshAccess()
+        lifecycleScope.launch {
+            val state = viewModel.uiState.first { it.settingsLoaded }
+            // Bring the bubble back after a reboot or app update once the user opens the app.
+            if (state.settings.onboardingCompleted && state.settings.bubbleEnabled && !state.bubbleRunning) {
+                DictationService.start(this@MainActivity)
             }
         }
+    }
 
-        LaunchedEffect(Unit) { modelDownloader.refresh() }
-
-        val setup = remember(refresh, downloadStates, settings.selectedModelId) {
-            SetupState(
-                microphoneReady = checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
-                    PackageManager.PERMISSION_GRANTED,
-                overlayReady = Settings.canDrawOverlays(this),
-                accessibilityReady = WisperlowAccessibilityService.isReady,
-                modelReady = downloadStates[settings.selectedModelId] is DownloadState.Completed,
-            )
-        }
-
-        WisperlowAppScreen(
-            settings = settings,
-            setup = setup,
-            serviceRunning = serviceRunning,
-            servicePhase = servicePhase,
-            downloadStates = downloadStates,
-            dictionaryText = uiState.dictionaryText,
-            history = uiState.history,
-            onRequestMicrophone = ::requestCorePermissions,
-            onRequestOverlay = {
-                openSystemSettings(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName"),
-                    ),
-                )
-            },
-            onRequestAccessibility = {
-                openSystemSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            },
-            onDownloadModel = { model ->
-                lifecycleScope.launch {
-                    try {
-                        modelDownloader.download(model)
-                        settingsRepository.setSelectedModel(model.id)
-                        if (DictationService.running.value ||
-                            DictationService.phase.value is DictationPhase.Initializing
-                        ) {
-                            DictationService.reloadModel(this@MainActivity)
-                        }
-                    } catch (_: Throwable) {
-                        // ModelDownloader publishes the user-visible failure state.
-                    }
-                }
-            },
-            onSelectModel = { model ->
-                lifecycleScope.launch {
-                    settingsRepository.setSelectedModel(model.id)
-                    // A running service owns the recognizer, so reload it only
-                    // after the selection has been persisted.
-                    if (DictationService.running.value ||
-                        DictationService.phase.value is DictationPhase.Initializing
-                    ) {
-                        DictationService.reloadModel(this@MainActivity)
-                    }
-                }
-            },
-            onToggleService = {
-                if (serviceRunning) {
-                    DictationService.stop(this)
-                } else if (setup.isReady && !startRequestInFlight) {
-                    startRequestInFlight = true
-                    lifecycleScope.launch { settingsRepository.setBubbleEnabled(true) }
-                    try {
-                        DictationService.start(this)
-                    } catch (_: SecurityException) {
-                        startRequestInFlight = false
-                        showToast(R.string.dictation_start_failed)
-                    } catch (_: IllegalStateException) {
-                        startRequestInFlight = false
-                        showToast(R.string.dictation_start_failed)
-                    }
-                }
-            },
-            onBubbleEnabledChange = { enabled ->
-                lifecycleScope.launch { settingsRepository.setBubbleEnabled(enabled) }
-                if (!enabled && serviceRunning) DictationService.stop(this)
-            },
-            onDictionaryTextChange = { text ->
-                viewModel.setDictionaryText(text)
-            },
-            onCopyHistory = { entry -> copyTranscript(entry) },
-            onDeleteHistory = { entry -> viewModel.deleteHistory(entry.id) },
+    private fun refreshAccess() {
+        viewModel.updateAccess(
+            SystemAccess(
+                microphone = granted(Manifest.permission.RECORD_AUDIO),
+                notifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    granted(Manifest.permission.POST_NOTIFICATIONS),
+                overlay = Settings.canDrawOverlays(this),
+                accessibilityEnabled = WisperlowAccessibilityService.isEnabledInSettings(this),
+            ),
         )
     }
 
-    private fun requestCorePermissions() {
+    private fun granted(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestMicrophone() {
+        val askedBefore = prefs.getBoolean(KEY_MIC_ASKED, false)
+        if (!granted(Manifest.permission.RECORD_AUDIO) && askedBefore &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        ) {
+            // Android stops showing the prompt after repeated denials; only settings can fix it.
+            openAppInfo()
+            return
+        }
+        prefs.edit().putBoolean(KEY_MIC_ASKED, true).apply()
         permissionLauncher.launch(
             buildList {
                 add(Manifest.permission.RECORD_AUDIO)
-                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
             }.toTypedArray(),
         )
     }
 
-    private fun openSystemSettings(intent: Intent) {
-        try {
-            startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            showToast(R.string.system_settings_unavailable)
-        } catch (_: SecurityException) {
-            showToast(R.string.system_settings_unavailable)
+    private fun openAccessibilitySettings() {
+        val component = ComponentName(this, WisperlowAccessibilityService::class.java).flattenToString()
+        // These extras make Settings scroll to and highlight our entry on most phones.
+        val highlight = Bundle().apply { putString(EXTRA_FRAGMENT_ARG_KEY, component) }
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .putExtra(EXTRA_FRAGMENT_ARG_KEY, component)
+            .putExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS, highlight)
+        open(intent)
+    }
+
+    private fun openAppInfo() {
+        open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    private fun startBubble() {
+        viewModel.setBubbleEnabled(true)
+        if (!DictationService.start(this)) {
+            Toast.makeText(this, R.string.home_needs_setup, Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun showToast(messageRes: Int) {
-        Toast.makeText(this, messageRes, Toast.LENGTH_LONG).show()
+    private fun stopBubble() {
+        viewModel.setBubbleEnabled(false)
+        DictationService.stop(this)
     }
 
-    private fun copyTranscript(entry: TranscriptEntry) {
-        val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(
-            ClipData.newPlainText(getString(R.string.clipboard_transcript_label), entry.text),
-        )
+    private fun copyText(text: String) {
+        getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText(getString(R.string.clipboard_transcript_label), text))
+        // Android 13+ confirms copies itself.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun open(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.system_settings_unavailable, Toast.LENGTH_LONG).show()
+        } catch (_: SecurityException) {
+            Toast.makeText(this, R.string.system_settings_unavailable, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private companion object {
+        const val KEY_MIC_ASKED = "mic_asked"
+        const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+        const val EXTRA_SHOW_FRAGMENT_ARGUMENTS = ":settings:show_fragment_args"
     }
 }

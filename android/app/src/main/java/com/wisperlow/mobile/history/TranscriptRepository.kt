@@ -83,6 +83,29 @@ class TranscriptRepository @Inject constructor(
         }
     }
 
+    /** Puts back an entry removed by [delete], e.g. for undo. */
+    suspend fun restore(entry: TranscriptEntry) {
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                loadLocked()
+                if (_entries.value.any { it.id == entry.id }) return@synchronized
+                val updated = TranscriptHistory.bound(_entries.value + entry)
+                writeEntries(updated)
+                _entries.value = updated
+            }
+        }
+    }
+
+    suspend fun clear() {
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                writeEntries(emptyList())
+                _entries.value = emptyList()
+                loaded = true
+            }
+        }
+    }
+
     private fun loadLocked() {
         if (loaded) return
         _entries.value = TranscriptHistory.bound(readEntries())

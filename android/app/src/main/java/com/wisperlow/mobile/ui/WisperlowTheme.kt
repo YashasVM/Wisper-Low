@@ -22,13 +22,13 @@ object WisperlowColors {
     val Success = Color(0xFF287A57)
     val BubbleSurface = Color(0xFF211F29)
     val BubbleListening = Color(0xFF4936A0)
-    val BubbleProcessing = Color(0xFF353039)
-    val BubbleReview = Color(0xFF211F29)
-    val BubbleOutline = Color(0x66FFFFFF)
+    val BubbleSuccess = Color(0xFF1F6B4B)
+    val BubbleOutline = Color(0x40FFFFFF)
+    val Danger = Color(0xFFD14343)
 }
 
 private val LightColors = lightColorScheme(
-    primary = WisperlowColors.Ink,
+    primary = Color(0xFF5B3FD9),
     onPrimary = Color.White,
     secondary = WisperlowColors.Violet,
     onSecondary = Color.White,
@@ -40,11 +40,19 @@ private val LightColors = lightColorScheme(
     surfaceVariant = Color(0xFFF0EEF3),
     onSurfaceVariant = Color(0xFF5E5A66),
     outline = Color(0xFFD8D4DE),
+    primaryContainer = WisperlowColors.Lilac,
+    onPrimaryContainer = Color(0xFF2A1A73),
+    secondaryContainer = Color(0xFFE9E3FF),
+    onSecondaryContainer = Color(0xFF2A1A73),
+    tertiaryContainer = Color(0xFFD9F2E6),
+    onTertiaryContainer = Color(0xFF0E3B27),
+    errorContainer = Color(0xFFFCE4E4),
+    onErrorContainer = Color(0xFF6B1414),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFF4F1F8),
-    onPrimary = Color(0xFF1A171F),
+    primary = Color(0xFFC4B6FF),
+    onPrimary = Color(0xFF24145E),
     secondary = Color(0xFFB9A9FF),
     onSecondary = Color(0xFF24145E),
     tertiary = Color(0xFF83D7AE),
@@ -55,6 +63,14 @@ private val DarkColors = darkColorScheme(
     surfaceVariant = Color(0xFF2A262E),
     onSurfaceVariant = Color(0xFFC9C2CE),
     outline = Color(0xFF4B454F),
+    primaryContainer = Color(0xFF3A2C86),
+    onPrimaryContainer = Color(0xFFE9E3FF),
+    secondaryContainer = Color(0xFF32294F),
+    onSecondaryContainer = Color(0xFFE9E3FF),
+    tertiaryContainer = Color(0xFF173D2C),
+    onTertiaryContainer = Color(0xFFBDEFD6),
+    errorContainer = Color(0xFF4A1C1C),
+    onErrorContainer = Color(0xFFFFDAD6),
 )
 
 private val WisperlowTypography = androidx.compose.material3.Typography(
@@ -107,9 +123,12 @@ private val WisperlowShapes = Shapes(
 )
 
 @Composable
-fun WisperlowTheme(content: @Composable () -> Unit) {
+fun WisperlowTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = WisperlowTypography,
         shapes = WisperlowShapes,
         content = content,
