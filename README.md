@@ -2,6 +2,10 @@
 
 Wisperlow is a private, local speech-to-text application for desktop and Android. Record with a shortcut, transcribe on-device, and insert the result into the active application.
 
+**Key Features:**
+- 🎙️ **Speech-to-Text**: Transcribe audio locally without cloud services
+- 🔒 **Private**: All audio processing happens on your device
+
 ## Development
 
 Prerequisites:
