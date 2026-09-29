@@ -196,6 +196,7 @@ class ModelDownloader @Inject constructor(
             preserveDownload = true
             throw cancelled
         } catch (error: Throwable) {
+            Log.e(TAG, "Installing ${model.id} failed", error)
             setState(
                 model.id,
                 DownloadState.Failed(error.message ?: "Model download failed"),

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.RestartAlt
@@ -93,9 +94,9 @@ fun OnboardingScreen(
     }
 
     // Returning from a system settings screen with the switch on moves ahead by itself.
-    AutoAdvance(step == GuideStep.MICROPHONE && setup.microphone, next)
-    AutoAdvance(step == GuideStep.OVERLAY && setup.overlay, next)
-    AutoAdvance(step == GuideStep.ACCESSIBILITY && setup.accessibility, next)
+    AutoAdvance(step == GuideStep.MICROPHONE, setup.microphone, next)
+    AutoAdvance(step == GuideStep.OVERLAY, setup.overlay, next)
+    AutoAdvance(step == GuideStep.ACCESSIBILITY, setup.accessibility, next)
 
     val modelStarted = state.downloads.values.any {
         it is DownloadState.Completed || it is DownloadState.Downloading || it is DownloadState.Extracting
@@ -196,15 +197,17 @@ fun OnboardingScreen(
     }
 }
 
+/** Moves on only when [granted] flips to true while its step is showing, never on Back. */
 @Composable
-private fun AutoAdvance(condition: Boolean, advance: () -> Unit) {
-    var wasFalse by remember { mutableStateOf(!condition) }
-    LaunchedEffect(condition) {
-        if (condition && wasFalse) {
+private fun AutoAdvance(onStep: Boolean, granted: Boolean, advance: () -> Unit) {
+    var previous by remember { mutableStateOf(granted) }
+    LaunchedEffect(granted) {
+        val justGranted = granted && !previous
+        previous = granted
+        if (justGranted && onStep) {
             delay(700)
             advance()
         }
-        wasFalse = !condition
     }
 }
 
@@ -322,7 +325,7 @@ private fun ModelStep(state: MainUiState, actions: AppActions, callbacks: Onboar
 @Composable
 private fun MicrophoneStep(granted: Boolean, asked: Boolean, actions: AppActions) {
     StepTitle(R.string.mic_step_title, R.string.mic_step_body)
-    IconTextRow(Icons.Rounded.Mic, stringResource(R.string.mic_step_notifications))
+    IconTextRow(Icons.Rounded.Notifications, stringResource(R.string.mic_step_notifications))
     DoneBanner(granted)
     if (!granted && asked) {
         SectionCard(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
@@ -370,6 +373,7 @@ private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
 @Composable
 private fun TryStep(state: MainUiState, level: Float, callbacks: OnboardingCallbacks) {
     StepTitle(R.string.try_step_title, R.string.try_step_body)
+    if (!state.setup.model) ModelProgressLine(state.downloads)
     PracticeArea(
         practice = state.practice,
         dictation = state.dictation,
@@ -410,5 +414,32 @@ fun UsageTips() {
         IconTextRow(Icons.Rounded.DragIndicator, stringResource(R.string.tip_drag))
         IconTextRow(Icons.Rounded.Spellcheck, styledStringResource(R.string.tip_words))
         IconTextRow(Icons.Rounded.RestartAlt, stringResource(R.string.tip_restart))
+    }
+}
+
+/** Compact status of whichever model is on its way, for screens past the model step. */
+@Composable
+private fun ModelProgressLine(downloads: Map<String, DownloadState>) {
+    val active = downloads.values.firstOrNull { it is DownloadState.Downloading || it is DownloadState.Extracting }
+        ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        when (active) {
+            is DownloadState.Downloading -> {
+                if (active.totalBytes > 0 && !active.waitingForNetwork) {
+                    LinearProgressIndicator(progress = { active.progressPct / 100f }, modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                Text(
+                    if (active.waitingForNetwork) stringResource(R.string.model_waiting_wifi)
+                    else stringResource(R.string.model_downloading, active.progressPct),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            else -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.model_extracting), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }

@@ -86,7 +86,7 @@ class DictationEngine @Inject constructor(
     private var stt: SttEngine? = null
 
     @Volatile private var vad: VadEngine? = null
-    private var session: Session? = null
+    @Volatile private var session: Session? = null
     private var idleReleaseJob: Job? = null
     @Volatile private var lastLevelNanos = 0L
 
