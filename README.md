@@ -8,12 +8,15 @@ Wisperlow is a private, local speech-to-text application for desktop and Android
 - ⚡ **Fast**: Optimized for desktop and mobile
 - 🔌 **Integrations**: Seamlessly insert transcriptions into any active application
 
-## Development
+## Getting Started
 
-Prerequisites:
+### Prerequisites
 
 - Rust (stable)
-- Bun
+- Bun (JavaScript runtime)
+- 4GB RAM minimum
+
+### Development
 
 Install dependencies and start the desktop app:
 
