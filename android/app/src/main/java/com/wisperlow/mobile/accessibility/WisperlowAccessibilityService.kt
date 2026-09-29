@@ -24,7 +24,7 @@ enum class InsertResult {
     /** Text went straight into the field. */
     INSERTED,
 
-    /** Text was pasted via the clipboard, so it is also on the clipboard. */
+    /** Text was pasted via the clipboard, which is restored when Android allows reading it. */
     PASTED,
 
     /** No usable text field; nothing was inserted. */
@@ -202,6 +202,9 @@ class WisperlowAccessibilityService : AccessibilityService() {
     /** Fallback for fields (often web views) that ignore direct text replacement. */
     private fun paste(target: AccessibilityNodeInfo, insertion: String): Boolean {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        // Android only lets focused apps read the clipboard, so this is often
+        // null; when it is readable, put the user's own clip back afterwards.
+        val previous = runCatching { clipboard.primaryClip }.getOrNull()
         val clip = ClipData.newPlainText("Wisperlow", insertion)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Keeps the system clipboard preview from flashing dictated text.
@@ -210,10 +213,19 @@ class WisperlowAccessibilityService : AccessibilityService() {
             }
         }
         clipboard.setPrimaryClip(clip)
-        return target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        val pasted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        if (previous != null) {
+            // The target app reads the clip asynchronously; restore only after it has.
+            handler.postDelayed(
+                { runCatching { clipboard.setPrimaryClip(previous) } },
+                Timing.CLIPBOARD_RESTORE_MS,
+            )
+        }
+        return pasted
     }
 
     private object Timing {
         const val KEYBOARD_DEBOUNCE_MS = 120L
+        const val CLIPBOARD_RESTORE_MS = 600L
     }
 }
