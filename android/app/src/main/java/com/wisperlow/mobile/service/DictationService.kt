@@ -116,15 +116,13 @@ class DictationService : Service(), BubbleActions {
 
     private suspend fun observe() {
         scope.launch { engine.level.collect { overlay.setLevel(it) } }
+        scope.launch { WisperlowAccessibilityService.keyboardTop.collect { overlay.setKeyboardTop(it) } }
         scope.launch {
             settingsRepository.bubblePosition.collect { position ->
                 if (position == bubblePosition) return@collect
                 bubblePosition = position
                 // "Reset position" in settings: move a resting bubble right away.
-                if (position == null && overlay.isShowing && engine.state.value == DictationState.Idle) {
-                    overlay.hide()
-                    overlay.show(null)
-                }
+                if (position == null) overlay.resetPlacement()
             }
         }
         scope.launch {
@@ -195,9 +193,9 @@ class DictationService : Service(), BubbleActions {
         }
     }
 
-    override fun onMoved(x: Int, y: Int) {
-        bubblePosition = x to y
-        scope.launch { settingsRepository.setBubblePosition(x, y) }
+    override fun onMoved(side: Int, y: Int) {
+        bubblePosition = side to y
+        scope.launch { settingsRepository.setBubblePosition(side, y) }
     }
 
     override fun onReviewInsert(text: String) {

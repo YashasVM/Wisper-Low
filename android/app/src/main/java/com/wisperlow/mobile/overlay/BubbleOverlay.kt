@@ -105,7 +105,8 @@ interface BubbleActions {
     fun onTap()
     fun onLongPress()
     fun onDismissDrop()
-    fun onMoved(x: Int, y: Int)
+    /** [side] is 0 for the left edge, 1 for the right; [y] is in screen pixels. */
+    fun onMoved(side: Int, y: Int)
     fun onReviewInsert(text: String)
     fun onReviewCopy(text: String)
     fun onReviewCancel()
@@ -133,6 +134,13 @@ class BubbleOverlay(
     private val owner = OverlayLifecycleOwner()
     private var params: WindowManager.LayoutParams? = null
 
+    // Placement: the bubble docks to a side edge (so wider states grow inward)
+    // at a height the user chose, or just above the keyboard by default.
+    private var rightSide = true
+    private var userY: Int? = null
+    private var keyboardTop: Int? = null
+    private var dragging = false
+
     val isShowing: Boolean get() = bubbleView != null
 
     fun render(state: BubbleUi) {
@@ -141,12 +149,11 @@ class BubbleOverlay(
         if (state is BubbleUi.Review && !wasReview) reviewText = state.text
         val view = bubbleView ?: return
         val lp = params ?: return
-        val focusable = state is BubbleUi.Review
-        val flags = windowFlags(focusable)
-        if (lp.flags != flags) {
+        val flags = windowFlags(focusable = state is BubbleUi.Review)
+        if (lp.flags != flags || wasReview != (state is BubbleUi.Review)) {
             lp.flags = flags
-            if (focusable) keepOnScreen(lp, REVIEW_WIDTH_DP, REVIEW_HEIGHT_DP)
             runCatching { windowManager.updateViewLayout(view, lp) }
+            applyPlacement()
         }
     }
 
@@ -154,22 +161,26 @@ class BubbleOverlay(
         micLevel = value.coerceIn(0f, 1f)
     }
 
-    /** Shows the bubble at [position] (pixels) or a default spot on the right edge. */
-    fun show(position: Pair<Int, Int>?) {
+    /** Top edge of the open keyboard in screen pixels, or null when it is closed. */
+    fun setKeyboardTop(top: Int?) {
+        if (keyboardTop == top) return
+        keyboardTop = top
+        applyPlacement()
+    }
+
+    /** [saved] is (side, y): side 0 = left, 1 = right. Null uses the default spot. */
+    fun show(saved: Pair<Int, Int>?) {
         if (bubbleView != null || !Settings.canDrawOverlays(context)) return
+        rightSide = saved?.first != SIDE_LEFT
+        userY = saved?.second
         owner.start()
         val view = ComposeView(context).apply {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
             setContent { WisperlowTheme(darkTheme = true) { Bubble() } }
         }
-        val screen = screenSize()
-        val lp = baseParams(windowFlags(focusable = ui is BubbleUi.Review)).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = position?.first ?: (screen.first - dp(DOT_DP + EDGE_MARGIN_DP))
-            y = position?.second ?: (screen.second * 0.55f).roundToInt()
-        }
-        keepOnScreen(lp, DOT_DP, DOT_DP)
+        val lp = baseParams(windowFlags(focusable = ui is BubbleUi.Review))
+        placeInto(lp)
         try {
             windowManager.addView(view, lp)
             bubbleView = view
@@ -180,8 +191,15 @@ class BubbleOverlay(
         }
     }
 
+    fun resetPlacement() {
+        rightSide = true
+        userY = null
+        applyPlacement()
+    }
+
     fun hide() {
         hideDismissTarget()
+        dragging = false
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         params = null
@@ -195,8 +213,10 @@ class BubbleOverlay(
     // ---- window plumbing ----
 
     private fun windowFlags(focusable: Boolean): Int {
+        // LAYOUT_IN_SCREEN makes y match the screen coordinates reported for the keyboard.
         var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         if (!focusable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         return flags
     }
@@ -220,31 +240,58 @@ class BubbleOverlay(
 
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
-    private fun keepOnScreen(lp: WindowManager.LayoutParams, widthDp: Int, heightDp: Int) {
-        val (w, h) = screenSize()
-        lp.x = lp.x.coerceIn(0, (w - dp(widthDp)).coerceAtLeast(0))
-        lp.y = lp.y.coerceIn(dp(TOP_MARGIN_DP), (h - dp(heightDp) - dp(BOTTOM_MARGIN_DP)).coerceAtLeast(0))
+    private fun placeInto(lp: WindowManager.LayoutParams) {
+        val (_, h) = screenSize()
+        val dot = dp(DOT_DP)
+        val keyboard = keyboardTop
+        var y = userY ?: keyboard?.let { it - dot - dp(KEYBOARD_GAP_DP) } ?: (h * DEFAULT_HEIGHT_FRACTION).roundToInt()
+        // Never sit on top of the keys, even at a user-chosen height.
+        if (keyboard != null && y + dot > keyboard) y = keyboard - dot - dp(KEYBOARD_GAP_DP)
+        if (ui is BubbleUi.Review) y = minOf(y, h - dp(REVIEW_HEIGHT_DP) - dp(BOTTOM_MARGIN_DP))
+        lp.gravity = Gravity.TOP or if (rightSide) Gravity.END else Gravity.START
+        lp.x = dp(EDGE_MARGIN_DP)
+        lp.y = y.coerceIn(dp(TOP_MARGIN_DP), (h - dot - dp(BOTTOM_MARGIN_DP)).coerceAtLeast(dp(TOP_MARGIN_DP)))
+    }
+
+    private fun applyPlacement() {
+        if (dragging) return
+        val view = bubbleView ?: return
+        val lp = params ?: return
+        placeInto(lp)
+        runCatching { windowManager.updateViewLayout(view, lp) }
     }
 
     private fun moveBy(dx: Float, dy: Float) {
         val view = bubbleView ?: return
         val lp = params ?: return
-        lp.x += dx.roundToInt()
-        lp.y += dy.roundToInt()
-        keepOnScreen(lp, DOT_DP, DOT_DP)
+        val (w, h) = screenSize()
+        // With END gravity, x grows toward the left.
+        lp.x = (lp.x + if (rightSide) -dx.roundToInt() else dx.roundToInt()).coerceIn(0, w - dp(DOT_DP))
+        lp.y = (lp.y + dy.roundToInt()).coerceIn(0, h - dp(DOT_DP))
         runCatching { windowManager.updateViewLayout(view, lp) }
         overDismiss = isOverDismiss(lp)
     }
 
+    private fun absoluteLeft(lp: WindowManager.LayoutParams): Int {
+        val (w, _) = screenSize()
+        return if (rightSide) w - lp.x - dp(DOT_DP) else lp.x
+    }
+
     private fun isOverDismiss(lp: WindowManager.LayoutParams): Boolean {
         val (w, h) = screenSize()
-        val centerX = lp.x + dp(DOT_DP) / 2
+        val centerX = absoluteLeft(lp) + dp(DOT_DP) / 2
         val centerY = lp.y + dp(DOT_DP) / 2
         return kotlin.math.abs(centerX - w / 2) < dp(DISMISS_RADIUS_DP) &&
             centerY > h - dp(DISMISS_ZONE_DP)
     }
 
+    private fun startDrag() {
+        dragging = true
+        showDismissTarget()
+    }
+
     private fun endDrag() {
+        dragging = false
         val view = bubbleView ?: return
         val lp = params ?: return
         hideDismissTarget()
@@ -253,14 +300,16 @@ class BubbleOverlay(
             view.performHapticFeedback(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS,
             )
+            applyPlacement()
             actions.onDismissDrop()
             return
         }
         // Snap to the nearest side so the bubble never covers the middle of a field.
         val (w, _) = screenSize()
-        lp.x = if (lp.x + dp(DOT_DP) / 2 < w / 2) dp(EDGE_MARGIN_DP) else w - dp(DOT_DP + EDGE_MARGIN_DP)
-        runCatching { windowManager.updateViewLayout(view, lp) }
-        actions.onMoved(lp.x, lp.y)
+        rightSide = absoluteLeft(lp) + dp(DOT_DP) / 2 >= w / 2
+        userY = lp.y
+        applyPlacement()
+        actions.onMoved(if (rightSide) SIDE_RIGHT else SIDE_LEFT, lp.y)
     }
 
     private fun showDismissTarget() {
@@ -582,7 +631,7 @@ class BubbleOverlay(
                 total += delta
                 if (!dragged && !longPressed && total.getDistance() > slop && ui is BubbleUi.Idle) {
                     dragged = true
-                    showDismissTarget()
+                    startDrag()
                 }
                 if (dragged) {
                     moveBy(delta.x, delta.y)
@@ -625,6 +674,10 @@ class BubbleOverlay(
     }
 
     private companion object {
+        const val SIDE_LEFT = 0
+        const val SIDE_RIGHT = 1
+        const val KEYBOARD_GAP_DP = 12
+        const val DEFAULT_HEIGHT_FRACTION = 0.4f
         const val DOT_DP = 56
         const val EDGE_MARGIN_DP = 6
         const val TOP_MARGIN_DP = 48

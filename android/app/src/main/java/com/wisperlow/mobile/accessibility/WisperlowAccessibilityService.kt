@@ -6,6 +6,7 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -48,6 +49,10 @@ class WisperlowAccessibilityService : AccessibilityService() {
         /** True while a keyboard is open for a text field in another app. */
         val keyboardVisible: StateFlow<Boolean> = _keyboardVisible.asStateFlow()
 
+        private val _keyboardTop = MutableStateFlow<Int?>(null)
+        /** Screen y of the open keyboard's top edge, so the bubble can dock just above it. */
+        val keyboardTop: StateFlow<Int?> = _keyboardTop.asStateFlow()
+
         /** Whether the user switched the service on in system settings, even if not yet bound. */
         fun isEnabledInSettings(context: Context): Boolean {
             val enabled = Settings.Secure.getString(
@@ -82,6 +87,7 @@ class WisperlowAccessibilityService : AccessibilityService() {
             instance = null
             _connected.value = false
             _keyboardVisible.value = false
+            _keyboardTop.value = null
         }
         handler.removeCallbacks(recomputeKeyboard)
         capturedTarget = null
@@ -102,11 +108,13 @@ class WisperlowAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
             emptyList()
         }
-        val imeVisible = current.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        val ime = current.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
         val focusedPackage = current
             .firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isFocused }
             ?.let { window -> runCatching { window.root?.packageName?.toString() }.getOrNull() }
-        _keyboardVisible.value = imeVisible && focusedPackage != packageName
+        val visible = ime != null && focusedPackage != packageName
+        _keyboardTop.value = if (visible) Rect().also { ime!!.getBoundsInScreen(it) }.top.takeIf { it > 0 } else null
+        _keyboardVisible.value = visible
     }
 
     private fun captureTargetImpl(): Boolean {

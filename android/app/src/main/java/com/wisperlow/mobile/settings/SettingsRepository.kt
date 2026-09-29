@@ -63,7 +63,8 @@ class SettingsRepository @Inject constructor(
         val historyEnabled = booleanPreferencesKey("history_enabled")
         val dictionary = stringPreferencesKey("personal_dictionary")
         val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
-        val bubbleX = intPreferencesKey("bubble_x")
+        // Older builds stored a pixel x under "bubble_x"; a new key keeps it from being read as a side.
+        val bubbleSide = intPreferencesKey("bubble_side")
         val bubbleY = intPreferencesKey("bubble_y")
     }
 
@@ -90,10 +91,11 @@ class SettingsRepository @Inject constructor(
     val current: StateFlow<WisperlowSettings> =
         settings.stateIn(scope, SharingStarted.Eagerly, WisperlowSettings())
 
+    /** Saved bubble placement as (side, y): side 0 = left edge, 1 = right edge; y in screen pixels. */
     val bubblePosition: Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->
-        val x = prefs[Keys.bubbleX] ?: return@map null
+        val side = prefs[Keys.bubbleSide] ?: return@map null
         val y = prefs[Keys.bubbleY] ?: return@map null
-        x to y
+        side to y
     }
 
     suspend fun setSelectedModel(id: String) = edit { it[Keys.selectedModelId] = id }
@@ -109,13 +111,13 @@ class SettingsRepository @Inject constructor(
         it[Keys.dictionary] = serializeDictionary(dict)
     }
 
-    suspend fun setBubblePosition(x: Int, y: Int) = edit {
-        it[Keys.bubbleX] = x
+    suspend fun setBubblePosition(side: Int, y: Int) = edit {
+        it[Keys.bubbleSide] = side
         it[Keys.bubbleY] = y
     }
 
     suspend fun clearBubblePosition() = edit {
-        it.remove(Keys.bubbleX)
+        it.remove(Keys.bubbleSide)
         it.remove(Keys.bubbleY)
     }
 
