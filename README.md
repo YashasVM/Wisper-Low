@@ -43,4 +43,12 @@ curl -o src-tauri/resources/models/silero_vad_v4.onnx \
   https://blob.handy.computer/silero_vad_v4.onnx
 ```
 
+## Architecture
+
+Wisperlow uses:
+- **Tauri** for desktop application framework
+- **React** for frontend UI
+- **Rust** for backend speech processing
+- **Silero VAD** for voice activity detection
+
 Wisperlow keeps speech processing local. Model downloads are initiated by the application and audio is not sent to a cloud transcription service.
