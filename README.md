@@ -51,4 +51,10 @@ Wisperlow uses:
 - **Rust** for backend speech processing
 - **Silero VAD** for voice activity detection
 
-Wisperlow keeps speech processing local. Model downloads are initiated by the application and audio is not sent to a cloud transcription service.
+## Privacy & Security
+
+Wisperlow keeps all speech processing local. Model downloads are initiated by the application and audio is **never** sent to cloud transcription services. Your voice data stays on your device.
+
+- No telemetry tracking
+- No external API calls for transcription
+- Open source for transparency
