@@ -58,3 +58,11 @@ Wisperlow keeps all speech processing local. Model downloads are initiated by th
 - No telemetry tracking
 - No external API calls for transcription
 - Open source for transparency
+
+## Contributing
+
+Contributions are welcome! Please submit pull requests or open issues for bug reports and feature requests.
+
+## License
+
+MIT License - See LICENSE file for details
