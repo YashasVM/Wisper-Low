@@ -51,7 +51,7 @@ fun ModelList(
     var deletePrompt by remember { mutableStateOf<SttModel?>(null) }
     val anyInstalled = downloads.values.any { it is DownloadState.Completed }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.Sm)) {
         models.forEach { model ->
             ModelCard(
                 model = model,
@@ -134,8 +134,8 @@ private fun ModelCard(
             if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
         ),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(Space.M), verticalArrangement = Arrangement.spacedBy(Space.S)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
                 Text(model.displayName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
                 Chip(stringResource(R.string.model_size_mb, model.sizeHintMb))
                 if (recommended) Chip(stringResource(R.string.model_recommended), highlighted = true)
@@ -220,6 +220,6 @@ private fun Chip(text: String, highlighted: Boolean = false) {
         color = if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         contentColor = if (highlighted) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = Space.S, vertical = 3.dp))
     }
 }

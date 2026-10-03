@@ -110,7 +110,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
             .border(6.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), RoundedCornerShape(30.dp))
             .padding(14.dp),
     ) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Space.S)) {
             // A fake chat app.
             Box(Modifier.width(90.dp).height(10.dp).background(lineColor, CircleShape))
             Spacer(Modifier.height(6.dp))
@@ -125,7 +125,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                         if (phase >= 1) MaterialTheme.colorScheme.primary else lineColor,
                         RoundedCornerShape(14.dp),
                     )
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(horizontal = 10.dp, vertical = Space.S)
                     .animateContentSize(),
             ) {
                 Text(
@@ -156,7 +156,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
             Row(
                 modifier = Modifier
                     .background(bubbleColor, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(horizontal = 10.dp, vertical = Space.S)
                     .animateContentSize(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -210,7 +210,7 @@ private fun Keyboard(color: Color) {
             .fillMaxWidth()
             .background(color, RoundedCornerShape(10.dp))
             .padding(6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.Xs),
     ) {
         repeat(3) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(horizontal = (row * 6).dp)) {

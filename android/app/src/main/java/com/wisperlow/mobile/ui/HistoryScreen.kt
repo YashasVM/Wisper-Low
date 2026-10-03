@@ -54,7 +54,7 @@ fun HistoryScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = screenPadding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.Sm),
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,7 +93,7 @@ fun HistoryScreen(
                     stringResource(R.string.history_no_results, query.trim()),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(8.dp),
+                    modifier = Modifier.padding(Space.S),
                 )
             }
             else -> items(filtered, key = { it.id }) { entry ->
@@ -125,8 +125,8 @@ fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(start = 16.dp, top = 14.dp, end = 4.dp, bottom = 4.dp)) {
-            Text(entry.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(end = 12.dp))
+        Column(Modifier.padding(start = Space.M, top = 14.dp, end = Space.Xs, bottom = Space.Xs)) {
+            Text(entry.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(end = Space.Sm))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     DateUtils.getRelativeTimeSpanString(entry.timestampMillis).toString() + " · " +
@@ -153,9 +153,9 @@ fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 40.dp, horizontal = 16.dp),
+            .padding(vertical = 40.dp, horizontal = Space.M),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.S),
     ) {
         IconBadge(icon)
         Text(stringResource(title), style = MaterialTheme.typography.titleMedium)

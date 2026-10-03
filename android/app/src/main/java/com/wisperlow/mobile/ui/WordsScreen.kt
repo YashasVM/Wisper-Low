@@ -54,8 +54,8 @@ fun WordsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = screenPadding(contentPadding).let {
                 PaddingValues(
-                    start = 20.dp,
-                    end = 20.dp,
+                    start = Space.Ml,
+                    end = Space.Ml,
                     top = it.calculateTopPadding(),
                     bottom = it.calculateBottomPadding() + 72.dp,
                 )
@@ -82,7 +82,7 @@ fun WordsScreen(
                     tonalElevation = 1.dp,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(Modifier.padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = Space.M, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(spoken, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(written, style = MaterialTheme.typography.titleMedium)
@@ -100,7 +100,7 @@ fun WordsScreen(
             text = { Text(stringResource(R.string.words_add)) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp),
+                .padding(end = Space.Ml, bottom = contentPadding.calculateBottomPadding() + 16.dp),
         )
     }
 
@@ -111,7 +111,7 @@ fun WordsScreen(
             onDismissRequest = { editing = null },
             title = { Text(stringResource(if (edit.spoken == null) R.string.words_add else R.string.words_edit)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.Sm)) {
                     OutlinedTextField(
                         value = spoken,
                         onValueChange = { spoken = it.replace("\n", " ") },

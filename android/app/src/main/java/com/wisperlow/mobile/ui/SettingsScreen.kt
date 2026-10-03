@@ -48,7 +48,7 @@ fun SettingsScreen(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = screenPadding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.Sm),
     ) {
         item { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium) }
 

@@ -108,7 +108,7 @@ fun OnboardingScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(horizontal = Space.L, vertical = Space.Sm), verticalArrangement = Arrangement.spacedBy(Space.S)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.onboarding_step, index + 1, steps.size),
@@ -152,7 +152,7 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                    .padding(horizontal = Space.L, vertical = Space.Sm),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 when (current) {
@@ -172,9 +172,9 @@ fun OnboardingScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = Space.L, vertical = Space.M),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.Sm),
         ) {
             if (index > 0) {
                 TextButton(onClick = { index-- }) { Text(stringResource(R.string.action_back)) }
@@ -255,9 +255,9 @@ private fun DoneBanner(done: Boolean) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.M),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.Sm),
         ) {
             androidx.compose.material3.Icon(Icons.Rounded.CheckCircle, contentDescription = null)
             Text(stringResource(R.string.status_done), style = MaterialTheme.typography.titleMedium)
@@ -317,7 +317,7 @@ private fun ColumnScope.HowStep() {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(Space.M),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 IconBadge(icon)

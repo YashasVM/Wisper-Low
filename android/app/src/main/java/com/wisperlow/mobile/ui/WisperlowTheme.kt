@@ -20,17 +20,24 @@ object Motion {
     const val Medium = 280
     const val Long = 420
     val Easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
-    fun <T> tween() = androidx.compose.animation.core.tween<T>(Medium, easing = Easing)
-    fun <T> fade() = androidx.compose.animation.core.tween<T>(Short, easing = Easing)
-    fun <T> slow() = androidx.compose.animation.core.tween<T>(Long, easing = Easing)
+
+    /** False when the system animator scale is 0 (reduced motion); durations collapse to zero. */
+    val enabled: Boolean get() = android.animation.ValueAnimator.areAnimatorsEnabled()
+    private fun ms(d: Int) = if (enabled) d else 0
+    fun <T> tween() = androidx.compose.animation.core.tween<T>(ms(Medium), easing = Easing)
+    fun <T> fade() = androidx.compose.animation.core.tween<T>(ms(Short), easing = Easing)
+    fun <T> slow() = androidx.compose.animation.core.tween<T>(ms(Long), easing = Easing)
 }
 
 /** Shared spacing scale. */
 object Space {
     val Xs = 4.dp
     val S = 8.dp
+    val Sm = 12.dp
     val M = 16.dp
+    val Ml = 20.dp
     val L = 24.dp
+    val Xl = 32.dp
 }
 
 object WisperlowColors {

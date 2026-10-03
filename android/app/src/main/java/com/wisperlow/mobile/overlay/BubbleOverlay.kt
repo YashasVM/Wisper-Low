@@ -186,8 +186,8 @@ class BubbleOverlay(
 
     private fun windowWidthFor(state: BubbleUi): Int = when (state) {
         is BubbleUi.Idle -> WindowManager.LayoutParams.WRAP_CONTENT
-        is BubbleUi.Review -> dp(REVIEW_WIDTH_DP + 16)
-        else -> dp(PILL_DP + 16)
+        is BubbleUi.Review -> dp(REVIEW_WIDTH_DP + 8)
+        else -> dp(PILL_DP + 8)
     }
 
     private fun windowHeightFor(state: BubbleUi): Int = when (state) {
@@ -755,7 +755,7 @@ class BubbleOverlay(
         const val DISMISS_BOTTOM_DP = 56
         const val MAX_PILL_CHARS = 70
         const val PILL_DP = 240
-        const val SHRINK_DELAY_MS = 450L
+        const val SHRINK_DELAY_MS = 320L
         const val TAP_DEBOUNCE_MS = 400L
     }
 }

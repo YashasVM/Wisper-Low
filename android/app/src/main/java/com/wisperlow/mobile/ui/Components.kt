@@ -66,8 +66,8 @@ fun SectionCard(
         tonalElevation = if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp,
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(Space.Ml),
+            verticalArrangement = Arrangement.spacedBy(Space.Sm),
             content = content,
         )
     }
@@ -79,7 +79,7 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(start = 4.dp, top = 8.dp),
+        modifier = modifier.padding(start = Space.Xs, top = Space.S),
     )
 }
 
@@ -115,7 +115,7 @@ fun IconTextRow(icon: ImageVector, text: String, modifier: Modifier = Modifier) 
 /** Numbered instruction, e.g. "1  Tap Open settings". */
 @Composable
 fun NumberedStep(number: Int, text: AnnotatedString) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.Sm), verticalAlignment = Alignment.Top) {
         Box(
             modifier = Modifier
                 .size(26.dp)
@@ -145,7 +145,7 @@ fun SwitchRow(
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(Space.M),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

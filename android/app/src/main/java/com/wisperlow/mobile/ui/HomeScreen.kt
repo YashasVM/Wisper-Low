@@ -55,7 +55,7 @@ fun HomeScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = screenPadding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.M),
     ) {
         item { BubbleStatusCard(state, actions, callbacks) }
         val fixes = fixesFor(state, actions, callbacks)
@@ -63,7 +63,7 @@ fun HomeScreen(
             item {
                 SectionCard(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
                     fixes.forEach { fix ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Sm)) {
                             Icon(Icons.Rounded.WarningAmber, contentDescription = null)
                             Text(stringResource(fix.label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             TextButton(onClick = fix.action) { Text(stringResource(R.string.action_fix)) }
@@ -177,8 +177,8 @@ private fun fixesFor(state: MainUiState, actions: AppActions, callbacks: HomeCal
 }
 
 fun screenPadding(inner: PaddingValues): PaddingValues = PaddingValues(
-    start = 20.dp,
-    end = 20.dp,
+    start = Space.Ml,
+    end = Space.Ml,
     top = inner.calculateTopPadding() + 16.dp,
     bottom = inner.calculateBottomPadding() + 24.dp,
 )

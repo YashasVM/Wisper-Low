@@ -54,7 +54,7 @@ fun PracticeArea(
     }
     val shown = listOf(practice.text, live).filter { it.isNotBlank() }.joinToString(" ")
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.Sm)) {
         OutlinedTextField(
             value = shown,
             onValueChange = { if (!listening && !finishing) onTextChange(it) },
@@ -66,7 +66,7 @@ fun PracticeArea(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.M),
         ) {
             MicButton(listening = listening, finishing = finishing, level = level, enabled = modelReady, onClick = onToggle)
             Column(Modifier.weight(1f)) {
