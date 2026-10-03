@@ -187,7 +187,7 @@ class ModelDownloader @Inject constructor(
                 extract(archive, model)
             }
             setState(model.id, DownloadState.Completed(installedDir))
-            clearPersistedDownload(model.id)
+            discardDownloadEntry(model.id)
             return installedDir
         } catch (cancelled: CancellationException) {
             // DownloadManager continues independently of this coroutine. Keep
@@ -201,7 +201,7 @@ class ModelDownloader @Inject constructor(
                 model.id,
                 DownloadState.Failed(error.message ?: "Model download failed"),
             )
-            clearPersistedDownload(model.id)
+            discardDownloadEntry(model.id)
             throw error
         } finally {
             if (!preserveDownload) {
@@ -433,6 +433,15 @@ class ModelDownloader @Inject constructor(
             files.any { it.name.startsWith("joiner") && it.name.endsWith(".onnx") }
         val hasSingleNemoModel = files.count { it.name.endsWith(".onnx") } == 1
         return hasTokens && (hasTransducer || hasSingleNemoModel)
+    }
+
+    /** Removes the system download record too, so finished or failed transfers don't linger in Downloads. */
+    private fun discardDownloadEntry(modelId: String) {
+        persistedDownloadId(modelId)?.let { id ->
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            runCatching { downloadManager.remove(id) }
+        }
+        clearPersistedDownload(modelId)
     }
 
     private fun setState(modelId: String, state: DownloadState) {
