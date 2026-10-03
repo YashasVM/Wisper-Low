@@ -62,7 +62,12 @@ class DictationService : Service(), BubbleActions {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var overlay: BubbleOverlay
-    private var bubblePosition: Pair<Int, Int>? = null
+    private var portraitPosition: Pair<Int, Int>? = null
+    private var landscapePosition: Pair<Int, Int>? = null
+    private val isLandscape: Boolean
+        get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    private val bubblePosition: Pair<Int, Int>?
+        get() = if (isLandscape) landscapePosition else portraitPosition
     private var flashJob: Job? = null
     private var lastNotificationListening: Boolean? = null
 
@@ -95,7 +100,8 @@ class DictationService : Service(), BubbleActions {
         getSystemService(NotificationManager::class.java).cancel(RestartReceiver.NOTIFICATION_ID)
         overlay = BubbleOverlay(this, this)
         scope.launch {
-            bubblePosition = settingsRepository.bubblePosition.first()
+            portraitPosition = settingsRepository.bubblePosition(landscape = false).first()
+            landscapePosition = settingsRepository.bubblePosition(landscape = true).first()
             observe()
         }
     }
@@ -108,7 +114,8 @@ class DictationService : Service(), BubbleActions {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // Rotation or split-screen changes the screen size; keep the bubble on screen.
-        if (::overlay.isInitialized) overlay.reposition()
+        // Each orientation remembers its own spot.
+        if (::overlay.isInitialized) overlay.reposition(bubblePosition)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -137,11 +144,18 @@ class DictationService : Service(), BubbleActions {
         scope.launch { engine.level.collect { overlay.setLevel(it) } }
         scope.launch { WisperlowAccessibilityService.keyboardTop.collect { overlay.setKeyboardTop(it) } }
         scope.launch {
-            settingsRepository.bubblePosition.collect { position ->
-                if (position == bubblePosition) return@collect
-                bubblePosition = position
+            settingsRepository.bubblePosition(landscape = false).collect { position ->
+                if (position == portraitPosition) return@collect
+                portraitPosition = position
                 // "Reset position" in settings: move a resting bubble right away.
-                if (position == null) overlay.resetPlacement()
+                if (position == null && !isLandscape) overlay.resetPlacement()
+            }
+        }
+        scope.launch {
+            settingsRepository.bubblePosition(landscape = true).collect { position ->
+                if (position == landscapePosition) return@collect
+                landscapePosition = position
+                if (position == null && isLandscape) overlay.resetPlacement()
             }
         }
         scope.launch {
@@ -213,8 +227,9 @@ class DictationService : Service(), BubbleActions {
     }
 
     override fun onMoved(side: Int, y: Int) {
-        bubblePosition = side to y
-        scope.launch { settingsRepository.setBubblePosition(side, y) }
+        val landscape = isLandscape
+        if (landscape) landscapePosition = side to y else portraitPosition = side to y
+        scope.launch { settingsRepository.setBubblePosition(landscape, side, y) }
     }
 
     override fun onReviewInsert(text: String) {

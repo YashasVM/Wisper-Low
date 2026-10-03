@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.OvershootInterpolator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
@@ -60,7 +61,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.heading
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -144,6 +153,12 @@ class BubbleOverlay(
     private var userY: Int? = null
     private var keyboardTop: Int? = null
     private var dragging = false
+    private var rawLeft = 0f
+    private var rawTop = 0f
+    private var snapAnimator: ValueAnimator? = null
+
+    /** Bumped on touch or keyboard changes so the idle bubble wakes up to full opacity. */
+    private var activity by mutableIntStateOf(0)
 
     val isShowing: Boolean get() = bubbleView != null
 
@@ -203,6 +218,7 @@ class BubbleOverlay(
     fun setKeyboardTop(top: Int?) {
         if (keyboardTop == top) return
         keyboardTop = top
+        activity++
         applyPlacement()
     }
 
@@ -232,7 +248,12 @@ class BubbleOverlay(
     }
 
     /** Re-clamps the bubble after the screen size changed (rotation, split screen, fold). */
-    fun reposition() = applyPlacement()
+    fun reposition(saved: Pair<Int, Int>?) {
+        // Orientation changed: switch to the spot remembered for it.
+        rightSide = saved?.first != SIDE_LEFT
+        userY = saved?.second
+        applyPlacement()
+    }
 
     fun resetPlacement() {
         rightSide = true
@@ -243,6 +264,7 @@ class BubbleOverlay(
     fun hide() {
         hideDismissTarget()
         dragging = false
+        snapAnimator?.cancel()
         bubbleView?.let {
             it.removeCallbacks(shrinkWindow)
             runCatching { windowManager.removeView(it) }
@@ -301,6 +323,7 @@ class BubbleOverlay(
 
     private fun applyPlacement() {
         if (dragging) return
+        snapAnimator?.cancel()
         val view = bubbleView ?: return
         val lp = params ?: return
         placeInto(lp)
@@ -311,11 +334,21 @@ class BubbleOverlay(
         val view = bubbleView ?: return
         val lp = params ?: return
         val (w, h) = screenSize()
+        val dot = dp(DOT_DP)
+        // Track the finger on raw coordinates so the magnet below never traps it.
+        rawLeft = (rawLeft + dx).coerceIn(0f, (w - dot).toFloat())
+        rawTop = (rawTop + dy).coerceIn(0f, (h - dot).toFloat())
+        val near = kotlin.math.abs(rawLeft + dot / 2f - w / 2f) < dp(DISMISS_RADIUS_DP) &&
+            rawTop + dot / 2f > h - dp(DISMISS_ZONE_DP)
+        // Magnet: inside the zone the bubble sits centred on the target.
+        val left = if (near) w / 2f - dot / 2f else rawLeft
+        val top = if (near) (h - dp(DISMISS_CENTER_BOTTOM_DP) - dot / 2).toFloat() else rawTop
         // With END gravity, x grows toward the left.
-        lp.x = (lp.x + if (rightSide) -dx.roundToInt() else dx.roundToInt()).coerceIn(0, w - dp(DOT_DP))
-        lp.y = (lp.y + dy.roundToInt()).coerceIn(0, h - dp(DOT_DP))
+        lp.x = (if (rightSide) w - left - dot else left).roundToInt().coerceIn(0, w - dot)
+        lp.y = top.roundToInt()
         runCatching { windowManager.updateViewLayout(view, lp) }
-        overDismiss = isOverDismiss(lp)
+        if (near && !overDismiss) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        overDismiss = near
     }
 
     private fun absoluteLeft(lp: WindowManager.LayoutParams): Int {
@@ -323,16 +356,13 @@ class BubbleOverlay(
         return if (rightSide) w - lp.x - dp(DOT_DP) else lp.x
     }
 
-    private fun isOverDismiss(lp: WindowManager.LayoutParams): Boolean {
-        val (w, h) = screenSize()
-        val centerX = absoluteLeft(lp) + dp(DOT_DP) / 2
-        val centerY = lp.y + dp(DOT_DP) / 2
-        return kotlin.math.abs(centerX - w / 2) < dp(DISMISS_RADIUS_DP) &&
-            centerY > h - dp(DISMISS_ZONE_DP)
-    }
-
     private fun startDrag() {
         dragging = true
+        snapAnimator?.cancel()
+        params?.let {
+            rawLeft = absoluteLeft(it).toFloat()
+            rawTop = it.y.toFloat()
+        }
         showDismissTarget()
     }
 
@@ -352,10 +382,39 @@ class BubbleOverlay(
         }
         // Snap to the nearest side so the bubble never covers the middle of a field.
         val (w, _) = screenSize()
-        rightSide = absoluteLeft(lp) + dp(DOT_DP) / 2 >= w / 2
+        val left = absoluteLeft(lp)
+        rightSide = left + dp(DOT_DP) / 2 >= w / 2
         userY = lp.y
-        applyPlacement()
-        actions.onMoved(if (rightSide) SIDE_RIGHT else SIDE_LEFT, lp.y)
+        // Re-express the current spot against the (possibly new) docked edge, then spring to the margin.
+        val startX = if (rightSide) w - left - dp(DOT_DP) else left
+        val startY = lp.y
+        placeInto(lp)
+        val endX = lp.x
+        val endY = lp.y
+        lp.x = startX
+        lp.y = startY
+        springTo(view, lp, startX, startY, endX, endY)
+        actions.onMoved(if (rightSide) SIDE_RIGHT else SIDE_LEFT, endY)
+    }
+
+    private fun springTo(view: View, lp: WindowManager.LayoutParams, x0: Int, y0: Int, x1: Int, y1: Int) {
+        if (!ValueAnimator.areAnimatorsEnabled() || (x0 == x1 && y0 == y1)) {
+            lp.x = x1
+            lp.y = y1
+            runCatching { windowManager.updateViewLayout(view, lp) }
+            return
+        }
+        snapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = SNAP_MS
+            interpolator = OvershootInterpolator(1.4f)
+            addUpdateListener {
+                val t = it.animatedValue as Float
+                lp.x = (x0 + (x1 - x0) * t).roundToInt().coerceAtLeast(0)
+                lp.y = (y0 + (y1 - y0) * t).roundToInt()
+                runCatching { windowManager.updateViewLayout(view, lp) }
+            }
+            start()
+        }
     }
 
     private fun showDismissTarget() {
@@ -400,11 +459,26 @@ class BubbleOverlay(
         }
         val color by animateColorAsState(target, if (animations) tween(260) else snap(), label = "bubbleColor")
         val anchor = if (rightSide) Alignment.TopEnd else Alignment.TopStart
+        // A resting bubble dims after a few seconds so it covers less of the app.
+        var faded by remember { mutableStateOf(false) }
+        LaunchedEffect(state is BubbleUi.Idle, activity) {
+            faded = false
+            if (state is BubbleUi.Idle) {
+                delay(IDLE_FADE_DELAY_MS)
+                faded = true
+            }
+        }
+        val alpha by animateFloatAsState(
+            if (faded) IDLE_FADED_ALPHA else 1f,
+            animationSpec = if (animations) tween(400) else snap(),
+            label = "bubbleAlpha",
+        )
         // The window is fixed-size while active; this box morphs inside it, anchored to the docked edge.
         Box(Modifier.fillMaxSize(), contentAlignment = anchor) {
             Box(
                 modifier = Modifier
                     .padding(4.dp)
+                    .alpha(alpha)
                     .animateContentSize(animationSpec = sizeSpec, alignment = anchor)
                     .background(color.copy(alpha = 0.96f), shape)
                     .border(1.dp, WisperlowColors.BubbleOutline, shape)
@@ -523,6 +597,7 @@ class BubbleOverlay(
                 text = context.getString(R.string.bubble_review_title),
                 color = Color.White.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.semantics { heading() },
             )
             BasicTextField(
                 value = reviewText,
@@ -572,8 +647,16 @@ class BubbleOverlay(
 
     @Composable
     private fun DismissTarget() {
-        val scale by animateFloatAsState(if (overDismiss) 1.25f else 1f, label = "dismissScale")
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val scale by animateFloatAsState(
+            if (overDismiss) 1.25f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "dismissScale",
+        )
+        val hideLabel = context.getString(R.string.bubble_drop_to_hide)
+        Column(
+            modifier = Modifier.semantics { contentDescription = hideLabel },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Box(
                 modifier = Modifier
                     .scale(scale)
@@ -665,6 +748,7 @@ class BubbleOverlay(
     private suspend fun PointerInputScope.gestures() {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            activity++
             val slop = viewConfiguration.touchSlop
             var dragged = false
             var total = Offset.Zero
@@ -758,6 +842,11 @@ class BubbleOverlay(
         const val DISMISS_RADIUS_DP = 72
         const val DISMISS_ZONE_DP = 190
         const val DISMISS_BOTTOM_DP = 56
+        /** Distance from the screen bottom to the centre of the dismiss circle (circle + label stack). */
+        const val DISMISS_CENTER_BOTTOM_DP = 122
+        const val SNAP_MS = 380L
+        const val IDLE_FADE_DELAY_MS = 3000L
+        const val IDLE_FADED_ALPHA = 0.6f
         const val MAX_PILL_CHARS = 70
         const val PILL_DP = 240
         const val SHRINK_DELAY_MS = 320L

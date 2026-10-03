@@ -75,6 +75,8 @@ class SettingsRepository @Inject constructor(
         // Older builds stored a pixel x under "bubble_x"; a new key keeps it from being read as a side.
         val bubbleSide = intPreferencesKey("bubble_side")
         val bubbleY = intPreferencesKey("bubble_y")
+        val bubbleSideLandscape = intPreferencesKey("bubble_side_landscape")
+        val bubbleYLandscape = intPreferencesKey("bubble_y_landscape")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -119,9 +121,10 @@ class SettingsRepository @Inject constructor(
     }
 
     /** Saved bubble placement as (side, y): side 0 = left edge, 1 = right edge; y in screen pixels. */
-    val bubblePosition: Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->
-        val side = prefs[Keys.bubbleSide] ?: return@map null
-        val y = prefs[Keys.bubbleY] ?: return@map null
+    fun bubblePosition(landscape: Boolean): Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->
+        // Portrait keeps the original keys so existing positions survive the upgrade.
+        val side = prefs[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] ?: return@map null
+        val y = prefs[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] ?: return@map null
         side to y
     }
 
@@ -138,14 +141,16 @@ class SettingsRepository @Inject constructor(
         it[Keys.dictionary] = serializeDictionary(dict)
     }
 
-    suspend fun setBubblePosition(side: Int, y: Int) = edit {
-        it[Keys.bubbleSide] = side
-        it[Keys.bubbleY] = y
+    suspend fun setBubblePosition(landscape: Boolean, side: Int, y: Int) = edit {
+        it[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] = side
+        it[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] = y
     }
 
     suspend fun clearBubblePosition() = edit {
         it.remove(Keys.bubbleSide)
         it.remove(Keys.bubbleY)
+        it.remove(Keys.bubbleSideLandscape)
+        it.remove(Keys.bubbleYLandscape)
     }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
