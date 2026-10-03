@@ -18,10 +18,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "wisperlow_settings",
@@ -95,8 +97,26 @@ class SettingsRepository @Inject constructor(
     }
 
     /** Latest settings for synchronous readers such as the overlay and audio callbacks. */
-    val current: StateFlow<WisperlowSettings> =
-        settings.stateIn(scope, SharingStarted.Eagerly, WisperlowSettings())
+    val current: StateFlow<WisperlowSettings> get() = _current.asStateFlow()
+
+    private val _current = MutableStateFlow(WisperlowSettings())
+    private val _loaded = MutableStateFlow(false)
+
+    /** False until DataStore delivered its first value; [current] holds defaults until then. */
+    val isLoaded: Boolean get() = _loaded.value
+
+    suspend fun awaitLoaded() {
+        _loaded.first { it }
+    }
+
+    init {
+        scope.launch {
+            settings.collect { value ->
+                _current.value = value
+                _loaded.value = true
+            }
+        }
+    }
 
     /** Saved bubble placement as (side, y): side 0 = left edge, 1 = right edge; y in screen pixels. */
     val bubblePosition: Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->

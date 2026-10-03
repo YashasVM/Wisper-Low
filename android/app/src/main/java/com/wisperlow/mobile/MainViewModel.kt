@@ -209,16 +209,20 @@ class MainViewModel @Inject constructor(
 
     private fun startPractice() {
         practice.update { it.copy(error = null) }
-        practiceOwned = engine.start { result ->
-            practiceOwned = false
-            when (result) {
-                is DictationEngine.Result.Success -> practice.update { current ->
-                    val joined = if (current.text.isBlank()) result.value else "${current.text.trimEnd()} ${result.value}"
-                    current.copy(text = joined, error = null)
+        practiceOwned = engine.start(
+            listener = { result ->
+                practiceOwned = false
+                when (result) {
+                    is DictationEngine.Result.Success -> practice.update { current ->
+                        val joined = if (current.text.isBlank()) result.value else "${current.text.trimEnd()} ${result.value}"
+                        current.copy(text = joined, error = null)
+                    }
+                    is DictationEngine.Result.Failure -> practice.update { it.copy(error = result.error) }
                 }
-                is DictationEngine.Result.Failure -> practice.update { it.copy(error = result.error) }
-            }
-        }
+            },
+            // Cancelled from elsewhere (bubble, service stop): no result will arrive.
+            onCancelled = { practiceOwned = false },
+        )
     }
 
     fun setPracticeText(text: String) = practice.update { it.copy(text = text) }

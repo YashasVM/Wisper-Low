@@ -66,6 +66,9 @@ class DictationService : Service(), BubbleActions {
     private var flashJob: Job? = null
     private var lastNotificationListening: Boolean? = null
 
+    /** True while the engine session in progress was started from the bubble, not the in-app practice. */
+    private var ownsSession = false
+
     /** Bubble state that belongs to this service rather than the engine. */
     private data class LocalUi(
         val review: String? = null,
@@ -117,7 +120,8 @@ class DictationService : Service(), BubbleActions {
     override fun onDestroy() {
         _running.value = false
         if (::overlay.isInitialized) {
-            if (engine.isActive) engine.cancel()
+            // Only stop our own dictation; an in-app practice session is not ours to cancel.
+            if (ownsSession && engine.isActive) engine.cancel()
             overlay.destroy()
         }
         scope.cancel()
@@ -236,12 +240,16 @@ class DictationService : Service(), BubbleActions {
         local.update { it.copy(flash = null) }
         // Remember the field now; the review editor could take focus later.
         WisperlowAccessibilityService.captureTarget()
-        engine.start { result ->
-            when (result) {
-                is DictationEngine.Result.Success -> onTranscript(result.value)
-                is DictationEngine.Result.Failure -> flash(errorMessage(result.error), success = false)
-            }
-        }
+        ownsSession = engine.start(
+            listener = { result ->
+                ownsSession = false
+                when (result) {
+                    is DictationEngine.Result.Success -> onTranscript(result.value)
+                    is DictationEngine.Result.Failure -> flash(errorMessage(result.error), success = false)
+                }
+            },
+            onCancelled = { ownsSession = false },
+        )
     }
 
     private fun onTranscript(text: String) {
@@ -323,6 +331,13 @@ class DictationService : Service(), BubbleActions {
                 startForeground(NOTIFICATION_ID, notification)
             }
             true
+        } catch (error: SecurityException) {
+            // The microphone permission vanished between the check and now. Older
+            // Android still accepts a type-less foreground start, which satisfies
+            // the startForegroundService() contract before we stop ourselves.
+            Log.e(TAG, "Microphone service not permitted", error)
+            runCatching { startForeground(NOTIFICATION_ID, buildNotification(listening = false)) }
+            false
         } catch (error: RuntimeException) {
             Log.e(TAG, "Could not start the bubble service", error)
             false

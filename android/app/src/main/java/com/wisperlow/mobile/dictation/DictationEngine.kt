@@ -20,6 +20,7 @@ import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -101,13 +102,16 @@ class DictationEngine @Inject constructor(
     val modelLoaded: StateFlow<Boolean> = _modelLoaded.asStateFlow()
 
     val isActive: Boolean
-        get() = session != null
+        get() = session != null || pendingStart != null
 
     private class Session(
         val id: Long,
         val settings: WisperlowSettings,
         val listener: ResultListener,
+        val onCancelled: (() -> Unit)?,
     ) {
+        /** Null until the voice detector is ready; audio is buffered meanwhile. */
+        var detector: VadEngine? = null
         val pcm = PcmBuffer()
         val boundaries = Channel<Int>(Channel.UNLIMITED)
         val parts = mutableListOf<String>()
@@ -117,18 +121,38 @@ class DictationEngine @Inject constructor(
     }
 
     private var nextSessionId = 0L
+    private var pendingStart: Job? = null
+    private var pendingCancelled: (() -> Unit)? = null
 
     /**
      * Starts recording immediately. The model loads in parallel if needed, so
      * the user can begin speaking without waiting. Returns false and reports an
      * error through [listener] when dictation cannot start.
      */
-    fun start(listener: ResultListener): Boolean {
+    fun start(listener: ResultListener, onCancelled: (() -> Unit)? = null): Boolean {
         checkMainThread()
-        if (session != null) {
+        if (session != null || pendingStart != null) {
             listener.onResult(Result.Failure(DictationError.BUSY))
             return false
         }
+        if (!settingsRepository.isLoaded) {
+            // Settings still hold defaults right after process start; wait for the
+            // real ones so the model, auto-stop and dictionary are the user's.
+            val job = scope.launch(start = CoroutineStart.LAZY) {
+                settingsRepository.awaitLoaded()
+                pendingStart = null
+                pendingCancelled = null
+                startNow(listener, onCancelled)
+            }
+            pendingStart = job
+            pendingCancelled = onCancelled
+            job.start()
+            return true
+        }
+        return startNow(listener, onCancelled)
+    }
+
+    private fun startNow(listener: ResultListener, onCancelled: (() -> Unit)?): Boolean {
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             listener.onResult(Result.Failure(DictationError.MIC_PERMISSION))
             return false
@@ -138,21 +162,19 @@ class DictationEngine @Inject constructor(
             listener.onResult(Result.Failure(DictationError.NO_MODEL))
             return false
         }
-        val detector = ensureVad() ?: run {
-            listener.onResult(Result.Failure(DictationError.MODEL_LOAD_FAILED))
-            return false
-        }
         idleReleaseJob?.cancel()
 
-        val s = Session(++nextSessionId, settings, listener)
+        val s = Session(++nextSessionId, settings, listener, onCancelled)
         session = s
-        detector.reset(settings.autoStop.silenceMs)
         _level.value = 0f
+        // Fast path: the detector is already loaded. Otherwise it loads on the
+        // decode thread and the audio captured meanwhile is replayed into it.
+        vad?.let { activateDetector(s, it) }
         audio.setErrorListener { message ->
             Log.w(TAG, message)
             scope.launch { if (session === s) finish(s) }
         }
-        audio.setListener { samples, level -> onAudio(s, detector, samples, level) }
+        audio.setListener { samples, level -> onAudio(s, samples, level) }
         if (!audio.start()) {
             session = null
             audio.setListener(null)
@@ -166,6 +188,22 @@ class DictationEngine @Inject constructor(
         return true
     }
 
+    /** Resets [detector] for [s] and replays audio already captured, reacting to its events. */
+    private fun activateDetector(s: Session, detector: VadEngine) {
+        synchronized(s) {
+            detector.reset(s.settings.autoStop.silenceMs)
+            val captured = s.pcm.size
+            var offset = 0
+            while (offset < captured) {
+                val end = minOf(offset + REPLAY_CHUNK, captured)
+                val event = detector.process(s.pcm.slice(offset, end))
+                handleEvent(s, detector, event, end)
+                offset = end
+            }
+            s.detector = detector
+        }
+    }
+
     /** Stops recording and delivers the transcript once the last phrase is decoded. */
     fun finish() {
         checkMainThread()
@@ -175,6 +213,12 @@ class DictationEngine @Inject constructor(
     /** Stops recording and discards everything captured in this session. */
     fun cancel() {
         checkMainThread()
+        pendingStart?.let { job ->
+            job.cancel()
+            pendingStart = null
+            pendingCancelled?.invoke()
+            pendingCancelled = null
+        }
         val s = session ?: return
         session = null
         audio.stop()
@@ -183,6 +227,8 @@ class DictationEngine @Inject constructor(
         _level.value = 0f
         _state.value = DictationState.Idle
         scheduleIdleRelease()
+        // Tell the owner, who may be waiting on a result that will now never come.
+        s.onCancelled?.invoke()
     }
 
     /** Loads the selected model ahead of time so the next dictation has no cold start. */
@@ -192,7 +238,10 @@ class DictationEngine @Inject constructor(
         val modelDir = resolveModelDir(settings) ?: return
         idleReleaseJob?.cancel()
         scope.launch {
-            withContext(decodeDispatcher) { ensureStt(modelDir) }
+            withContext(decodeDispatcher) {
+                // Swapping models under a live session would release the recognizer it is decoding with.
+                if (session == null) ensureStt(modelDir)
+            }
             if (session == null) scheduleIdleRelease()
         }
     }
@@ -216,7 +265,7 @@ class DictationEngine @Inject constructor(
         s.finishing = true
         audio.stop()
         _level.value = 0f
-        val detector = vad
+        val detector = s.detector
         // Drop most of the trailing silence that ended the session; it only
         // costs decode time. Keep a little so final consonants survive.
         val trailing = (detector?.trailingSilenceSamples ?: 0) - KEEP_TRAILING_SAMPLES
@@ -238,16 +287,27 @@ class DictationEngine @Inject constructor(
     }
 
     /** Audio thread: run VAD, keep samples, and turn pauses into decode points. */
-    private fun onAudio(s: Session, detector: VadEngine, samples: ShortArray, level: Float) {
+    private fun onAudio(s: Session, samples: ShortArray, level: Float) {
         if (session !== s || s.finishing) return
-        val event = detector.process(samples)
-        s.pcm.append(samples)
         val now = System.nanoTime()
         if (now - lastLevelNanos >= LEVEL_INTERVAL_NANOS) {
             lastLevelNanos = now
             _level.value = level
         }
-        val captured = s.pcm.size
+        synchronized(s) {
+            val detector = s.detector
+            if (detector == null) {
+                // Detector still loading: just keep the audio; it is replayed once ready.
+                s.pcm.append(samples)
+                return
+            }
+            val event = detector.process(samples)
+            s.pcm.append(samples)
+            handleEvent(s, detector, event, s.pcm.size)
+        }
+    }
+
+    private fun handleEvent(s: Session, detector: VadEngine, event: VadEvent?, captured: Int) {
         val heard = detector.heardSpeech
         when {
             captured >= MAX_CAPTURE_SAMPLES -> scope.launch { finish(s) }
@@ -264,6 +324,16 @@ class DictationEngine @Inject constructor(
 
     /** Decodes phrases in order as their boundaries arrive. */
     private suspend fun consume(s: Session, modelDir: File) {
+        if (s.detector == null) {
+            val detector = withContext(decodeDispatcher) { ensureVad() }
+            if (session !== s) return
+            if (detector == null) {
+                cancel()
+                s.listener.onResult(Result.Failure(DictationError.MODEL_LOAD_FAILED))
+                return
+            }
+            activateDetector(s, detector)
+        }
         val engine = withContext(decodeDispatcher) { ensureStt(modelDir) }
         if (engine == null) {
             if (session === s) {
@@ -310,6 +380,7 @@ class DictationEngine @Inject constructor(
         modelDownloader.installedDirFor(settings.selectedModelId)
             ?: modelDownloader.installedModels().firstOrNull()
 
+    /** Decode thread only: copies the bundled model on first use and loads it. */
     private fun ensureVad(): VadEngine? {
         vad?.let { return it }
         return try {
@@ -379,6 +450,7 @@ class DictationEngine @Inject constructor(
         private const val NO_SPEECH_MANUAL_SAMPLES = SAMPLE_RATE * 30
         private const val MIN_SEGMENT_SAMPLES = SAMPLE_RATE * 3 / 4
         private const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 5
+        private const val REPLAY_CHUNK = 512
         private const val KEEP_TRAILING_SAMPLES = SAMPLE_RATE * 3 / 10
         private const val IDLE_RELEASE_MS = 5 * 60_000L
         private const val LEVEL_INTERVAL_NANOS = 60_000_000L
