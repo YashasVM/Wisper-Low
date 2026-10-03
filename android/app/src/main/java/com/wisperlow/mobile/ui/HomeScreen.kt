@@ -28,6 +28,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -75,7 +77,7 @@ fun HomeScreen(
         }
         item {
             SectionCard {
-                Text(stringResource(R.string.try_step_title), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.try_step_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 PracticeArea(
                     practice = state.practice,
                     dictation = state.dictation,
@@ -90,7 +92,7 @@ fun HomeScreen(
         item {
             SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.home_tips_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.home_tips_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                     IconButton(onClick = { tipsOpen = !tipsOpen }) {
                         Icon(
                             if (tipsOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,

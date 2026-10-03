@@ -73,6 +73,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -367,7 +369,7 @@ private fun AutoAdvance(onStep: Boolean, granted: Boolean, advance: () -> Unit) 
 /** Display headline plus one short supporting sentence. */
 @Composable
 private fun Headline(title: Int, body: Int) {
-    Text(stringResource(title), style = MaterialTheme.typography.displaySmall)
+    Text(stringResource(title), style = MaterialTheme.typography.displaySmall, modifier = Modifier.semantics { heading() })
     Text(
         stringResource(body),
         style = MaterialTheme.typography.bodyLarge,

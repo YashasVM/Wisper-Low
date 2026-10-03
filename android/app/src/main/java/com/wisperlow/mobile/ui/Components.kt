@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -109,7 +110,7 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(start = Space.Xs, top = Space.S),
+        modifier = modifier.padding(start = Space.Xs, top = Space.S).semantics { heading() },
     )
 }
 
@@ -204,7 +205,7 @@ fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = MaterialTheme.typography.displaySmall,
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = modifier,
+        modifier = modifier.semantics { heading() },
     )
 }
 
