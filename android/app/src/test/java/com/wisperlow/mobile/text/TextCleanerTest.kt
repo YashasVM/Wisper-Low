@@ -55,7 +55,8 @@ class TextCleanerTest {
         assertEquals("Is it ready? Yes!", TextCleaner.clean("Is it ready question mark yes exclamation point"))
         assertEquals("First line\nSecond", TextCleaner.clean("First line new line Second"))
         assertEquals("One\n\nTwo", TextCleaner.clean("One new paragraph two"))
-        assertEquals("Done. Next", TextCleaner.clean("Done period next"))
+        assertEquals("Done period next", TextCleaner.clean("Done period next"))
+        assertEquals("Done.\nNext", TextCleaner.clean("Done period new line next"))
     }
 
     @Test
@@ -71,6 +72,17 @@ class TextCleanerTest {
         assertEquals(3, TextCleaner.wordCount("hello world again"))
         assertEquals(6, TextCleaner.wordCount("hello, don't stop-it 42 now"))
         assertEquals(2, TextCleaner.wordCount("हिंदी भाषा"))
+    }
+
+    @Test
+    fun trailingNewLineIsKept() {
+        assertEquals("Hello\n", TextCleaner.clean("Hello new line"))
+    }
+
+    @Test
+    fun jurassicPeriodStaysAWord() {
+        assertEquals("the Jurassic period was long", TextCleaner.clean("the Jurassic period was long"))
+        assertEquals("Jurassic period was long", TextCleaner.clean("Jurassic period was long"))
     }
 
     @Test

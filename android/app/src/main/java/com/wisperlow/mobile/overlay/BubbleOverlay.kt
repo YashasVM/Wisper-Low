@@ -81,6 +81,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -200,7 +201,7 @@ class BubbleOverlay(
 
     private fun windowWidthFor(state: BubbleUi): Int = when (state) {
         is BubbleUi.Idle -> WindowManager.LayoutParams.WRAP_CONTENT
-        is BubbleUi.Review -> dp(REVIEW_WIDTH_DP + 8)
+        is BubbleUi.Review -> dp(reviewWidthDp() + 8)
         else -> dp(PILL_DP + 8)
     }
 
@@ -304,6 +305,10 @@ class BubbleOverlay(
             val metrics = context.resources.displayMetrics
             metrics.widthPixels to metrics.heightPixels
         }
+
+    /** Review panel width: 320dp, or less on narrow screens so it never leaves the display. */
+    private fun reviewWidthDp(): Int =
+        minOf(REVIEW_WIDTH_DP, (screenSize().first / density).toInt() - 24).coerceAtLeast(160)
 
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
@@ -505,7 +510,8 @@ class BubbleOverlay(
                     state.modelLoading -> context.getString(R.string.bubble_loading_keep_talking)
                     else -> context.getString(R.string.bubble_listening)
                 },
-                hint = context.getString(R.string.bubble_tap_to_finish),
+                // The second line would not fit the fixed-height window at large font scales.
+                hint = if (LocalDensity.current.fontScale > 1.3f) null else context.getString(R.string.bubble_tap_to_finish),
                 description = context.getString(R.string.bubble_listening_description),
             ) { Waveform(animations) }
             is BubbleUi.Finishing -> Pill(
@@ -578,6 +584,8 @@ class BubbleOverlay(
                         text = hint,
                         color = Color.White.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -588,7 +596,7 @@ class BubbleOverlay(
     private fun ReviewPanel() {
         Column(
             modifier = Modifier
-                .width(REVIEW_WIDTH_DP.dp)
+                .width(reviewWidthDp().dp)
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {

@@ -195,17 +195,23 @@ class DictationEngine @Inject constructor(
 
     /** Resets [detector] for [s] and replays audio already captured, reacting to its events. */
     private fun activateDetector(s: Session, detector: VadEngine) {
-        synchronized(s) {
-            detector.reset(s.settings.autoStop.silenceMs)
+        detector.reset(s.settings.autoStop.silenceMs)
+        var offset = 0
+        while (true) {
+            // Replay without the lock so the audio thread keeps appending; hand over once caught up.
             val captured = s.pcm.size
-            var offset = 0
             while (offset < captured) {
                 val end = minOf(offset + REPLAY_CHUNK, captured)
                 val event = detector.process(s.pcm.slice(offset, end))
                 handleEvent(s, detector, event, end)
                 offset = end
             }
-            s.detector = detector
+            synchronized(s) {
+                if (s.pcm.size == offset) {
+                    s.detector = detector
+                    return
+                }
+            }
         }
     }
 
@@ -367,7 +373,9 @@ class DictationEngine @Inject constructor(
                 s.listener.onResult(Result.Failure(DictationError.MODEL_LOAD_FAILED))
                 return
             }
-            activateDetector(s, detector)
+            // Replaying buffered audio is CPU work; keep it off the main thread.
+            withContext(decodeDispatcher) { if (session === s) activateDetector(s, detector) }
+            if (session !== s) return
         }
         val engine = withContext(decodeDispatcher) { ensureStt(modelDir) }
         if (engine == null) {

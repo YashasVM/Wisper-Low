@@ -11,13 +11,12 @@ internal object InsertionVerifier {
 
     /**
      * [before] is the field text prior to the action, [after] the re-read text.
-     * A field that ignored the action is unchanged; one that reformatted our text
-     * still changed and contains the dictated words, which counts as applied.
+     * A field that ignored the action is unchanged; any change counts as applied.
      */
-    fun check(before: String, after: String, insertion: String): Outcome {
-        if (after == before) return Outcome.NOT_APPLIED
-        val core = insertion.trim()
-        return if (core.isNotEmpty() && after.contains(core)) Outcome.APPLIED else Outcome.NOT_APPLIED
+    fun check(before: String, after: String, @Suppress("UNUSED_PARAMETER") insertion: String): Outcome {
+        // Any change means the field took the action (it may have reformatted our text);
+        // pasting on top of that would insert the dictation twice.
+        return if (after == before) Outcome.NOT_APPLIED else Outcome.APPLIED
     }
 
     /** Terminal emulators expose their whole buffer as text, so replacing it would wipe the screen. */

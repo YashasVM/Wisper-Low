@@ -7,8 +7,8 @@ internal object SmartSpacing {
     private const val SENTENCE_END = ".!?…"
 
     fun fit(before: String, after: String, text: String): String {
-        var result = text.trim()
-        if (result.isEmpty()) return ""
+        var result = text.trimStart().trimEnd(' ', '\t')
+        if (result.isBlank()) return ""
         val previous = before.lastOrNull()
         if (startsSentence(before)) result = capitalized(result)
         if (previous != null && !previous.isWhitespace() && previous !in NO_SPACE_AFTER &&
@@ -17,7 +17,7 @@ internal object SmartSpacing {
             result = " $result"
         }
         val next = after.firstOrNull()
-        if (next != null && !next.isWhitespace() && next !in NO_SPACE_BEFORE) {
+        if (next != null && !next.isWhitespace() && next !in NO_SPACE_BEFORE && !result.endsWith("\n")) {
             result = "$result "
         }
         return result

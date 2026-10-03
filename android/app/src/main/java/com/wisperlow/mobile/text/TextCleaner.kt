@@ -88,7 +88,15 @@ object TextCleaner {
             }
             val prev = tokens.getOrNull(i - 1)?.let(::bare)
             val next = tokens.getOrNull(i + (match?.first?.size ?: 1))?.let(::bare)
-            val usable = match != null && out.isNotEmpty() && prev !in nounLeaders && next !in verbFollowers &&
+            val afterMatch = i + (match?.first?.size ?: 1)
+            // "period" is also a common noun ("Jurassic period was long"), so it only
+            // becomes punctuation at the end of the utterance or before a line break.
+            val isStop = match?.second == "."
+            val stopAllowed = !isStop || afterMatch >= tokens.size || (
+                tokens.getOrNull(afterMatch)?.let(::bare) == "new" &&
+                    tokens.getOrNull(afterMatch + 1)?.let(::bare) in setOf("line", "paragraph")
+                )
+            val usable = match != null && stopAllowed && out.isNotEmpty() && prev !in nounLeaders && next !in verbFollowers &&
                 (match.second.startsWith("\n") || prev != null)
             if (match == null || !usable) {
                 if (out.isNotEmpty() && !out.endsWith("\n")) out.append(' ')
@@ -115,7 +123,8 @@ object TextCleaner {
 
     private fun normalizeSpaces(text: String): String {
         val collapsed = horizontalWhitespaceRun.replace(text, " ")
-        val joined = collapsed.split("\n").joinToString("\n") { it.trim() }.trim()
+        // Keep a trailing line break (a spoken "new line" at the end); drop other edge whitespace.
+        val joined = collapsed.split("\n").joinToString("\n") { it.trim() }.trimStart().trimEnd(' ', '\t')
         return spaceBeforePunct.replace(joined) { it.groupValues[1] }
     }
 }

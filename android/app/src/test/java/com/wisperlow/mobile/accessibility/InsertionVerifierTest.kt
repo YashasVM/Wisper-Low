@@ -31,9 +31,9 @@ class InsertionVerifierTest {
     }
 
     @Test
-    fun changedWithoutInsertionIsRejected() {
+    fun anyChangeCountsAsApplied() {
         assertEquals(
-            InsertionVerifier.Outcome.NOT_APPLIED,
+            InsertionVerifier.Outcome.APPLIED,
             InsertionVerifier.check("a", "", "hello"),
         )
     }
