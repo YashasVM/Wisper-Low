@@ -226,11 +226,9 @@ fun PrimaryCta(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
         enabled = enabled,
         shape = MaterialTheme.shapes.large,
         interactionSource = source,
-        modifier = modifier.heightIn(min = 52.dp).androidx_widthIn().pressScale(source),
+        modifier = modifier.heightIn(min = 52.dp).widthIn(min = 120.dp).pressScale(source),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
-
-private fun Modifier.androidx_widthIn(): Modifier = this.then(Modifier.widthIn(min = 120.dp))
 
 /** Secondary action that sits beside or under a primary one. */
 @Composable
