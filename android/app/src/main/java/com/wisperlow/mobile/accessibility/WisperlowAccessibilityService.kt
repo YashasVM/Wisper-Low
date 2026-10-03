@@ -159,9 +159,10 @@ class WisperlowAccessibilityService : AccessibilityService() {
             val upper = maxOf(start, end)
             val insertion = SmartSpacing.fit(current.substring(0, lower), current.substring(upper), text)
             if (insertion.isEmpty()) return InsertResult.NO_TARGET
-            if (setTextAt(target, current, lower, upper, insertion)) {
+            val terminal = InsertionVerifier.isTerminal(target.packageName?.toString(), target.className?.toString())
+            if (!terminal && setTextAt(target, current, lower, upper, insertion)) {
                 InsertResult.INSERTED
-            } else if (paste(target, insertion)) {
+            } else if (!appliedLate(target, current, insertion) && paste(target, insertion)) {
                 InsertResult.PASTED
             } else {
                 InsertResult.NO_TARGET
@@ -187,7 +188,7 @@ class WisperlowAccessibilityService : AccessibilityService() {
         // Some apps accept the action but ignore it; confirm before trusting it.
         target.refresh()
         val updated = target.text?.toString().orEmpty()
-        if (!updated.contains(insertion.trim())) return false
+        if (InsertionVerifier.check(current, updated, insertion) != InsertionVerifier.Outcome.APPLIED) return false
         val cursor = (start + insertion.length).coerceAtMost(updated.length)
         target.performAction(
             AccessibilityNodeInfo.ACTION_SET_SELECTION,
@@ -197,6 +198,13 @@ class WisperlowAccessibilityService : AccessibilityService() {
             },
         )
         return true
+    }
+
+    /** Some apps apply SET_TEXT after we re-read; pasting then would insert twice. */
+    private fun appliedLate(target: AccessibilityNodeInfo, original: String, insertion: String): Boolean {
+        if (!runCatching { target.refresh() }.getOrDefault(false)) return false
+        val now = if (target.isShowingHintText) "" else target.text?.toString().orEmpty()
+        return InsertionVerifier.check(original, now, insertion) == InsertionVerifier.Outcome.APPLIED
     }
 
     /** Fallback for fields (often web views) that ignore direct text replacement. */
