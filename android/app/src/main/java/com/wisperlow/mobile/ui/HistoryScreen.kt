@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -150,20 +153,28 @@ fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit
 
 @Composable
 fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int, body: Int) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 40.dp, horizontal = Space.M),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Space.S),
+    val shown = remember { androidx.compose.animation.core.MutableTransitionState(!Motion.enabled) }
+    LaunchedEffect(Unit) { shown.targetState = true }
+    androidx.compose.animation.AnimatedVisibility(
+        visibleState = shown,
+        enter = androidx.compose.animation.fadeIn(Motion.slow()) + androidx.compose.animation.slideInVertically(Motion.slow()) { it / 8 },
     ) {
-        IconBadge(icon)
-        Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
-        Text(
-            stringResource(body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = Space.Xl, horizontal = Space.L),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Space.Sm),
+        ) {
+            HeroIcon(icon)
+            Spacer(Modifier.height(Space.Xs))
+            Text(stringResource(title), style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(
+                stringResource(body),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
     }
 }

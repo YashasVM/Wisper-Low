@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -68,7 +69,18 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
     val report by rememberUpdatedState(onPhase)
     val animate = ValueAnimator.areAnimatorsEnabled()
 
-    LaunchedEffect(animate) {
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    // Re-keyed on lifecycle so the loop stops while the app is in the background.
+    var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) }
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+            resumed = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(animate, resumed) {
+        if (!resumed) return@LaunchedEffect
         if (!animate) {
             phase = 3
             typed = DEMO_SENTENCE.length
@@ -96,6 +108,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
             3 -> WisperlowColors.BubbleSuccess
             else -> WisperlowColors.BubbleSurface
         },
+        animationSpec = Motion.tween(),
         label = "demoBubble",
     )
     val fieldText = if (phase >= 3) DEMO_SENTENCE else ""

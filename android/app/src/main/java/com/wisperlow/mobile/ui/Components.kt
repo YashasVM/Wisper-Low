@@ -4,6 +4,7 @@ import android.graphics.Typeface
 import android.text.Spanned
 import android.text.style.StyleSpan
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -66,7 +68,7 @@ fun SectionCard(
         tonalElevation = if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp,
     ) {
         Column(
-            modifier = Modifier.padding(Space.Ml),
+            modifier = Modifier.animateContentSize(Motion.tween()).padding(Space.Ml),
             verticalArrangement = Arrangement.spacedBy(Space.Sm),
             content = content,
         )
@@ -156,5 +158,39 @@ fun SwitchRow(
         }
         // The row handles the toggle so the whole line is one large touch target.
         Switch(checked = checked, onCheckedChange = null, enabled = enabled, modifier = Modifier.semantics { role = Role.Switch })
+    }
+}
+
+/** Primary call to action: one per screen, same size everywhere. */
+@Composable
+fun PrimaryCta(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    androidx.compose.material3.Button(
+        onClick = onClick,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier.heightIn(min = 52.dp).androidx_widthIn(),
+    ) { Text(text, style = MaterialTheme.typography.labelLarge) }
+}
+
+private fun Modifier.androidx_widthIn(): Modifier = this.then(Modifier.widthIn(min = 120.dp))
+
+/** Secondary action that sits beside or under a primary one. */
+@Composable
+fun SecondaryCta(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    androidx.compose.material3.OutlinedButton(onClick = onClick, shape = MaterialTheme.shapes.large, modifier = modifier) {
+        Text(text, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/** Large soft icon medallion that introduces an onboarding step or empty state. */
+@Composable
+fun HeroIcon(icon: ImageVector, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(72.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(34.dp))
     }
 }

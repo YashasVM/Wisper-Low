@@ -23,7 +23,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.Keyboard
@@ -169,6 +173,7 @@ fun OnboardingScreen(
         }
 
         // Bottom bar: one clear primary action per step.
+        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -225,13 +230,12 @@ private fun AutoAdvance(onStep: Boolean, granted: Boolean, advance: () -> Unit) 
 
 @Composable
 private fun PrimaryButton(label: Int, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 52.dp).widthIn(min = 120.dp)) {
-        Text(stringResource(label))
-    }
+    PrimaryCta(stringResource(label), onClick, enabled = enabled)
 }
 
 @Composable
-private fun StepTitle(title: Int, body: Int) {
+private fun StepTitle(title: Int, body: Int, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+    if (icon != null) HeroIcon(icon)
     Text(stringResource(title), style = MaterialTheme.typography.headlineMedium)
     Text(
         stringResource(body),
@@ -332,7 +336,7 @@ private fun ColumnScope.HowStep() {
 
 @Composable
 private fun ModelStep(state: MainUiState, actions: AppActions, callbacks: OnboardingCallbacks) {
-    StepTitle(R.string.model_step_title, R.string.model_step_body)
+    StepTitle(R.string.model_step_title, R.string.model_step_body, Icons.Rounded.Download)
     ModelList(
         selectedId = state.settings.selectedModelId,
         downloads = state.downloads,
@@ -351,20 +355,20 @@ private fun ModelStep(state: MainUiState, actions: AppActions, callbacks: Onboar
 
 @Composable
 private fun MicrophoneStep(granted: Boolean, asked: Boolean, actions: AppActions) {
-    StepTitle(R.string.mic_step_title, R.string.mic_step_body)
+    StepTitle(R.string.mic_step_title, R.string.mic_step_body, Icons.Rounded.Mic)
     IconTextRow(Icons.Rounded.Notifications, stringResource(R.string.mic_step_notifications))
     DoneBanner(granted)
     if (!granted && asked) {
         SectionCard(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
             Text(stringResource(R.string.mic_step_denied), style = MaterialTheme.typography.bodyMedium)
-            OutlinedButton(onClick = actions.openAppInfo) { Text(stringResource(R.string.mic_step_open_app_settings)) }
+            SecondaryCta(stringResource(R.string.mic_step_open_app_settings), actions.openAppInfo)
         }
     }
 }
 
 @Composable
 private fun OverlayStep(granted: Boolean) {
-    StepTitle(R.string.overlay_step_title, R.string.overlay_step_body)
+    StepTitle(R.string.overlay_step_title, R.string.overlay_step_body, Icons.Rounded.Layers)
     DoneBanner(granted)
     if (!granted) {
         SectionCard {
@@ -376,7 +380,7 @@ private fun OverlayStep(granted: Boolean) {
 
 @Composable
 private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
-    StepTitle(R.string.a11y_step_title, R.string.a11y_step_body)
+    StepTitle(R.string.a11y_step_title, R.string.a11y_step_body, Icons.Rounded.Accessibility)
     DoneBanner(enabled)
     if (!enabled) {
         SectionCard {
@@ -386,7 +390,7 @@ private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
         SectionCard(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
             Text(stringResource(R.string.a11y_restricted_title), style = MaterialTheme.typography.titleMedium)
             Text(styledStringResource(R.string.a11y_restricted_body), style = MaterialTheme.typography.bodyMedium)
-            OutlinedButton(onClick = actions.openAppInfo) { Text(stringResource(R.string.a11y_open_app_info)) }
+            SecondaryCta(stringResource(R.string.a11y_open_app_info), actions.openAppInfo)
         }
         Text(
             stringResource(R.string.a11y_skip_note),
@@ -399,7 +403,7 @@ private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
 
 @Composable
 private fun TryStep(state: MainUiState, level: Float, callbacks: OnboardingCallbacks) {
-    StepTitle(R.string.try_step_title, R.string.try_step_body)
+    StepTitle(R.string.try_step_title, R.string.try_step_body, Icons.Rounded.Edit)
     if (!state.setup.model) ModelProgressLine(state.downloads)
     PracticeArea(
         practice = state.practice,
@@ -414,6 +418,7 @@ private fun TryStep(state: MainUiState, level: Float, callbacks: OnboardingCallb
 
 @Composable
 private fun DoneStep(canRun: Boolean) {
+    HeroIcon(Icons.Rounded.CheckCircle)
     Text(stringResource(R.string.done_title), style = MaterialTheme.typography.headlineLarge)
     Text(
         stringResource(R.string.done_body),
