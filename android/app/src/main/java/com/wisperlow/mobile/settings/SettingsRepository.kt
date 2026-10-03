@@ -2,9 +2,11 @@ package com.wisperlow.mobile.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,7 +23,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wisperlow_settings")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "wisperlow_settings",
+    // A corrupt settings file would otherwise throw from the Eagerly-started
+    // flow and crash the app on every launch; fall back to defaults instead.
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /** How long a pause in speech must last before dictation finishes on its own. */
 enum class AutoStop(val silenceMs: Long) {
