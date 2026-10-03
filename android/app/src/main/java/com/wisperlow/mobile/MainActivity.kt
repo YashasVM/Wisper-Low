@@ -142,10 +142,7 @@ class MainActivity : ComponentActivity() {
     private fun copyText(text: String) {
         getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText(getString(R.string.clipboard_transcript_label), text))
-        // Android 13+ confirms copies itself.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
-        }
+        // Confirmation is shown as an in-app snackbar by the caller.
     }
 
     private fun open(intent: Intent) {

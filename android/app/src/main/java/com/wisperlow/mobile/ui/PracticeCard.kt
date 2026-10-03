@@ -152,3 +152,8 @@ class AppActions(
     val copyText: (String) -> Unit,
     val isMetered: () -> Boolean,
 )
+
+fun AppActions.withCopy(copy: (String) -> Unit) = AppActions(
+    requestMicrophone, openOverlaySettings, openAccessibilitySettings, openAppInfo,
+    startBubble, stopBubble, copy, isMetered,
+)

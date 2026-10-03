@@ -1,6 +1,15 @@
 package com.wisperlow.mobile.ui
 
+import android.content.Intent
 import android.text.format.DateUtils
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -121,9 +130,43 @@ fun HistoryScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit)?, modifier: Modifier = Modifier) {
+    if (onDelete == null) {
+        HistoryCard(entry, onCopy, null, modifier)
+        return
+    }
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value != SwipeToDismissBoxValue.Settled) onDelete()
+            // The row leaves the list through the delete; never keep it in a dismissed state.
+            false
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier,
+        backgroundContent = {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer, MaterialTheme.shapes.medium)
+                    .padding(horizontal = Space.M),
+                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        },
+    ) { HistoryCard(entry, onCopy, onDelete, Modifier) }
+}
+
+@Composable
+private fun HistoryCard(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit)?, modifier: Modifier) {
+    val context = LocalContext.current
+    val shareLabel = stringResource(R.string.action_share)
     Surface(
+        onClick = onCopy,
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
@@ -141,6 +184,12 @@ fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit
                 )
                 IconButton(onClick = onCopy) {
                     Icon(Icons.Rounded.ContentCopy, contentDescription = stringResource(R.string.action_copy))
+                }
+                IconButton(onClick = {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, entry.text)
+                    runCatching { context.startActivity(Intent.createChooser(send, shareLabel).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) {
+                    Icon(Icons.Rounded.Share, contentDescription = shareLabel)
                 }
                 if (onDelete != null) {
                     IconButton(onClick = onDelete) {

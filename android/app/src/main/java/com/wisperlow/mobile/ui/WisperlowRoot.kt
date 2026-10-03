@@ -97,6 +97,15 @@ private fun MainTabs(
     val settingsList = rememberLazyListState()
     val context = LocalContext.current
     val tab = Tab.entries[tabIndex]
+    val copiedMessage = stringResource(R.string.copied)
+    // One consistent confirmation for every copy, instead of a toast on some OS versions only.
+    val copy: (String) -> Unit = { text ->
+        actions.copyText(text)
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(copiedMessage)
+        }
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -124,7 +133,7 @@ private fun MainTabs(
             Tab.HOME -> HomeScreen(
                 state = state,
                 level = level,
-                actions = actions,
+                actions = actions.withCopy(copy),
                 callbacks = HomeCallbacks(
                     onOpenGuide = onOpenGuide,
                     onSeeHistory = { tabIndex = Tab.HISTORY.ordinal },
@@ -141,7 +150,7 @@ private fun MainTabs(
             Tab.HISTORY -> HistoryScreen(
                 state = state,
                 contentPadding = padding,
-                onCopy = { actions.copyText(it.text) },
+                onCopy = { copy(it.text) },
                 onDelete = { entry ->
                     viewModel.deleteHistory(entry)
                     scope.launch {
