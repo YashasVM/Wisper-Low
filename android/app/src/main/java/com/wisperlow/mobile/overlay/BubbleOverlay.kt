@@ -381,6 +381,8 @@ class BubbleOverlay(
 
     // ---- UI ----
 
+    // The content lambda reads the captured `state`; the AnimatedContent target is only the state's class (the transition key).
+    @android.annotation.SuppressLint("UnusedContentLambdaTargetStateParameter")
     @Composable
     private fun Bubble() {
         val state = ui
