@@ -78,9 +78,6 @@
     <string name="welcome_title">Talk instead of type, in any app</string>
     <string name="welcome_body">Wisperlow puts a small microphone bubble next to your keyboard. Tap it, speak, and your words are typed for you.</string>
     <string name="welcome_point_private">Everything runs on your phone. Your voice never leaves it.</string>
-    <string name="welcome_point_keyboard">Keep your keyboard. Works alongside Gboard, Samsung Keyboard and others.</string>
-    <string name="welcome_point_offline">Works offline once the speech model is downloaded.</string>
-    <string name="welcome_setup_time">Setup takes about two minutes. We’ll walk you through each switch.</string>
     <string name="welcome_start">Let’s set it up</string>
 
     <string name="how_title">How it works</string>
