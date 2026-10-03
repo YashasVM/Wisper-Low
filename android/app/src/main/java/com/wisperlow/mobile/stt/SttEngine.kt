@@ -7,11 +7,9 @@ import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 
-class SttEngine(private val modelDir: File) {
+class SttEngine(val modelDir: File) {
 
     // Loading and native inference both mutate sherpa's native state. Keep the
     // lifecycle and decode operations serialized so a reload cannot publish a
@@ -22,17 +20,18 @@ class SttEngine(private val modelDir: File) {
     val isLoaded: Boolean
         get() = synchronized(lifecycleLock) { recognizer != null }
 
-    suspend fun load(): Boolean = withContext(Dispatchers.Default) {
+    /** Allocates the native recognizer. Blocking; call from a worker thread. */
+    fun load(): Boolean {
         synchronized(lifecycleLock) {
-            if (recognizer != null) return@withContext true
+            if (recognizer != null) return true
             try {
                 val config = buildConfig()
                 recognizer = OfflineRecognizer(assetManager = null, config = config)
-                true
+                return true
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to load model from ${modelDir.absolutePath}", t)
                 recognizer = null
-                false
+                return false
             }
         }
     }
@@ -123,13 +122,17 @@ class SttEngine(private val modelDir: File) {
     }
 
     private val inferenceThreads: Int
-        // Two native workers retain the model's accuracy while avoiding a
-        // thread-per-core burst on modern phones (which otherwise competes
-        // with audio capture and heats the device during longer dictation).
-        get() = MAX_THREADS
+        get() = threadsFor(Runtime.getRuntime().availableProcessors())
 
     companion object {
         private const val TAG = "SttEngine"
-        private const val MAX_THREADS = 2
+        private const val MIN_THREADS = 2
+        private const val MAX_THREADS = 4
+
+        /**
+         * Half the cores (big+little mix makes more threads counterproductive),
+         * clamped so decode is faster on 8-core phones without a thermal burst.
+         */
+        fun threadsFor(cores: Int): Int = (cores / 2).coerceIn(MIN_THREADS, MAX_THREADS)
     }
 }

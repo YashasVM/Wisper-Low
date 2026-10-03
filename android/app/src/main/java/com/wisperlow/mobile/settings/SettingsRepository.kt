@@ -2,42 +2,60 @@ package com.wisperlow.mobile.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wisperlow.mobile.stt.ModelCatalog
-import com.wisperlow.mobile.text.PolishMode
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.util.Base64
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wisperlow_settings")
-
-enum class InsertionPreference {
-    QUICK_INSERT,
-    REVIEW_FIRST,
-}
-
-data class VocabularyHint(
-    val canonical: String,
-    val context: String = "",
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "wisperlow_settings",
+    // A corrupt settings file would otherwise throw from the Eagerly-started
+    // flow and crash the app on every launch; fall back to defaults instead.
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
+/** How long a pause in speech must last before dictation finishes on its own. */
+enum class AutoStop(val silenceMs: Long) {
+    SHORT(1_000L),
+    NORMAL(1_600L),
+    RELAXED(2_600L),
+    LONG(4_000L),
+
+    /** Only an explicit tap finishes dictation. */
+    MANUAL(0L),
+}
+
 data class WisperlowSettings(
-    val selectedModelId: String = ModelCatalog.PARAKEET_V3_INT8.id,
+    val selectedModelId: String = ModelCatalog.DEFAULT.id,
     val bubbleEnabled: Boolean = true,
-    val personalDictionary: Map<String, String> = emptyMap(),
-    val polishMode: PolishMode = PolishMode.ORIGINAL,
-    val insertionPreference: InsertionPreference = InsertionPreference.REVIEW_FIRST,
+    /** Show the bubble only while a keyboard is open in another app. Needs Accessibility. */
+    val bubbleOnlyWhenTyping: Boolean = true,
+    /** Show an editable preview before inserting instead of typing immediately. */
+    val reviewBeforeInsert: Boolean = false,
+    val autoStop: AutoStop = AutoStop.NORMAL,
+    /** Keep the speech model in memory between dictations for instant starts. */
+    val keepModelLoaded: Boolean = false,
     val historyEnabled: Boolean = true,
+    val personalDictionary: Map<String, String> = emptyMap(),
     val onboardingCompleted: Boolean = false,
-    val practiceCompleted: Boolean = false,
-    /** Contextual canonical terms supplied to polishing, separate from exact aliases. */
-    val vocabularyHints: List<VocabularyHint> = emptyList(),
 )
 
 @Singleton
@@ -46,78 +64,103 @@ class SettingsRepository @Inject constructor(
 ) {
     private object Keys {
         val selectedModelId = stringPreferencesKey("selected_model_id")
-        val bubbleEnabled = androidx.datastore.preferences.core.booleanPreferencesKey("bubble_enabled")
+        val bubbleEnabled = booleanPreferencesKey("bubble_enabled")
+        val bubbleOnlyWhenTyping = booleanPreferencesKey("bubble_only_when_typing")
+        val reviewBeforeInsert = booleanPreferencesKey("review_before_insert")
+        val autoStop = stringPreferencesKey("auto_stop")
+        val keepModelLoaded = booleanPreferencesKey("keep_model_loaded")
+        val historyEnabled = booleanPreferencesKey("history_enabled")
         val dictionary = stringPreferencesKey("personal_dictionary")
-        val polishMode = stringPreferencesKey("polish_mode")
-        val insertionPreference = stringPreferencesKey("insertion_preference")
-        val historyEnabled = androidx.datastore.preferences.core.booleanPreferencesKey("history_enabled")
-        val onboardingCompleted = androidx.datastore.preferences.core.booleanPreferencesKey("onboarding_completed")
-        val practiceCompleted = androidx.datastore.preferences.core.booleanPreferencesKey("practice_completed")
-        val vocabularyHints = stringPreferencesKey("vocabulary_hints")
+        val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
+        // Older builds stored a pixel x under "bubble_x"; a new key keeps it from being read as a side.
+        val bubbleSide = intPreferencesKey("bubble_side")
+        val bubbleY = intPreferencesKey("bubble_y")
+        val bubbleSideLandscape = intPreferencesKey("bubble_side_landscape")
+        val bubbleYLandscape = intPreferencesKey("bubble_y_landscape")
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     val settings: Flow<WisperlowSettings> = context.dataStore.data.map { prefs ->
-        val selectedModelId = prefs[Keys.selectedModelId]
-            ?.takeIf { ModelCatalog.byId(it) != null }
-            ?: ModelCatalog.PARAKEET_V3_INT8.id
+        val defaults = WisperlowSettings()
         WisperlowSettings(
-            selectedModelId = selectedModelId,
-            bubbleEnabled = prefs[Keys.bubbleEnabled] ?: true,
+            selectedModelId = prefs[Keys.selectedModelId]
+                ?.takeIf { ModelCatalog.byId(it) != null }
+                ?: defaults.selectedModelId,
+            bubbleEnabled = prefs[Keys.bubbleEnabled] ?: defaults.bubbleEnabled,
+            bubbleOnlyWhenTyping = prefs[Keys.bubbleOnlyWhenTyping] ?: defaults.bubbleOnlyWhenTyping,
+            reviewBeforeInsert = prefs[Keys.reviewBeforeInsert] ?: defaults.reviewBeforeInsert,
+            autoStop = parseAutoStop(prefs[Keys.autoStop]),
+            keepModelLoaded = prefs[Keys.keepModelLoaded] ?: defaults.keepModelLoaded,
+            historyEnabled = prefs[Keys.historyEnabled] ?: defaults.historyEnabled,
             personalDictionary = parseDictionary(prefs[Keys.dictionary] ?: ""),
-            polishMode = parsePolishMode(prefs[Keys.polishMode]),
-            insertionPreference = parseInsertionPreference(prefs[Keys.insertionPreference]),
-            historyEnabled = prefs[Keys.historyEnabled] ?: true,
             onboardingCompleted = prefs[Keys.onboardingCompleted] ?: false,
-            practiceCompleted = prefs[Keys.practiceCompleted] ?: false,
-            vocabularyHints = parseVocabularyHints(prefs[Keys.vocabularyHints] ?: ""),
         )
     }
 
-    suspend fun setSelectedModel(id: String) {
-        context.dataStore.edit { it[Keys.selectedModelId] = id }
+    /** Latest settings for synchronous readers such as the overlay and audio callbacks. */
+    val current: StateFlow<WisperlowSettings> get() = _current.asStateFlow()
+
+    private val _current = MutableStateFlow(WisperlowSettings())
+    private val _loaded = MutableStateFlow(false)
+
+    /** False until DataStore delivered its first value; [current] holds defaults until then. */
+    val isLoaded: Boolean get() = _loaded.value
+
+    suspend fun awaitLoaded() {
+        _loaded.first { it }
     }
 
-    suspend fun setBubbleEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[Keys.bubbleEnabled] = enabled }
-    }
-
-    suspend fun setPersonalDictionary(dict: Map<String, String>) {
-        context.dataStore.edit {
-            it[Keys.dictionary] = dict.entries.joinToString("\n") { (k, v) ->
-                "${k.trim()}=${v.replace("\n", " ")}"
+    init {
+        scope.launch {
+            settings.collect { value ->
+                _current.value = value
+                _loaded.value = true
             }
         }
     }
 
-    suspend fun setPolishMode(mode: PolishMode) {
-        context.dataStore.edit { it[Keys.polishMode] = mode.name }
+    /** Saved bubble placement as (side, y): side 0 = left edge, 1 = right edge; y in screen pixels. */
+    fun bubblePosition(landscape: Boolean): Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->
+        // Portrait keeps the original keys so existing positions survive the upgrade.
+        val side = prefs[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] ?: return@map null
+        val y = prefs[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] ?: return@map null
+        side to y
     }
 
-    suspend fun setInsertionPreference(preference: InsertionPreference) {
-        context.dataStore.edit { it[Keys.insertionPreference] = preference.name }
+    suspend fun setSelectedModel(id: String) = edit { it[Keys.selectedModelId] = id }
+    suspend fun setBubbleEnabled(enabled: Boolean) = edit { it[Keys.bubbleEnabled] = enabled }
+    suspend fun setBubbleOnlyWhenTyping(enabled: Boolean) = edit { it[Keys.bubbleOnlyWhenTyping] = enabled }
+    suspend fun setReviewBeforeInsert(enabled: Boolean) = edit { it[Keys.reviewBeforeInsert] = enabled }
+    suspend fun setAutoStop(value: AutoStop) = edit { it[Keys.autoStop] = value.name }
+    suspend fun setKeepModelLoaded(enabled: Boolean) = edit { it[Keys.keepModelLoaded] = enabled }
+    suspend fun setHistoryEnabled(enabled: Boolean) = edit { it[Keys.historyEnabled] = enabled }
+    suspend fun setOnboardingCompleted(completed: Boolean) = edit { it[Keys.onboardingCompleted] = completed }
+
+    suspend fun setPersonalDictionary(dict: Map<String, String>) = edit {
+        it[Keys.dictionary] = serializeDictionary(dict)
     }
 
-    suspend fun setHistoryEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[Keys.historyEnabled] = enabled }
+    suspend fun setBubblePosition(landscape: Boolean, side: Int, y: Int) = edit {
+        it[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] = side
+        it[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] = y
     }
 
-    suspend fun setOnboardingCompleted(completed: Boolean) {
-        context.dataStore.edit { it[Keys.onboardingCompleted] = completed }
+    suspend fun clearBubblePosition() = edit {
+        it.remove(Keys.bubbleSide)
+        it.remove(Keys.bubbleY)
+        it.remove(Keys.bubbleSideLandscape)
+        it.remove(Keys.bubbleYLandscape)
     }
 
-    suspend fun setPracticeCompleted(completed: Boolean) {
-        context.dataStore.edit { it[Keys.practiceCompleted] = completed }
-    }
-
-    suspend fun setVocabularyHints(hints: List<VocabularyHint>) {
-        context.dataStore.edit { it[Keys.vocabularyHints] = serializeVocabularyHints(hints) }
+    private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        context.dataStore.edit(block)
     }
 
     companion object {
-        fun parsePolishMode(raw: String?): PolishMode = parseEnum(raw, PolishMode.ORIGINAL)
-
-        fun parseInsertionPreference(raw: String?): InsertionPreference =
-            parseEnum(raw, InsertionPreference.REVIEW_FIRST)
+        fun parseAutoStop(raw: String?): AutoStop =
+            raw?.trim()?.uppercase()?.let { value -> AutoStop.entries.firstOrNull { it.name == value } }
+                ?: AutoStop.NORMAL
 
         fun parseDictionary(raw: String): Map<String, String> =
             raw.lineSequence()
@@ -129,45 +172,9 @@ class SettingsRepository @Inject constructor(
                 .filter { (k, v) -> k.isNotEmpty() && v.isNotEmpty() }
                 .toMap()
 
-        fun parseVocabularyHints(raw: String): List<VocabularyHint> =
-            raw.lineSequence()
-                .mapNotNull { line ->
-                    val parts = line.split('\t')
-                    if (parts.size != 2) return@mapNotNull null
-                    runCatching {
-                        VocabularyHint(
-                            canonical = decode(parts[0]),
-                            context = decode(parts[1]),
-                        )
-                    }.getOrNull()
-                }
-                .filter { it.canonical.isNotBlank() }
-                .distinct()
-                .toList()
-
-        fun serializeVocabularyHints(hints: List<VocabularyHint>): String =
-            hints.asSequence()
-                .map { hint ->
-                    val canonical = hint.canonical.replace('\n', ' ').trim()
-                    val context = hint.context.replace('\n', ' ').trim()
-                    canonical to context
-                }
-                .filter { (canonical, _) -> canonical.isNotEmpty() }
-                .distinct()
-                .joinToString("\n") { (canonical, context) ->
-                    "${encode(canonical)}\t${encode(context)}"
-                }
-
-        private inline fun <reified T : Enum<T>> parseEnum(raw: String?, fallback: T): T =
-            raw?.trim()
-                ?.takeIf(String::isNotEmpty)
-                ?.let { value -> runCatching { enumValueOf<T>(value.uppercase()) }.getOrNull() }
-                ?: fallback
-
-        private fun encode(value: String): String =
-            Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
-
-        private fun decode(value: String): String =
-            String(Base64.getDecoder().decode(value), Charsets.UTF_8)
+        fun serializeDictionary(dict: Map<String, String>): String =
+            dict.entries.joinToString("\n") { (k, v) ->
+                "${k.replace("\n", " ").replace("=", " ").trim()}=${v.replace("\n", " ").trim()}"
+            }
     }
 }

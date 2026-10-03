@@ -23,11 +23,11 @@ android {
 
     defaultConfig {
         applicationId = "com.wisperlow.mobile"
-        minSdk = 33
+        minSdk = 29
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 5
+        versionName = "0.4.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -46,7 +46,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.findByName("release")
+            isShrinkResources = true
+            // Without CI signing secrets, fall back to the local debug key so a
+            // release build is still installable for personal testing.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -60,6 +63,16 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    splits {
+        // One small APK per CPU type for sideloading, plus a universal fallback.
+        // Play bundles split by ABI on their own.
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -80,6 +93,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 

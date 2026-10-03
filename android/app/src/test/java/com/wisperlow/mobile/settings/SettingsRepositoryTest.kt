@@ -1,6 +1,5 @@
 package com.wisperlow.mobile.settings
 
-import com.wisperlow.mobile.text.PolishMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,34 +7,22 @@ import org.junit.Test
 
 class SettingsRepositoryTest {
     @Test
-    fun defaultsPreserveExistingInstallBehavior() {
+    fun defaultsFavorFastInsertion() {
         val defaults = WisperlowSettings()
 
-        assertEquals(PolishMode.ORIGINAL, defaults.polishMode)
-        assertEquals(InsertionPreference.REVIEW_FIRST, defaults.insertionPreference)
+        assertFalse(defaults.reviewBeforeInsert)
+        assertEquals(AutoStop.NORMAL, defaults.autoStop)
         assertTrue(defaults.historyEnabled)
+        assertTrue(defaults.bubbleOnlyWhenTyping)
         assertFalse(defaults.onboardingCompleted)
-        assertFalse(defaults.practiceCompleted)
-        assertTrue(defaults.vocabularyHints.isEmpty())
     }
 
     @Test
-    fun enumParsersUseSafeDefaultsForUnknownAndCorruptValues() {
-        assertEquals(PolishMode.POLISHED, SettingsRepository.parsePolishMode(" polished "))
-        assertEquals(PolishMode.ORIGINAL, SettingsRepository.parsePolishMode("not-a-mode"))
-        assertEquals(PolishMode.ORIGINAL, SettingsRepository.parsePolishMode("%$#"))
-        assertEquals(
-            InsertionPreference.QUICK_INSERT,
-            SettingsRepository.parseInsertionPreference("quick_insert"),
-        )
-        assertEquals(
-            InsertionPreference.REVIEW_FIRST,
-            SettingsRepository.parseInsertionPreference("missing"),
-        )
-        assertEquals(
-            InsertionPreference.REVIEW_FIRST,
-            SettingsRepository.parseInsertionPreference(null),
-        )
+    fun autoStopParserUsesSafeDefaultForUnknownValues() {
+        assertEquals(AutoStop.RELAXED, SettingsRepository.parseAutoStop(" relaxed "))
+        assertEquals(AutoStop.MANUAL, SettingsRepository.parseAutoStop("MANUAL"))
+        assertEquals(AutoStop.NORMAL, SettingsRepository.parseAutoStop("%$#"))
+        assertEquals(AutoStop.NORMAL, SettingsRepository.parseAutoStop(null))
     }
 
     @Test
@@ -59,39 +46,14 @@ class SettingsRepositoryTest {
 
         assertEquals(1, parsed.size)
         assertEquals("second", parsed["hello"])
-        assertFalse(parsed.containsKey("HELLO"))
     }
 
     @Test
-    fun vocabularyHintsHaveSeparateContextAndIgnoreCorruptRecords() {
-        val hints = listOf(
-            VocabularyHint("GPT-5.6 Sol", "the orchestration model"),
-            VocabularyHint("Wisperlow", "the Android app"),
-        )
+    fun dictionaryRoundTripsWithoutBreakingOnSeparators() {
+        val dict = mapOf("wisper low" to "Wisperlow", "a=b" to "line\nbreak")
+        val parsed = SettingsRepository.parseDictionary(SettingsRepository.serializeDictionary(dict))
 
-        val serialized = SettingsRepository.serializeVocabularyHints(hints)
-        val parsed = SettingsRepository.parseVocabularyHints(
-            "$serialized\nnot-base64\tstill-not-enough-fields\n",
-        )
-
-        assertEquals(hints, parsed)
-        assertEquals("the orchestration model", parsed.first().context)
-        assertFalse(SettingsRepository.parseDictionary("soul=Sol").containsKey("GPT-5.6 Sol"))
-    }
-
-    @Test
-    fun vocabularyHintsNormalizeLineBreaksAndDuplicateEntries() {
-        val serialized = SettingsRepository.serializeVocabularyHints(
-            listOf(
-                VocabularyHint("  Acme  ", "first\ncontext"),
-                VocabularyHint("Acme", "first context"),
-                VocabularyHint("", "ignored"),
-            ),
-        )
-
-        assertEquals(
-            listOf(VocabularyHint("Acme", "first context")),
-            SettingsRepository.parseVocabularyHints(serialized),
-        )
+        assertEquals("Wisperlow", parsed["wisper low"])
+        assertEquals("line break", parsed["a b"])
     }
 }

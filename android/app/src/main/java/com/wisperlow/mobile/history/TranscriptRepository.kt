@@ -25,19 +25,22 @@ data class TranscriptEntry(
 )
 
 @Singleton
-class TranscriptRepository @Inject constructor(
-    @ApplicationContext context: Context,
-) {
-    private val file = AtomicFile(File(context.filesDir, "transcripts.txt"))
+class TranscriptRepository internal constructor(private val store: TranscriptStore) {
+
+    @Inject
+    constructor(@ApplicationContext context: Context) :
+        this(AtomicFileStore(AtomicFile(File(context.filesDir, "transcripts.txt"))))
+
     private val lock = Any()
     private var loaded = false
     private val _entries = MutableStateFlow<List<TranscriptEntry>>(emptyList())
 
     val entries: StateFlow<List<TranscriptEntry>> = _entries.asStateFlow()
 
+    /** Loads history; an unreadable file is logged and retried on the next call, never overwritten. */
     suspend fun load() {
         withContext(Dispatchers.IO) {
-            synchronized(lock) { loadLocked() }
+            synchronized(lock) { runCatching { loadLocked() } }
         }
     }
 
@@ -83,23 +86,65 @@ class TranscriptRepository @Inject constructor(
         }
     }
 
+    /** Puts back an entry removed by [delete], e.g. for undo. */
+    suspend fun restore(entry: TranscriptEntry) {
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                loadLocked()
+                if (_entries.value.any { it.id == entry.id }) return@synchronized
+                val updated = TranscriptHistory.bound(_entries.value + entry)
+                writeEntries(updated)
+                _entries.value = updated
+            }
+        }
+    }
+
+    suspend fun clear() {
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                // Clearing is an explicit user choice, so it is allowed even when the old file is unreadable.
+                writeEntries(emptyList())
+                _entries.value = emptyList()
+                loaded = true
+            }
+        }
+    }
+
+    /**
+     * Throws when the file exists but cannot be read, leaving [loaded] false so
+     * that no write can replace history we failed to read with a single entry.
+     */
     private fun loadLocked() {
         if (loaded) return
         _entries.value = TranscriptHistory.bound(readEntries())
         loaded = true
     }
 
-    private fun readEntries(): List<TranscriptEntry> = runCatching {
-        file.openRead().bufferedReader().useLines { lines ->
-            lines.mapNotNull(TranscriptLineCodec::decode).toList()
-        }
-    }.getOrDefault(emptyList())
+    private fun readEntries(): List<TranscriptEntry> = try {
+        store.read()?.lineSequence()?.mapNotNull(TranscriptLineCodec::decode)?.toList().orEmpty()
+    } catch (_: java.io.FileNotFoundException) {
+        emptyList()
+    }
 
     private fun writeEntries(entries: List<TranscriptEntry>) {
+        store.write(entries.joinToString("\n", transform = TranscriptLineCodec::encode))
+    }
+}
+
+/** Persistence seam: [read] throws [java.io.FileNotFoundException] when nothing was saved yet. */
+internal interface TranscriptStore {
+    fun read(): String?
+    fun write(text: String)
+}
+
+private class AtomicFileStore(private val file: AtomicFile) : TranscriptStore {
+    override fun read(): String = file.openRead().bufferedReader().use { it.readText() }
+
+    override fun write(text: String) {
         val output = file.startWrite()
         try {
             OutputStreamWriter(output, Charsets.UTF_8).apply {
-                write(entries.joinToString("\n", transform = TranscriptLineCodec::encode))
+                write(text)
                 flush()
             }
             file.finishWrite(output)

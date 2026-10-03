@@ -37,6 +37,8 @@ sealed interface DownloadState {
     data class Downloading(
         val downloadedBytes: Long,
         val totalBytes: Long,
+        /** DownloadManager is holding the transfer until Wi-Fi (or any network) returns. */
+        val waitingForNetwork: Boolean = false,
     ) : DownloadState {
         val progressPct: Int
             get() = if (totalBytes > 0L) {
@@ -89,11 +91,8 @@ class ModelDownloader @Inject constructor(
                 // A live operation may already be extracting. Preserve its
                 // Extracting state when refresh is called from the UI.
                 if (inFlight[model.id] == null) {
-                    setState(
-                        model.id,
-                        DownloadState.Downloading(snapshot.downloadedBytes, snapshot.totalBytes),
-                    )
-                    ensureOperation(model)
+                    setState(model.id, snapshot.toState())
+                    ensureOperation(model, allowMobileData = false)
                 }
             } else {
                 clearPersistedDownload(model.id)
@@ -116,28 +115,47 @@ class ModelDownloader @Inject constructor(
         }
     }
 
-    /** Starts or attaches to the one operation for this model. */
-    suspend fun download(model: SttModel): File {
+    /**
+     * Starts or attaches to the one operation for this model. Without
+     * [allowMobileData] the transfer waits for an unmetered network.
+     */
+    suspend fun download(model: SttModel, allowMobileData: Boolean = false): File {
         installedDirFor(model.id)?.let { installed ->
             setState(model.id, DownloadState.Completed(installed))
             return installed
         }
-        return ensureOperation(model).await()
+        if (allowMobileData && persistedMobileData(model.id) == false) {
+            // A queued Wi-Fi-only request cannot be changed; replace it.
+            cancelDownload(model.id)
+        }
+        return ensureOperation(model, allowMobileData).await()
     }
 
+    /** Stops an in-progress download and discards its partial archive. */
+    fun cancelDownload(modelId: String) {
+        inFlight.remove(modelId)?.cancel()
+        persistedDownloadId(modelId)?.let { id ->
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            runCatching { downloadManager.remove(id) }
+        }
+        clearPersistedDownload(modelId)
+        if (installedDirFor(modelId) == null) setState(modelId, DownloadState.NotStarted)
+    }
+
+    /** Deletes an installed model. Release any loaded recognizer for it first. */
     fun deleteModel(modelId: String) {
         val model = ModelCatalog.byId(modelId) ?: return
+        cancelDownload(modelId)
         File(modelsRoot, model.dirName).deleteRecursively()
-        clearPersistedDownload(modelId)
         setState(modelId, DownloadState.NotStarted)
     }
 
-    private fun ensureOperation(model: SttModel): Deferred<File> {
+    private fun ensureOperation(model: SttModel, allowMobileData: Boolean): Deferred<File> {
         inFlight[model.id]?.let { return it }
 
         lateinit var operation: Deferred<File>
         operation = downloadScope.async(start = CoroutineStart.LAZY) {
-            performDownload(model)
+            performDownload(model, allowMobileData)
         }
         operation.invokeOnCompletion {
             inFlight.remove(model.id, operation)
@@ -152,11 +170,11 @@ class ModelDownloader @Inject constructor(
         return operation
     }
 
-    private suspend fun performDownload(model: SttModel): File {
+    private suspend fun performDownload(model: SttModel, allowMobileData: Boolean): File {
         var archive: File? = null
         var preserveDownload = false
         try {
-            val downloadId = findOrEnqueue(model)
+            val downloadId = findOrEnqueue(model, allowMobileData)
             archive = awaitDownload(downloadId, model)
             if (archive.length() != model.archiveSizeBytes) {
                 throw IOException(
@@ -169,7 +187,7 @@ class ModelDownloader @Inject constructor(
                 extract(archive, model)
             }
             setState(model.id, DownloadState.Completed(installedDir))
-            clearPersistedDownload(model.id)
+            discardDownloadEntry(model.id)
             return installedDir
         } catch (cancelled: CancellationException) {
             // DownloadManager continues independently of this coroutine. Keep
@@ -178,11 +196,12 @@ class ModelDownloader @Inject constructor(
             preserveDownload = true
             throw cancelled
         } catch (error: Throwable) {
+            Log.e(TAG, "Installing ${model.id} failed", error)
             setState(
                 model.id,
                 DownloadState.Failed(error.message ?: "Model download failed"),
             )
-            clearPersistedDownload(model.id)
+            discardDownloadEntry(model.id)
             throw error
         } finally {
             if (!preserveDownload) {
@@ -195,7 +214,7 @@ class ModelDownloader @Inject constructor(
         }
     }
 
-    private fun findOrEnqueue(model: SttModel): Long {
+    private fun findOrEnqueue(model: SttModel, allowMobileData: Boolean): Long {
         val persistedId = persistedDownloadId(model.id)
         if (persistedId != null) {
             val snapshot = querySnapshot(persistedId)
@@ -227,16 +246,18 @@ class ModelDownloader @Inject constructor(
             setTitle(model.archiveName)
             setDescription(model.displayName)
             setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setAllowedNetworkTypes(
-                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE,
-            )
-            setAllowedOverMetered(true)
-            setAllowedOverRoaming(true)
+            // The archive is hundreds of megabytes: never spend mobile data
+            // or roaming allowance unless the user explicitly chose to.
+            setAllowedOverMetered(allowMobileData)
+            setAllowedOverRoaming(false)
             setDestinationUri(Uri.fromFile(destination))
         }
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         return downloadManager.enqueue(request).also { id ->
-            preferences.edit().putLong(downloadKey(model.id), id).apply()
+            preferences.edit()
+                .putLong(downloadKey(model.id), id)
+                .putBoolean(mobileDataKey(model.id), allowMobileData)
+                .apply()
         }
     }
 
@@ -253,13 +274,7 @@ class ModelDownloader @Inject constructor(
                     throw IOException("Download failed: reason=${snapshot.reason}")
                 }
                 snapshot.isActive -> {
-                    setState(
-                        model.id,
-                        DownloadState.Downloading(
-                            snapshot.downloadedBytes,
-                            snapshot.totalBytes,
-                        ),
-                    )
+                    setState(model.id, snapshot.toState())
                     delay(POLL_INTERVAL_MS)
                 }
                 else -> throw IOException("Download stopped unexpectedly")
@@ -420,6 +435,15 @@ class ModelDownloader @Inject constructor(
         return hasTokens && (hasTransducer || hasSingleNemoModel)
     }
 
+    /** Removes the system download record too, so finished or failed transfers don't linger in Downloads. */
+    private fun discardDownloadEntry(modelId: String) {
+        persistedDownloadId(modelId)?.let { id ->
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            runCatching { downloadManager.remove(id) }
+        }
+        clearPersistedDownload(modelId)
+    }
+
     private fun setState(modelId: String, state: DownloadState) {
         _states.update { states -> states + (modelId to state) }
     }
@@ -427,11 +451,15 @@ class ModelDownloader @Inject constructor(
     private fun persistedDownloadId(modelId: String): Long? =
         preferences.getLong(downloadKey(modelId), -1L).takeIf { it > 0L }
 
+    private fun persistedMobileData(modelId: String): Boolean? =
+        if (preferences.contains(mobileDataKey(modelId))) preferences.getBoolean(mobileDataKey(modelId), false) else null
+
     private fun clearPersistedDownload(modelId: String) {
-        preferences.edit().remove(downloadKey(modelId)).apply()
+        preferences.edit().remove(downloadKey(modelId)).remove(mobileDataKey(modelId)).apply()
     }
 
     private fun downloadKey(modelId: String): String = "download_id_$modelId"
+    private fun mobileDataKey(modelId: String): String = "download_mobile_$modelId"
 
     private data class DownloadSnapshot(
         val status: Int,
@@ -444,6 +472,13 @@ class ModelDownloader @Inject constructor(
             get() = status == DownloadManager.STATUS_PENDING ||
                 status == DownloadManager.STATUS_RUNNING ||
                 status == DownloadManager.STATUS_PAUSED
+
+        fun toState(): DownloadState.Downloading = DownloadState.Downloading(
+            downloadedBytes = downloadedBytes,
+            totalBytes = totalBytes,
+            waitingForNetwork = status == DownloadManager.STATUS_PAUSED &&
+                reason != DownloadManager.PAUSED_UNKNOWN,
+        )
     }
 
     companion object {

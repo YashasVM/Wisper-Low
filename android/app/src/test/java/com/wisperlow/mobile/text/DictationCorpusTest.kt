@@ -62,7 +62,7 @@ class DictationCorpusTest {
         ).run()
         val grammarCase = report.observations.single { it.case.id == "grammar_more_better" }
 
-        assertEquals("I I want uh the onboarding to be more better", grammarCase.actualOutput)
+        assertEquals("I want the onboarding to be more better", grammarCase.actualOutput)
         assertEquals("I want the onboarding to be better.", grammarCase.case.expectedPolishedText)
         assertFalse(grammarCase.actualOutput == grammarCase.case.expectedPolishedText)
     }

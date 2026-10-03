@@ -43,7 +43,9 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         val bufferBytes = minBuffer * 4
         return try {
             val created = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
+                // VOICE_RECOGNITION skips the call-oriented AGC/echo processing
+                // that smears consonants and hurts recognizer accuracy.
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
@@ -122,6 +124,7 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         }
         val chunk = ShortArray(CHUNK_FRAMES)
         var emptyReads = 0
+        try {
             while (running && record === rec) {
                 val n = try {
                     rec.read(chunk, 0, CHUNK_FRAMES, AudioRecord.READ_BLOCKING)
@@ -130,10 +133,6 @@ class AudioEngine(private val sampleRate: Int = 16000) {
                     break
                 }
                 if (!running || record !== rec) break
-                if (n == AudioRecord.ERROR_DEAD_OBJECT || n == AudioRecord.ERROR_INVALID_OPERATION) {
-                    notifyReadFailure("AudioRecord stopped with read error: $n")
-                    break
-                }
                 if (n < 0) {
                     notifyReadFailure("AudioRecord read failed: $n")
                     break
@@ -161,8 +160,16 @@ class AudioEngine(private val sampleRate: Int = 16000) {
                 val samples = if (n == CHUNK_FRAMES) chunk else chunk.copyOf(n)
                 listener?.invoke(samples, level.toFloat())
             }
- {
-            if (record === rec) running = false
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            // The worker owns the native handle so it is never released while
+            // a blocking read is still inside the vendor HAL.
+            if (record === rec) {
+                running = false
+                record = null
+            }
+            runCatching { rec.stop() }
             runCatching { rec.release() }
         }
     }

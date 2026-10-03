@@ -1,0 +1,196 @@
+package com.wisperlow.mobile.ui
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MicOff
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.wisperlow.mobile.MainUiState
+import com.wisperlow.mobile.R
+
+class HomeCallbacks(
+    val onOpenGuide: () -> Unit,
+    val onSeeHistory: () -> Unit,
+    val onTogglePractice: () -> Unit,
+    val onPracticeText: (String) -> Unit,
+    val onClearPractice: () -> Unit,
+    val onOpenModels: () -> Unit,
+)
+
+@Composable
+fun HomeScreen(
+    state: MainUiState,
+    level: Float,
+    actions: AppActions,
+    callbacks: HomeCallbacks,
+    contentPadding: PaddingValues,
+) {
+    var tipsOpen by rememberSaveable { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = screenPadding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.M),
+    ) {
+        item { BubbleStatusCard(state, level, actions, callbacks) }
+        val fixes = fixesFor(state, actions, callbacks)
+        if (fixes.isNotEmpty()) {
+            item {
+                SectionCard(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
+                    fixes.forEach { fix ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Sm)) {
+                            Icon(Icons.Rounded.WarningAmber, contentDescription = null)
+                            Text(stringResource(fix.label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = fix.action) { Text(stringResource(R.string.action_fix)) }
+                        }
+                    }
+                    SecondaryCta(stringResource(R.string.home_guide), callbacks.onOpenGuide, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        item {
+            SectionCard {
+                Text(stringResource(R.string.try_step_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                PracticeArea(
+                    practice = state.practice,
+                    dictation = state.dictation,
+                    level = level,
+                    modelReady = state.setup.model && state.setup.microphone,
+                    onToggle = callbacks.onTogglePractice,
+                    onTextChange = callbacks.onPracticeText,
+                    onClear = callbacks.onClearPractice,
+                )
+            }
+        }
+        item {
+            SectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.home_tips_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
+                    IconButton(onClick = { tipsOpen = !tipsOpen }) {
+                        Icon(
+                            if (tipsOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                            contentDescription = stringResource(R.string.home_tips_title),
+                        )
+                    }
+                }
+                if (tipsOpen) UsageTips()
+            }
+        }
+        if (state.history.isNotEmpty()) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem()) {
+                    SectionHeader(stringResource(R.string.home_recent), Modifier.weight(1f))
+                    TextButton(onClick = callbacks.onSeeHistory) { Text(stringResource(R.string.home_see_all)) }
+                }
+            }
+            items(state.history.take(3), key = { it.id }) { entry ->
+                HistoryRow(entry = entry, onCopy = { actions.copyText(entry.text) }, onDelete = null, modifier = Modifier.animateItem())
+            }
+        }
+    }
+}
+
+@Composable
+private fun BubbleStatusCard(state: MainUiState, level: Float, actions: AppActions, callbacks: HomeCallbacks) {
+    val on = state.bubbleRunning
+    val canRun = state.setup.canRunBubble
+    val cardColor by animateColorAsState(
+        if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        Motion.tween(),
+        label = "heroCard",
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val idle = MaterialTheme.colorScheme.outline
+    val spec = if (on) OrbSpec(primary, secondary, 0.55f) else OrbSpec(idle, idle.copy(alpha = 0.6f), 0.1f)
+    SectionCard(
+        color = cardColor,
+        contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
+            AuroraOrb(
+                spec = spec,
+                level = if (on) level else 0f,
+                modifier = Modifier.size(HeroOrbSize),
+                center = {
+                    Icon(
+                        if (on) Icons.Rounded.Mic else Icons.Rounded.MicOff,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(Space.L),
+                    )
+                },
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.Xs)) {
+                Text(
+                    stringResource(if (on) R.string.home_on_title else R.string.home_off_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    stringResource(
+                        when {
+                            on -> R.string.home_on_body
+                            canRun -> R.string.home_off_body
+                            else -> R.string.home_needs_setup
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        if (on) {
+            SecondaryCta(stringResource(R.string.home_turn_off), actions.stopBubble, Modifier.fillMaxWidth())
+        } else if (canRun) {
+            PrimaryCta(stringResource(R.string.home_turn_on), actions.startBubble, Modifier.fillMaxWidth())
+        } else {
+            PrimaryCta(stringResource(R.string.home_guide), callbacks.onOpenGuide, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private val HeroOrbSize = 112.dp
+
+private class Fix(val label: Int, val action: () -> Unit)
+
+private fun fixesFor(state: MainUiState, actions: AppActions, callbacks: HomeCallbacks): List<Fix> = buildList {
+    val setup = state.setup
+    if (!setup.model) add(Fix(R.string.home_fix_model, callbacks.onOpenModels))
+    if (!setup.microphone) add(Fix(R.string.home_fix_mic, actions.requestMicrophone))
+    if (!setup.overlay) add(Fix(R.string.home_fix_overlay, actions.openOverlaySettings))
+    if (!setup.accessibility) add(Fix(R.string.home_fix_accessibility, actions.openAccessibilitySettings))
+    if (!setup.notifications && setup.microphone) add(Fix(R.string.home_fix_notifications, actions.openAppInfo))
+}
+
+fun screenPadding(inner: PaddingValues): PaddingValues = PaddingValues(
+    start = Space.Ml,
+    end = Space.Ml,
+    top = inner.calculateTopPadding() + Space.M,
+    bottom = inner.calculateBottomPadding() + Space.L,
+)

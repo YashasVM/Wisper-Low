@@ -37,13 +37,14 @@ class VadEngineInstrumentedTest {
             val vad = VadEngine(model)
             try {
                 assertTrue("VAD failed to load", vad.load())
+                vad.reset(endSilenceMs = 800L)
                 val events = mutableListOf<VadEvent>()
                 feed(vad, pcm, events)
                 feed(vad, ShortArray(16_000), events)
                 assertTrue("Speech start was not detected", VadEvent.SpeechStart in events)
-                assertTrue("Speech end was not detected", VadEvent.SpeechEnd in events)
+                assertTrue("Speech end was not detected", VadEvent.EndOfSpeech in events)
 
-                vad.reset()
+                vad.reset(endSilenceMs = 800L)
                 val silenceEvents = mutableListOf<VadEvent>()
                 feed(vad, ShortArray(16_000), silenceEvents)
                 assertFalse("Reset VAD emitted speech for silence", silenceEvents.isNotEmpty())

@@ -12,19 +12,14 @@ Install JDK 17 and Android SDK 35, then run:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+Debug APKs are written to `app/build/outputs/apk/debug/`. For a smaller,
+faster build to install on a phone, run `./gradlew assembleRelease`; without
+signing secrets it is signed with the local debug key.
 
-The verified build passes 27 JVM unit tests, Android lint (0 errors), and four
-instrumentation tests on an Android 15 x86_64 emulator: activity recreation,
-real-audio VAD detection/reset, service startup/shutdown, and repeated Parakeet
-recognition. The real-audio suite uses the installed upstream model and has no
-skipped tests in that environment. The debug APK is signed for local installation;
-release distribution still requires your signing configuration below.
-
-These checks do not establish a battery, thermal, or transcription-accuracy win
-over Samsung Keyboard on a physical S24 Ultra. The model is unchanged; the
-resource improvements come from lifecycle management, bounded audio capture,
-fewer inference workers, and reduced VAD allocations.
+The build passes 42 JVM unit tests and Android lint with no errors, and
+produces an arm64 release APK of about 31 MB. The four instrumentation tests
+(activity recreation, real-audio VAD, service lifecycle and repeated Parakeet
+recognition) need a device or emulator; see below.
 
 ## Real-model device verification
 
@@ -57,7 +52,7 @@ and punctuation against Samsung Keyboard voice input. Record word error rate,
 technical-term accuracy, cold versus warm load/decode latency, and the
 resulting `adb shell dumpsys meminfo`, `dumpsys thermalservice`, and battery
 statistics. Repeat this on the target Samsung device and at least one lower-
-RAM Android 13+ device before making resource or quality claims.
+RAM Android 10+ device before making resource or quality claims.
 
 The model layout and `nemo_transducer` configuration follow the official
 [sherpa-onnx Parakeet documentation](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html).
@@ -67,28 +62,54 @@ The shipped arm64 native libraries were checked with `readelf`: every
 Android's compatibility guidance is in the
 [16 KB page-size documentation](https://developer.android.com/guide/practices/page-sizes).
 
-## Device setup
+## How it works
 
-The app guides the user through microphone, notification, floating-overlay,
-and Accessibility permissions. Download the default Parakeet model once, turn
-on dictation, focus a text field in any app, and tap the floating bubble.
-Wisperlow loads the local STT model lazily on the first dictation and releases
-it after 120 seconds idle. Audio capture is limited to one minute per
-dictation; all captured frames are sent to review, including quiet starts and
-trailing words. After local transcription and cleanup, edit the review text
-and tap the check mark. Personal dictionary entries support phrases. The app
-does not turn spoken words into built-in voice commands. Text is inserted only
-into the focused editable target captured when recording starts through the
-Accessibility service; otherwise it is copied to the clipboard.
+Wisperlow is a floating microphone bubble that works next to any keyboard
+(Gboard, Samsung Keyboard, …). It is not a keyboard itself.
 
-The current Android target is API 35 with a minimum of API 33 (Android 13).
-The two native STT worker threads reduce contention during inference, but
-battery, thermal, latency, and low-RAM behavior still require measurement on
-real devices.
+1. Tap a text field in any app. When the keyboard opens, the bubble docks
+   just above it (with the Accessibility service on; otherwise it is always
+   visible).
+2. Tap the bubble and speak. It turns purple and shows your words as each
+   phrase is transcribed during natural pauses.
+3. Pause (1.5 s by default, configurable) or tap the bubble to finish. The text
+   is typed straight into the field. Hold the bubble to cancel, drag it to move,
+   or drop it on the ✕ to hide it until the keyboard opens again.
 
-Model downloads require about 1.2 GB of free space while the compressed archive
-and extracted model coexist. Archives are checked against the upstream byte
-size and SHA-256 digest before extraction.
+The first launch walks through every permission with step-by-step help,
+including Android's "Allow restricted settings" unlock that sideloaded apps
+need before their Accessibility service can be enabled, and ends with a
+try-it field.
+
+### Architecture
+
+- `dictation/DictationEngine` owns the microphone, voice detection and
+  speech model for every surface. Recording starts immediately while the model
+  loads, finished phrases are decoded on a dedicated thread while the user keeps
+  talking, and the model is preloaded when a keyboard opens. It is freed after
+  5 idle minutes or when Android reports memory pressure, unless "Keep model
+  ready" is on.
+- `service/DictationService` hosts the bubble as a microphone foreground
+  service; the microphone is only open while the bubble is listening.
+- `accessibility/WisperlowAccessibilityService` reports keyboard visibility
+  and position, and inserts text with a direct set-text action. It falls back to
+  paste (marking the clip as sensitive) only for fields that ignore set-text.
+- Android does not allow apps to restart a microphone service by themselves
+  after a reboot or update, so `RestartReceiver` posts a one-tap notification.
+
+Models download over Wi-Fi unless the user explicitly allows mobile data. They
+need about 2.5× the archive size free during extraction, and archives are
+checked against the upstream size and SHA-256 before extraction.
+
+| Model | Download | Languages |
+| --- | --- | --- |
+| Parakeet 0.6B v3 (default) | 490 MB | English + 24 European |
+| Parakeet 110M | 105 MB | English (fast, low memory) |
+| Parakeet 0.6B v2 | 485 MB | English |
+
+The app targets API 35 with a minimum of API 29 (Android 10). Builds produce
+one APK per CPU type plus a universal APK; phones from the last several years
+use `app-arm64-v8a-*.apk`.
 
 ## Release signing
 
