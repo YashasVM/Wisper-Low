@@ -33,6 +33,15 @@ object Motion {
     fun <T> tween() = androidx.compose.animation.core.tween<T>(ms(Medium), easing = Easing)
     fun <T> fade() = androidx.compose.animation.core.tween<T>(ms(Short), easing = Easing)
     fun <T> slow() = androidx.compose.animation.core.tween<T>(ms(Long), easing = Easing)
+
+    /** Tight tracking for live signals such as the mic level. */
+    fun <T> level() = androidx.compose.animation.core.tween<T>(ms(90), easing = androidx.compose.animation.core.LinearEasing)
+    /** Orb completion: the check draws in, then the ripple fades out. */
+    fun <T> checkDraw() = androidx.compose.animation.core.tween<T>(ms(520), easing = Easing)
+    fun <T> burst() = androidx.compose.animation.core.tween<T>(ms(1100), easing = Easing)
+    /** Ambient orb drift and breathing; slow enough to stay in the background. */
+    fun <T> drift() = androidx.compose.animation.core.tween<T>(9000, easing = androidx.compose.animation.core.LinearEasing)
+    fun <T> breathe() = androidx.compose.animation.core.tween<T>(2400, easing = androidx.compose.animation.core.LinearEasing)
 }
 
 /** Shared spacing scale. */

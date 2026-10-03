@@ -1,9 +1,9 @@
 package com.wisperlow.mobile.ui
 
-import android.animation.ValueAnimator
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,10 +97,9 @@ fun PracticeArea(
 
 @Composable
 private fun MicButton(listening: Boolean, finishing: Boolean, level: Float, enabled: Boolean, onClick: () -> Unit) {
-    val animate = ValueAnimator.areAnimatorsEnabled()
     val pulse by animateFloatAsState(
         targetValue = if (listening) 1f + (level * 4f).coerceIn(0f, 1f) * 0.35f else 1f,
-        animationSpec = tween(if (animate) 90 else 0),
+        animationSpec = Motion.level(),
         label = "micPulse",
     )
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(72.dp)) {
@@ -112,10 +111,12 @@ private fun MicButton(listening: Boolean, finishing: Boolean, level: Float, enab
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
             )
         }
+        val source = remember { MutableInteractionSource() }
         FilledIconButton(
             onClick = onClick,
             enabled = enabled && !finishing,
-            modifier = Modifier.size(60.dp),
+            interactionSource = source,
+            modifier = Modifier.size(60.dp).pressScale(source),
             colors = IconButtonDefaults.filledIconButtonColors(),
         ) {
             if (finishing) {

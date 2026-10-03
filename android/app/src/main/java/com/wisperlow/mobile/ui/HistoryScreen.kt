@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.wisperlow.mobile.MainUiState
 import com.wisperlow.mobile.R
@@ -60,8 +61,8 @@ fun HistoryScreen(
         verticalArrangement = Arrangement.spacedBy(Space.Sm),
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.history_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem()) {
+                ScreenTitle(stringResource(R.string.history_title), Modifier.weight(1f))
                 if (state.history.isNotEmpty()) {
                     TextButton(onClick = { confirmClear = true }) { Text(stringResource(R.string.history_clear_all)) }
                 }
@@ -100,7 +101,7 @@ fun HistoryScreen(
                 )
             }
             else -> items(filtered, key = { it.id }) { entry ->
-                HistoryRow(entry = entry, onCopy = { onCopy(entry) }, onDelete = { onDelete(entry) })
+                HistoryRow(entry = entry, onCopy = { onCopy(entry) }, onDelete = { onDelete(entry) }, modifier = Modifier.animateItem())
             }
         }
     }
@@ -121,14 +122,14 @@ fun HistoryScreen(
 }
 
 @Composable
-fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit)?) {
+fun HistoryRow(entry: TranscriptEntry, onCopy: () -> Unit, onDelete: (() -> Unit)?, modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(start = Space.M, top = 14.dp, end = Space.Xs, bottom = Space.Xs)) {
+        Column(Modifier.padding(start = Space.M, top = Space.Sm, end = Space.Xs, bottom = Space.Xs)) {
             Text(entry.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(end = Space.Sm))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -168,12 +169,12 @@ fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int
         ) {
             HeroIcon(icon)
             Spacer(Modifier.height(Space.Xs))
-            Text(stringResource(title), style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(stringResource(title), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
             Text(
                 stringResource(body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
             )
         }
     }

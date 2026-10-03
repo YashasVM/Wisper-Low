@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,11 +61,11 @@ fun WordsScreen(
                     bottom = it.calculateBottomPadding() + 72.dp,
                 )
             },
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(Space.Sm),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-                    Text(stringResource(R.string.words_title), style = MaterialTheme.typography.headlineMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(Space.Xs), modifier = Modifier.padding(bottom = Space.Xs)) {
+                    ScreenTitle(stringResource(R.string.words_title))
                     Text(
                         stringResource(R.string.words_body),
                         style = MaterialTheme.typography.bodyLarge,
@@ -76,13 +77,15 @@ fun WordsScreen(
                 item { EmptyState(Icons.Rounded.Spellcheck, R.string.words_empty_title, R.string.words_empty_body) }
             }
             items(sorted, key = { it.key }) { (spoken, written) ->
+                val source = remember { MutableInteractionSource() }
                 Surface(
                     onClick = { editing = WordEdit(spoken, spoken, written) },
+                    interactionSource = source,
                     shape = MaterialTheme.shapes.medium,
                     tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().animateItem().pressScale(source),
                 ) {
-                    Row(Modifier.padding(start = Space.M, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = Space.M, top = Space.Xs, bottom = Space.Xs), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(spoken, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(written, style = MaterialTheme.typography.titleMedium)
@@ -100,7 +103,7 @@ fun WordsScreen(
             text = { Text(stringResource(R.string.words_add)) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = Space.Ml, bottom = contentPadding.calculateBottomPadding() + 16.dp),
+                .padding(end = Space.Ml, bottom = contentPadding.calculateBottomPadding() + Space.M),
         )
     }
 

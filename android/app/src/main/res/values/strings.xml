@@ -28,6 +28,8 @@
     <string name="bubble_cancel">Discard</string>
     <string name="bubble_copy">Copy</string>
     <string name="bubble_insert">Insert</string>
+    <string name="demo_sentence">Running ten minutes late, see you soon!</string>
+    <string name="demo_message_hint">Message</string>
     <string name="bubble_inserted">Typed it</string>
     <string name="bubble_copied">Copied</string>
     <string name="bubble_copied_no_field">No text field found. Copied, so you can paste it.</string>

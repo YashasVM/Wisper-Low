@@ -1,12 +1,13 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -15,11 +16,9 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
 import androidx.compose.material.icons.rounded.WarningAmber
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wisperlow.mobile.MainUiState
@@ -57,7 +57,7 @@ fun HomeScreen(
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(Space.M),
     ) {
-        item { BubbleStatusCard(state, actions, callbacks) }
+        item { BubbleStatusCard(state, level, actions, callbacks) }
         val fixes = fixesFor(state, actions, callbacks)
         if (fixes.isNotEmpty()) {
             item {
@@ -69,7 +69,7 @@ fun HomeScreen(
                             TextButton(onClick = fix.action) { Text(stringResource(R.string.action_fix)) }
                         }
                     }
-                    TextButton(onClick = callbacks.onOpenGuide) { Text(stringResource(R.string.home_guide)) }
+                    SecondaryCta(stringResource(R.string.home_guide), callbacks.onOpenGuide, Modifier.fillMaxWidth())
                 }
             }
         }
@@ -103,35 +103,53 @@ fun HomeScreen(
         }
         if (state.history.isNotEmpty()) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.home_recent), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem()) {
+                    SectionHeader(stringResource(R.string.home_recent), Modifier.weight(1f))
                     TextButton(onClick = callbacks.onSeeHistory) { Text(stringResource(R.string.home_see_all)) }
                 }
             }
             items(state.history.take(3), key = { it.id }) { entry ->
-                HistoryRow(entry = entry, onCopy = { actions.copyText(entry.text) }, onDelete = null)
+                HistoryRow(entry = entry, onCopy = { actions.copyText(entry.text) }, onDelete = null, modifier = Modifier.animateItem())
             }
         }
     }
 }
 
 @Composable
-private fun BubbleStatusCard(state: MainUiState, actions: AppActions, callbacks: HomeCallbacks) {
+private fun BubbleStatusCard(state: MainUiState, level: Float, actions: AppActions, callbacks: HomeCallbacks) {
     val on = state.bubbleRunning
     val canRun = state.setup.canRunBubble
+    val cardColor by animateColorAsState(
+        if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        Motion.tween(),
+        label = "heroCard",
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val idle = MaterialTheme.colorScheme.outline
+    val spec = if (on) OrbSpec(primary, secondary, 0.55f) else OrbSpec(idle, idle.copy(alpha = 0.6f), 0.1f)
     SectionCard(
-        color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        contentColor = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        color = cardColor,
+        contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            IconBadge(
-                if (on) Icons.Rounded.Mic else Icons.Rounded.MicOff,
-                tint = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
+            AuroraOrb(
+                spec = spec,
+                level = if (on) level else 0f,
+                modifier = Modifier.size(HeroOrbSize),
+                center = {
+                    Icon(
+                        if (on) Icons.Rounded.Mic else Icons.Rounded.MicOff,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(Space.L),
+                    )
+                },
             )
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.Xs)) {
                 Text(
                     stringResource(if (on) R.string.home_on_title else R.string.home_off_title),
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                 )
                 Text(
                     stringResource(
@@ -146,24 +164,16 @@ private fun BubbleStatusCard(state: MainUiState, actions: AppActions, callbacks:
             }
         }
         if (on) {
-            OutlinedButton(
-                onClick = actions.stopBubble,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) { Text(stringResource(R.string.home_turn_off)) }
+            SecondaryCta(stringResource(R.string.home_turn_off), actions.stopBubble, Modifier.fillMaxWidth())
         } else if (canRun) {
-            Button(onClick = actions.startBubble, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.home_turn_on))
-            }
+            PrimaryCta(stringResource(R.string.home_turn_on), actions.startBubble, Modifier.fillMaxWidth())
         } else {
-            Button(onClick = callbacks.onOpenGuide, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.home_guide))
-            }
+            PrimaryCta(stringResource(R.string.home_guide), callbacks.onOpenGuide, Modifier.fillMaxWidth())
         }
     }
 }
+
+private val HeroOrbSize = 112.dp
 
 private class Fix(val label: Int, val action: () -> Unit)
 
@@ -179,6 +189,6 @@ private fun fixesFor(state: MainUiState, actions: AppActions, callbacks: HomeCal
 fun screenPadding(inner: PaddingValues): PaddingValues = PaddingValues(
     start = Space.Ml,
     end = Space.Ml,
-    top = inner.calculateTopPadding() + 16.dp,
-    bottom = inner.calculateBottomPadding() + 24.dp,
+    top = inner.calculateTopPadding() + Space.M,
+    bottom = inner.calculateBottomPadding() + Space.L,
 )

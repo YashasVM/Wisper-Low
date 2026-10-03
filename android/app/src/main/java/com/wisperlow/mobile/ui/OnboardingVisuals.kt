@@ -2,14 +2,12 @@ package com.wisperlow.mobile.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -83,9 +81,9 @@ fun AuroraOrb(spec: OrbSpec, level: Float, modifier: Modifier = Modifier, center
     val burst = remember { Animatable(1f) }
     LaunchedEffect(spec.complete) {
         if (spec.complete) {
-            check.animateTo(1f, tween(if (Motion.enabled) 520 else 0, easing = Motion.Easing))
+            check.animateTo(1f, Motion.checkDraw())
             burst.snapTo(0f)
-            burst.animateTo(1f, tween(if (Motion.enabled) 1100 else 0, easing = Motion.Easing))
+            burst.animateTo(1f, Motion.burst())
         } else {
             check.snapTo(0f)
             burst.snapTo(1f)
@@ -96,12 +94,12 @@ fun AuroraOrb(spec: OrbSpec, level: Float, modifier: Modifier = Modifier, center
     val transition = rememberInfiniteTransition(label = "orb")
     val phase by transition.animateFloat(
         0f, 1f,
-        infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
+        infiniteRepeatable(Motion.drift(), RepeatMode.Restart),
         label = "orbPhase",
     )
     val pulse by transition.animateFloat(
         0f, 1f,
-        infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        infiniteRepeatable(Motion.breathe(), RepeatMode.Restart),
         label = "orbPulse",
     )
     val motion = Motion.enabled

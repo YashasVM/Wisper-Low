@@ -5,7 +5,17 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,19 +68,37 @@ fun SectionCard(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = color,
-        contentColor = contentColor,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp,
-    ) {
+    val tonal = if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp
+    val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier.animateContentSize(Motion.tween()).padding(Space.Ml),
             verticalArrangement = Arrangement.spacedBy(Space.Sm),
             content = content,
+        )
+    }
+    if (onClick == null) {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            color = color,
+            contentColor = contentColor,
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = tonal,
+            content = body,
+        )
+    } else {
+        val source = remember { MutableInteractionSource() }
+        Surface(
+            onClick = onClick,
+            interactionSource = source,
+            modifier = modifier.fillMaxWidth().pressScale(source),
+            color = color,
+            contentColor = contentColor,
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = tonal,
+            content = body,
         )
     }
 }
@@ -102,7 +130,7 @@ fun IconBadge(icon: ImageVector, modifier: Modifier = Modifier, tint: Color = Ma
 fun IconTextRow(icon: ImageVector, text: AnnotatedString, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(Space.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconBadge(icon)
@@ -161,14 +189,43 @@ fun SwitchRow(
     }
 }
 
+/** Springs to a slightly smaller scale while pressed; shared by buttons and tappable cards. */
+@Composable
+fun Modifier.pressScale(source: InteractionSource, pressedScale: Float = 0.97f): Modifier {
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) pressedScale else 1f, Motion.spring(), label = "pressScale")
+    return graphicsLayer { scaleX = scale; scaleY = scale }
+}
+
+/** Screen title in the display style used by onboarding. */
+@Composable
+fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.displaySmall,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = modifier,
+    )
+}
+
+/** Soft violet wash behind a screen, matching the onboarding backdrop. */
+@Composable
+fun Modifier.screenBackdrop(): Modifier {
+    val tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    val bg = MaterialTheme.colorScheme.background
+    return background(bg).background(Brush.verticalGradient(listOf(tint, bg), endY = 1400f))
+}
+
 /** Primary call to action: one per screen, same size everywhere. */
 @Composable
 fun PrimaryCta(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val source = remember { MutableInteractionSource() }
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled,
         shape = MaterialTheme.shapes.large,
-        modifier = modifier.heightIn(min = 52.dp).androidx_widthIn(),
+        interactionSource = source,
+        modifier = modifier.heightIn(min = 52.dp).androidx_widthIn().pressScale(source),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
@@ -176,8 +233,20 @@ private fun Modifier.androidx_widthIn(): Modifier = this.then(Modifier.widthIn(m
 
 /** Secondary action that sits beside or under a primary one. */
 @Composable
-fun SecondaryCta(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    androidx.compose.material3.OutlinedButton(onClick = onClick, shape = MaterialTheme.shapes.large, modifier = modifier) {
+fun SecondaryCta(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
+) {
+    val source = remember { MutableInteractionSource() }
+    androidx.compose.material3.OutlinedButton(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        colors = colors,
+        interactionSource = source,
+        modifier = modifier.heightIn(min = 52.dp).pressScale(source),
+    ) {
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
 }

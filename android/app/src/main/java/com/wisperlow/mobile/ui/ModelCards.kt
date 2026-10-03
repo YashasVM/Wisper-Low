@@ -1,6 +1,13 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,14 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -119,22 +121,29 @@ private fun ModelCard(
     onDelete: () -> Unit,
 ) {
     val installed = state is DownloadState.Completed
-    OutlinedCard(
+    val container by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        Motion.tween(),
+        label = "modelCard",
+    )
+    val borderColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        Motion.tween(),
+        label = "modelBorder",
+    )
+    val borderWidth by animateDpAsState(if (selected) 2.dp else 1.dp, Motion.spring(), label = "modelBorderW")
+    val source = remember { MutableInteractionSource() }
+    Surface(
         onClick = { if (installed && !selected) onSelect() },
         enabled = installed && !selected,
-        modifier = Modifier.fillMaxWidth(),
+        interactionSource = source,
+        modifier = Modifier.fillMaxWidth().pressScale(source),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            disabledContainerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            disabledContentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-        ),
-        border = BorderStroke(
-            if (selected) 2.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        ),
+        color = container,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(borderWidth, borderColor),
     ) {
-        Column(Modifier.padding(Space.M), verticalArrangement = Arrangement.spacedBy(Space.S)) {
+        Column(Modifier.animateContentSize(Motion.tween()).padding(Space.M), verticalArrangement = Arrangement.spacedBy(Space.S)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
                 Text(model.displayName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
                 Chip(stringResource(R.string.model_size_mb, model.sizeHintMb))
@@ -152,14 +161,11 @@ private fun ModelCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             when (state) {
-                DownloadState.NotStarted -> Button(onClick = onDownload) { Text(stringResource(R.string.model_download)) }
+                DownloadState.NotStarted -> PrimaryCta(stringResource(R.string.model_download), onDownload)
                 is DownloadState.Downloading -> {
-                    if (state.totalBytes > 0 && !state.waitingForNetwork) {
-                        LinearProgressIndicator(progress = { state.progressPct / 100f }, modifier = Modifier.fillMaxWidth())
-                    } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Sm)) {
+                        val determinate = state.totalBytes > 0 && !state.waitingForNetwork
+                        DownloadRing(if (determinate) state.progressPct / 100f else null)
                         Text(
                             when {
                                 state.waitingForNetwork -> stringResource(R.string.model_waiting_wifi)
@@ -172,11 +178,14 @@ private fun ModelCard(
                         TextButton(onClick = onCancel) { Text(stringResource(R.string.model_cancel_download)) }
                     }
                     if (state.waitingForNetwork) {
-                        FilledTonalButton(onClick = onUseMobileData) { Text(stringResource(R.string.model_use_mobile_data)) }
+                        SecondaryCta(stringResource(R.string.model_use_mobile_data), onUseMobileData)
                     }
                 }
-                DownloadState.Extracting -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                DownloadState.Extracting -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space.Sm),
+                ) {
+                    DownloadRing(null)
                     Text(stringResource(R.string.model_extracting), style = MaterialTheme.typography.bodyMedium)
                 }
                 is DownloadState.Completed -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -185,7 +194,7 @@ private fun ModelCard(
                         Text(
                             stringResource(R.string.model_in_use),
                             style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(start = 6.dp).weight(1f),
+                            modifier = Modifier.padding(start = Space.S).weight(1f),
                         )
                     } else {
                         Text(
@@ -194,7 +203,7 @@ private fun ModelCard(
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.weight(1f),
                         )
-                        FilledTonalButton(onClick = onSelect) { Text(stringResource(R.string.model_use)) }
+                        SecondaryCta(stringResource(R.string.model_use), onSelect)
                     }
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Rounded.DeleteOutline, contentDescription = stringResource(R.string.model_delete))
@@ -206,10 +215,27 @@ private fun ModelCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    Button(onClick = onDownload) { Text(stringResource(R.string.model_retry)) }
+                    PrimaryCta(stringResource(R.string.model_retry), onDownload)
                 }
             }
         }
+    }
+}
+
+/** Circular download ring; progress glides between updates, null spins while the size is unknown. */
+@Composable
+private fun DownloadRing(progress: Float?) {
+    val shown by animateFloatAsState(progress ?: 0f, Motion.slow(), label = "downloadRing")
+    val modifier = Modifier.size(Space.Xl + Space.S)
+    if (progress == null) {
+        CircularProgressIndicator(modifier = modifier, strokeWidth = Space.Xs)
+    } else {
+        CircularProgressIndicator(
+            progress = { shown.coerceAtLeast(0.02f) },
+            modifier = modifier,
+            strokeWidth = Space.Xs,
+            trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+        )
     }
 }
 
@@ -220,6 +246,6 @@ private fun Chip(text: String, highlighted: Boolean = false) {
         color = if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         contentColor = if (highlighted) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = Space.S, vertical = 3.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = Space.S, vertical = Space.Xs))
     }
 }

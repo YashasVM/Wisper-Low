@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +20,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -50,7 +53,7 @@ fun SettingsScreen(
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(Space.Sm),
     ) {
-        item { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium) }
+        item { ScreenTitle(stringResource(R.string.settings_title)) }
 
         item { SectionHeader(stringResource(R.string.settings_section_bubble)) }
         item {
@@ -161,7 +164,8 @@ fun SettingsScreen(
 
 @Composable
 private fun LinkRow(title: String, body: String?, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = androidx.compose.ui.graphics.Color.Transparent) {
+    val source = remember { MutableInteractionSource() }
+    Surface(onClick = onClick, interactionSource = source, color = Color.Transparent, modifier = Modifier.pressScale(source, 0.98f)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

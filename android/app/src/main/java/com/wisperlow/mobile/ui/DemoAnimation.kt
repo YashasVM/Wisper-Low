@@ -43,13 +43,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.wisperlow.mobile.R
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-private const val DEMO_SENTENCE = "Running ten minutes late, see you soon!"
+/** Script timing for the demo loop, in milliseconds per beat. */
+private object Beat {
+    const val Idle = 900L
+    const val Keyboard = 1300L
+    const val Word = 55L
+    const val Settle = 500L
+    const val Typed = 1800L
+    const val Rest = 900L
+}
 
 /** Phases: 0 idle, 1 keyboard up with bubble, 2 listening, 3 typed, 4 rest. */
 fun demoStepFor(phase: Int): Int = when (phase) {
@@ -68,6 +77,9 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
     var typed by remember { mutableIntStateOf(0) }
     val report by rememberUpdatedState(onPhase)
     val animate = ValueAnimator.areAnimatorsEnabled()
+    val sentence = stringResource(R.string.demo_sentence)
+    val messageHint = stringResource(R.string.demo_message_hint)
+    val insertedLabel = stringResource(R.string.bubble_inserted)
 
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     // Re-keyed on lifecycle so the loop stops while the app is in the background.
@@ -83,22 +95,22 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
         if (!resumed) return@LaunchedEffect
         if (!animate) {
             phase = 3
-            typed = DEMO_SENTENCE.length
+            typed = sentence.length
             report(3)
             return@LaunchedEffect
         }
         while (true) {
-            phase = 0; typed = 0; report(0); delay(900)
-            phase = 1; report(1); delay(1300)
+            phase = 0; typed = 0; report(0); delay(Beat.Idle)
+            phase = 1; report(1); delay(Beat.Keyboard)
             phase = 2; report(2)
             // Words appear in the bubble as they are "spoken".
-            while (typed < DEMO_SENTENCE.length) {
+            while (typed < sentence.length) {
                 typed++
-                delay(55)
+                delay(Beat.Word)
             }
-            delay(500)
-            phase = 3; report(3); delay(1800)
-            phase = 4; report(4); delay(900)
+            delay(Beat.Settle)
+            phase = 3; report(3); delay(Beat.Typed)
+            phase = 4; report(4); delay(Beat.Rest)
         }
     }
 
@@ -111,7 +123,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
         animationSpec = Motion.tween(),
         label = "demoBubble",
     )
-    val fieldText = if (phase >= 3) DEMO_SENTENCE else ""
+    val fieldText = if (phase >= 3) sentence else ""
     val phoneColor = MaterialTheme.colorScheme.surface
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
 
@@ -139,10 +151,10 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                         RoundedCornerShape(14.dp),
                     )
                     .padding(horizontal = 10.dp, vertical = Space.S)
-                    .animateContentSize(),
+                    .animateContentSize(Motion.tween()),
             ) {
                 Text(
-                    text = fieldText.ifEmpty { "Message" },
+                    text = fieldText.ifEmpty { messageHint },
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
                     color = if (fieldText.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
@@ -150,8 +162,8 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
             }
             AnimatedVisibility(
                 visible = phase in 1..3,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
+                enter = slideInVertically(Motion.spring()) { it } + fadeIn(Motion.fade()),
+                exit = slideOutVertically(Motion.tween()) { it } + fadeOut(Motion.fade()),
             ) {
                 Keyboard(lineColor)
             }
@@ -160,8 +172,8 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
         // The Wisperlow bubble, docked at the edge just above the keyboard.
         AnimatedVisibility(
             visible = phase in 1..3,
-            enter = scaleIn() + fadeIn(),
-            exit = scaleOut() + fadeOut(),
+            enter = scaleIn(Motion.bouncy()) + fadeIn(Motion.fade()),
+            exit = scaleOut(Motion.tween()) + fadeOut(Motion.fade()),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 132.dp),
@@ -170,7 +182,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                 modifier = Modifier
                     .background(bubbleColor, RoundedCornerShape(20.dp))
                     .padding(horizontal = 10.dp, vertical = Space.S)
-                    .animateContentSize(),
+                    .animateContentSize(Motion.tween()),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -186,7 +198,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                 )
                 if (phase == 2) {
                     Text(
-                        DEMO_SENTENCE.take(typed).takeLast(18),
+                        sentence.take(typed).takeLast(18),
                         color = Color.White,
                         fontSize = 10.sp,
                         maxLines = 1,
@@ -194,7 +206,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                     )
                 }
                 if (phase == 3) {
-                    Text(LocalContext.current.getString(com.wisperlow.mobile.R.string.bubble_inserted), color = Color.White, fontSize = 10.sp)
+                    Text(insertedLabel, color = Color.White, fontSize = 10.sp)
                 }
             }
         }
