@@ -100,6 +100,11 @@ class DictationService : Service(), BubbleActions {
         }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        engine.onTrimMemory(level)
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // Rotation or split-screen changes the screen size; keep the bubble on screen.
