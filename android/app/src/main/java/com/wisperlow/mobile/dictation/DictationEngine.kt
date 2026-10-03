@@ -118,6 +118,10 @@ class DictationEngine @Inject constructor(
         var consumer: Job? = null
         var finishing = false
         var modelLoading = true
+        val startedNanos = System.nanoTime()
+        @Volatile var leadStart = 0
+        var lastBoundary = 0
+        var finishNanos = 0L
     }
 
     private var nextSessionId = 0L
@@ -183,6 +187,7 @@ class DictationEngine @Inject constructor(
             return false
         }
         s.modelLoading = !_modelLoaded.value
+        Log.d(TAG, "timing tap->recording ${(System.nanoTime() - s.startedNanos) / 1_000_000} ms (modelWarm=${!s.modelLoading})")
         publishListening(s)
         s.consumer = scope.launch { consume(s, modelDir) }
         return true
@@ -254,6 +259,16 @@ class DictationEngine @Inject constructor(
         scope.launch { withContext(NonCancellable + decodeDispatcher) { releaseStt() } }
     }
 
+    /** Call from Application/Service onTrimMemory; frees the model under pressure when idle. */
+    fun onTrimMemory(level: Int) {
+        checkMainThread()
+        if (session != null || pendingStart != null) return
+        if (DictationTuning.shouldReleaseOnTrim(level, settingsRepository.current.value.keepModelLoaded)) {
+            Log.i(TAG, "Releasing model on trim level $level")
+            releaseModelIfIdle()
+        }
+    }
+
     /** Frees the model immediately and waits, e.g. before deleting its files. */
     suspend fun releaseModel() {
         withContext(Dispatchers.Main.immediate) { cancel() }
@@ -263,6 +278,7 @@ class DictationEngine @Inject constructor(
     private fun finish(s: Session) {
         if (session !== s || s.finishing) return
         s.finishing = true
+        s.finishNanos = System.nanoTime()
         audio.stop()
         _level.value = 0f
         val detector = s.detector
@@ -279,6 +295,7 @@ class DictationEngine @Inject constructor(
             session = null
             _state.value = DictationState.Idle
             val text = compose(s)
+            Log.d(TAG, "timing stop->text ${(System.nanoTime() - s.finishNanos) / 1_000_000} ms, ${s.pcm.size / 16} ms audio")
             s.listener.onResult(
                 if (text.isBlank()) Result.Failure(DictationError.NOTHING_HEARD) else Result.Success(text),
             )
@@ -309,10 +326,18 @@ class DictationEngine @Inject constructor(
 
     private fun handleEvent(s: Session, detector: VadEngine, event: VadEvent?, captured: Int) {
         val heard = detector.heardSpeech
+        if (event == VadEvent.SpeechStart) s.leadStart = DictationTuning.leadStart(captured)
         when {
             captured >= MAX_CAPTURE_SAMPLES -> scope.launch { finish(s) }
             event == VadEvent.EndOfSpeech -> scope.launch { finish(s) }
-            event == VadEvent.Pause -> s.boundaries.trySend(captured)
+            event == VadEvent.Pause -> {
+                s.lastBoundary = captured
+                s.boundaries.trySend(captured)
+            }
+            heard && DictationTuning.shouldForceBoundary(captured, s.lastBoundary) -> {
+                s.lastBoundary = captured
+                s.boundaries.trySend(captured)
+            }
             !heard && captured >= noSpeechLimit(s.settings) -> scope.launch {
                 if (session === s) {
                     cancel()
@@ -345,7 +370,13 @@ class DictationEngine @Inject constructor(
         s.modelLoading = false
         if (session === s && !s.finishing) publishListening(s)
         var start = 0
+        var first = true
         for (boundary in s.boundaries) {
+            if (first) {
+                // Skip leading silence: fewer samples to decode, same words.
+                start = s.leadStart.coerceAtMost(boundary)
+                first = false
+            }
             val isFinal = s.boundaries.isClosedForReceive
             // Very short fragments decode poorly on their own; merge them into
             // the next phrase unless this is the end of the recording.
@@ -354,7 +385,9 @@ class DictationEngine @Inject constructor(
             val pcm = s.pcm.slice(start, boundary)
             start = boundary
             if (pcm.size < MIN_DECODE_SAMPLES) continue
+            val t0 = System.nanoTime()
             val text = withContext(decodeDispatcher) { engine.transcribe(pcm) }
+            Log.d(TAG, "timing decode ${pcm.size / 16} ms audio in ${(System.nanoTime() - t0) / 1_000_000} ms")
             val cleaned = TextCleaner.clean(text)
             if (!TextCleaner.looksLikeGibberish(cleaned)) s.parts += cleaned
             if (session === s) {

@@ -122,13 +122,17 @@ class SttEngine(val modelDir: File) {
     }
 
     private val inferenceThreads: Int
-        // Two native workers retain the model's accuracy while avoiding a
-        // thread-per-core burst on modern phones (which otherwise competes
-        // with audio capture and heats the device during longer dictation).
-        get() = MAX_THREADS
+        get() = threadsFor(Runtime.getRuntime().availableProcessors())
 
     companion object {
         private const val TAG = "SttEngine"
-        private const val MAX_THREADS = 2
+        private const val MIN_THREADS = 2
+        private const val MAX_THREADS = 4
+
+        /**
+         * Half the cores (big+little mix makes more threads counterproductive),
+         * clamped so decode is faster on 8-core phones without a thermal burst.
+         */
+        fun threadsFor(cores: Int): Int = (cores / 2).coerceIn(MIN_THREADS, MAX_THREADS)
     }
 }
