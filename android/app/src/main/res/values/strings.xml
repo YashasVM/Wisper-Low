@@ -60,6 +60,8 @@
     <string name="action_allow">Allow</string>
     <string name="action_fix">Fix</string>
     <string name="status_done">Done</string>
+    <string name="model_ring_size">%1$d of %2$d MB</string>
+    <string name="status_needed">Needed</string>
     <string name="copied">Copied</string>
 
     <!-- Navigation -->

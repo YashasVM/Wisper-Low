@@ -21,6 +21,12 @@ object Motion {
     const val Long = 420
     val Easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
+    /** Springs for interactive elements; settle quickly with a hint of overshoot. */
+    fun <T> spring(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (enabled) androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 380f) else androidx.compose.animation.core.snap()
+    fun <T> bouncy(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (enabled) androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 420f) else androidx.compose.animation.core.snap()
+
     /** False when the system animator scale is 0 (reduced motion); durations collapse to zero. */
     val enabled: Boolean get() = android.animation.ValueAnimator.areAnimatorsEnabled()
     private fun ms(d: Int) = if (enabled) d else 0
@@ -100,6 +106,20 @@ private val DarkColors = darkColorScheme(
 )
 
 private val WisperlowTypography = androidx.compose.material3.Typography(
+    displayMedium = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 40.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-1).sp,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 34.sp,
+        lineHeight = 39.sp,
+        letterSpacing = (-0.8).sp,
+    ),
     headlineLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
