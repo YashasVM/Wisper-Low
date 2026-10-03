@@ -212,6 +212,12 @@ class DictationEngine @Inject constructor(
     /** Stops recording and delivers the transcript once the last phrase is decoded. */
     fun finish() {
         checkMainThread()
+        // Released before the session even began (settings still loading): nothing was
+        // recorded, and ignoring this would leave a hot microphone the user thinks is off.
+        if (pendingStart != null && session == null) {
+            cancel()
+            return
+        }
         session?.let(::finish)
     }
 
@@ -256,7 +262,11 @@ class DictationEngine @Inject constructor(
         checkMainThread()
         if (session != null) return
         idleReleaseJob?.cancel()
-        scope.launch { withContext(NonCancellable + decodeDispatcher) { releaseStt() } }
+        scope.launch {
+            // Re-check on the decode thread: a session may have started since this was queued,
+            // and its model load is queued behind us on the same thread.
+            withContext(NonCancellable + decodeDispatcher) { if (session == null) releaseStt() }
+        }
     }
 
     /** Call from Application/Service onTrimMemory; frees the model under pressure when idle. */
@@ -463,7 +473,7 @@ class DictationEngine @Inject constructor(
         if (settingsRepository.current.value.keepModelLoaded) return
         idleReleaseJob = scope.launch {
             delay(IDLE_RELEASE_MS)
-            if (session == null) withContext(NonCancellable + decodeDispatcher) { releaseStt() }
+            withContext(NonCancellable + decodeDispatcher) { if (session == null) releaseStt() }
         }
     }
 

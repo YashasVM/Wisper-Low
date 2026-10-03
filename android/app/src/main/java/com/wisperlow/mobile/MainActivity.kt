@@ -128,9 +128,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startBubble() {
-        viewModel.setBubbleEnabled(true)
-        if (!DictationService.start(this)) {
-            Toast.makeText(this, R.string.home_needs_setup, Toast.LENGTH_LONG).show()
+        // Persist first: the service stops itself when it reads a stored "off" at startup.
+        lifecycleScope.launch {
+            viewModel.setBubbleEnabled(true).join()
+            if (!DictationService.start(this@MainActivity)) {
+                Toast.makeText(this@MainActivity, R.string.home_needs_setup, Toast.LENGTH_LONG).show()
+            }
         }
     }
 

@@ -14,7 +14,10 @@ object TextCleaner {
 
     /** Words that mean the next filler/punctuation word is being talked about, not dictated. */
     private val mentionCues = setOf("word", "words", "quote", "literal", "literally", "say", "says", "the", "a", "this", "that", "of")
-    private val nounLeaders = setOf("a", "the", "this", "that", "of", "full", "decimal", "my", "each", "every", "no", "word", "and")
+    private val nounLeaders = setOf("a", "the", "this", "that", "of", "full", "decimal", "my", "each", "every", "no", "word", "and",
+        // Nouns that take "period" as their head: "grace period", "time period".
+        "time", "grace", "trial", "waiting", "same", "last", "first", "long", "short", "whole", "given", "certain",
+    )
     private val verbFollowers = setOf("is", "are", "was", "were", "of", "means", "has")
 
     private val spoken: List<Pair<List<String>, String>> = listOf(

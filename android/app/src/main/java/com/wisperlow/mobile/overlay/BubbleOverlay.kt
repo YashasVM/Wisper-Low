@@ -59,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -682,17 +683,17 @@ class BubbleOverlay(
 
     @Composable
     private fun Waveform(animations: Boolean) {
-        val phase = if (animations) {
+        // Keep the State itself and read it while drawing, so frames redraw instead of recomposing.
+        val phase: State<Float> = if (animations) {
             val transition = rememberInfiniteTransition(label = "wave")
-            val value by transition.animateFloat(
+            transition.animateFloat(
                 initialValue = 0f,
                 targetValue = (2f * Math.PI).toFloat(),
                 animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
                 label = "wavePhase",
             )
-            value
         } else {
-            0f
+            remember { mutableFloatStateOf(0f) }
         }
         val loudness by animateFloatAsState(micLevel, animationSpec = tween(90), label = "level")
         Canvas(Modifier.size(width = 36.dp, height = 32.dp)) {
@@ -703,7 +704,7 @@ class BubbleOverlay(
             // Speech RMS rarely exceeds ~0.25, so boost it to use the full height.
             val amp = minH + (size.height * 0.9f - minH) * (loudness * 4f).coerceIn(0.08f, 1f)
             repeat(bars) { i ->
-                val wave = 0.55f + 0.45f * sin(phase + i * 0.9f)
+                val wave = 0.55f + 0.45f * sin(phase.value + i * 0.9f)
                 val h = minH + (amp - minH) * wave
                 val x = slot * i + slot / 2
                 drawLine(
@@ -719,21 +720,20 @@ class BubbleOverlay(
 
     @Composable
     private fun PulsingDots(animations: Boolean) {
-        val pulse = if (animations) {
+        val pulse: State<Float> = if (animations) {
             val transition = rememberInfiniteTransition(label = "dots")
-            val value by transition.animateFloat(
+            transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
                 label = "dotsPhase",
             )
-            value
         } else {
-            0.5f
+            remember { mutableFloatStateOf(0.5f) }
         }
         Canvas(Modifier.size(width = 36.dp, height = 16.dp)) {
             repeat(3) { i ->
-                val wave = sin((pulse * 2f * Math.PI).toFloat() - i * 0.9f)
+                val wave = sin((pulse.value * 2f * Math.PI).toFloat() - i * 0.9f)
                 drawCircle(
                     color = Color.White.copy(alpha = 0.35f + 0.65f * (0.5f + 0.5f * wave)),
                     radius = size.height * 0.28f,

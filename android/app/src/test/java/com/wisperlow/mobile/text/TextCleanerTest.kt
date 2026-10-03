@@ -73,4 +73,9 @@ class TextCleanerTest {
         assertEquals(2, TextCleaner.wordCount("हिंदी भाषा"))
     }
 
+    @Test
+    fun periodAsNounIsNotPunctuation() {
+        assertEquals("the grace period ends today", TextCleaner.clean("the grace period ends today"))
+        assertEquals("a long time period applies", TextCleaner.clean("a long time period applies"))
+    }
 }

@@ -193,9 +193,10 @@ class MainViewModel @Inject constructor(
 
     // ---- history ----
 
-    fun deleteHistory(entry: TranscriptEntry) = viewModelScope.launch { transcriptRepository.delete(entry.id) }
-    fun restoreHistory(entry: TranscriptEntry) = viewModelScope.launch { transcriptRepository.restore(entry) }
-    fun clearHistory() = viewModelScope.launch { transcriptRepository.clear() }
+    // Disk failures (full storage, unreadable file) must not take the app down from a button tap.
+    fun deleteHistory(entry: TranscriptEntry) = viewModelScope.launch { runCatching { transcriptRepository.delete(entry.id) } }
+    fun restoreHistory(entry: TranscriptEntry) = viewModelScope.launch { runCatching { transcriptRepository.restore(entry) } }
+    fun clearHistory() = viewModelScope.launch { runCatching { transcriptRepository.clear() } }
 
     // ---- in-app practice ----
 
