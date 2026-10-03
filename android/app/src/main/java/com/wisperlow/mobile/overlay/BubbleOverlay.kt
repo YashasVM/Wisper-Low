@@ -231,6 +231,9 @@ class BubbleOverlay(
         }
     }
 
+    /** Re-clamps the bubble after the screen size changed (rotation, split screen, fold). */
+    fun reposition() = applyPlacement()
+
     fun resetPlacement() {
         rightSide = true
         userY = null

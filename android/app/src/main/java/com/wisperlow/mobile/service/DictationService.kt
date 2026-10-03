@@ -11,6 +11,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -81,6 +82,9 @@ class DictationService : Service(), BubbleActions {
         super.onCreate()
         createChannel()
         if (!startAsForeground()) {
+            // startForegroundService() obliges us to have called startForeground();
+            // stopping without it crashes the app, so the failure paths in
+            // startAsForeground() still post the notification when allowed.
             stopSelf()
             return
         }
@@ -91,6 +95,12 @@ class DictationService : Service(), BubbleActions {
             bubblePosition = settingsRepository.bubblePosition.first()
             observe()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Rotation or split-screen changes the screen size; keep the bubble on screen.
+        if (::overlay.isInitialized) overlay.reposition()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -303,12 +313,9 @@ class DictationService : Service(), BubbleActions {
     // ---- foreground notification ----
 
     private fun startAsForeground(): Boolean {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
-            !Settings.canDrawOverlays(this)
-        ) {
-            return false
-        }
-        return try {
+        // Call startForeground first whenever the microphone type is allowed:
+        // bailing out of a startForegroundService() call without it is a crash.
+        val started = try {
             val notification = buildNotification(listening = false)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -320,6 +327,7 @@ class DictationService : Service(), BubbleActions {
             Log.e(TAG, "Could not start the bubble service", error)
             false
         }
+        return started && canStart(this)
     }
 
     private fun createChannel() {

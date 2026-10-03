@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.wisperlow.mobile.MainActivity
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,10 +50,13 @@ class RestartReceiver : BroadcastReceiver() {
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
-        val start = PendingIntent.getForegroundService(
+        // Open the app rather than starting the service directly: if the user
+        // revoked a permission since this was posted, a direct foreground-service
+        // start would crash. MainActivity restarts the bubble when it can.
+        val start = PendingIntent.getActivity(
             context,
             2,
-            Intent(context, DictationService::class.java).setAction(DictationService.ACTION_START),
+            Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = Notification.Builder(context, CHANNEL_ID)
