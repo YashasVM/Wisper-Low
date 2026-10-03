@@ -18,6 +18,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -35,13 +37,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -136,7 +139,8 @@ class BubbleOverlay(
 
     // Placement: the bubble docks to a side edge (so wider states grow inward)
     // at a height the user chose, or just above the keyboard by default.
-    private var rightSide = true
+    private var rightSide by mutableStateOf(true)
+    private var lastTapAt = 0L
     private var userY: Int? = null
     private var keyboardTop: Int? = null
     private var dragging = false
@@ -150,11 +154,45 @@ class BubbleOverlay(
         val view = bubbleView ?: return
         val lp = params ?: return
         val flags = windowFlags(focusable = state is BubbleUi.Review)
-        if (lp.flags != flags || wasReview != (state is BubbleUi.Review)) {
+        val width = windowWidthFor(state)
+        val height = windowHeightFor(state)
+        view.removeCallbacks(shrinkWindow)
+        if (state is BubbleUi.Idle && lp.width != WindowManager.LayoutParams.WRAP_CONTENT) {
+            // Let the pill finish collapsing inside the big window, then shrink it.
+            if (lp.flags != flags) {
+                lp.flags = flags
+                runCatching { windowManager.updateViewLayout(view, lp) }
+            }
+            view.postDelayed(shrinkWindow, SHRINK_DELAY_MS)
+            return
+        }
+        // One layout update per state change; the window never resizes per frame.
+        if (lp.flags != flags || lp.width != width || lp.height != height) {
             lp.flags = flags
-            runCatching { windowManager.updateViewLayout(view, lp) }
+            lp.width = width
+            lp.height = height
             applyPlacement()
         }
+    }
+
+    private val shrinkWindow = Runnable {
+        val view = bubbleView ?: return@Runnable
+        val lp = params ?: return@Runnable
+        if (ui !is BubbleUi.Idle) return@Runnable
+        lp.width = WindowManager.LayoutParams.WRAP_CONTENT
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+        applyPlacement()
+    }
+
+    private fun windowWidthFor(state: BubbleUi): Int = when (state) {
+        is BubbleUi.Idle -> WindowManager.LayoutParams.WRAP_CONTENT
+        is BubbleUi.Review -> dp(REVIEW_WIDTH_DP + 16)
+        else -> dp(PILL_DP + 16)
+    }
+
+    private fun windowHeightFor(state: BubbleUi): Int = when (state) {
+        is BubbleUi.Idle, is BubbleUi.Review -> WindowManager.LayoutParams.WRAP_CONTENT
+        else -> dp(DOT_DP + 8)
     }
 
     fun setLevel(value: Float) {
@@ -180,6 +218,8 @@ class BubbleOverlay(
             setContent { WisperlowTheme(darkTheme = true) { Bubble() } }
         }
         val lp = baseParams(windowFlags(focusable = ui is BubbleUi.Review))
+        lp.width = windowWidthFor(ui)
+        lp.height = windowHeightFor(ui)
         placeInto(lp)
         try {
             windowManager.addView(view, lp)
@@ -200,7 +240,10 @@ class BubbleOverlay(
     fun hide() {
         hideDismissTarget()
         dragging = false
-        bubbleView?.let { runCatching { windowManager.removeView(it) } }
+        bubbleView?.let {
+            it.removeCallbacks(shrinkWindow)
+            runCatching { windowManager.removeView(it) }
+        }
         bubbleView = null
         params = null
     }
@@ -339,50 +382,71 @@ class BubbleOverlay(
     private fun Bubble() {
         val state = ui
         val animations = ValueAnimator.areAnimatorsEnabled()
-        val sizeSpec = if (animations) spring<androidx.compose.ui.unit.IntSize>(stiffness = 700f) else snap()
-        val shape = if (state is BubbleUi.Idle) CircleShape else RoundedCornerShape(28.dp)
-        val color = when (state) {
+        val sizeSpec = if (animations) {
+            spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+        } else {
+            snap()
+        }
+        val shape = RoundedCornerShape(28.dp)
+        val target = when (state) {
             is BubbleUi.Listening -> WisperlowColors.BubbleListening
             is BubbleUi.Flash -> if (state.success) WisperlowColors.BubbleSuccess else WisperlowColors.BubbleSurface
             else -> WisperlowColors.BubbleSurface
         }
-        Box(
-            modifier = Modifier
-                .padding(4.dp)
-                .animateContentSize(animationSpec = sizeSpec)
-                .background(color.copy(alpha = 0.96f), shape)
-                .border(1.dp, WisperlowColors.BubbleOutline, shape)
-                .then(if (state is BubbleUi.Review) Modifier else Modifier.pointerInput(Unit) { gestures() }),
-        ) {
-            when (state) {
-                BubbleUi.Idle -> IdleDot()
-                is BubbleUi.Listening -> Pill(
-                    text = when {
-                        state.partial.isNotBlank() -> state.partial
-                        state.modelLoading -> context.getString(R.string.bubble_loading_keep_talking)
-                        else -> context.getString(R.string.bubble_listening)
+        val color by animateColorAsState(target, if (animations) tween(260) else snap(), label = "bubbleColor")
+        val anchor = if (rightSide) Alignment.TopEnd else Alignment.TopStart
+        // The window is fixed-size while active; this box morphs inside it, anchored to the docked edge.
+        Box(Modifier.fillMaxSize(), contentAlignment = anchor) {
+            Box(
+                modifier = Modifier
+                    .padding(4.dp)
+                    .animateContentSize(animationSpec = sizeSpec, alignment = anchor)
+                    .background(color.copy(alpha = 0.96f), shape)
+                    .border(1.dp, WisperlowColors.BubbleOutline, shape)
+                    .then(if (state is BubbleUi.Review) Modifier else Modifier.pointerInput(Unit) { gestures() }),
+            ) {
+                AnimatedContent(
+                    targetState = state::class,
+                    transitionSpec = {
+                        fadeIn(tween(160, delayMillis = 60)) togetherWith fadeOut(tween(100)) using null
                     },
-                    hint = context.getString(R.string.bubble_tap_to_finish),
-                    description = context.getString(R.string.bubble_listening_description),
-                ) { Waveform(animations) }
-                is BubbleUi.Finishing -> Pill(
-                    text = state.partial.ifBlank { context.getString(R.string.bubble_transcribing) },
-                    hint = null,
-                    description = context.getString(R.string.bubble_transcribing),
-                ) { PulsingDots(animations) }
-                is BubbleUi.Review -> ReviewPanel()
-                is BubbleUi.Flash -> Pill(
-                    text = state.message,
-                    hint = null,
-                    description = state.message,
-                ) {
-                    Icon(
-                        imageVector = if (state.success) Icons.Rounded.Check else Icons.Rounded.ErrorOutline,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
+                    contentAlignment = anchor,
+                    label = "bubbleContent",
+                ) { _ -> BubbleBody(state, animations) }
+            }
+        }
+    }
+
+    @Composable
+    private fun BubbleBody(state: BubbleUi, animations: Boolean) {
+        when (state) {
+            BubbleUi.Idle -> IdleDot()
+            is BubbleUi.Listening -> Pill(
+                text = when {
+                    state.partial.isNotBlank() -> state.partial
+                    state.modelLoading -> context.getString(R.string.bubble_loading_keep_talking)
+                    else -> context.getString(R.string.bubble_listening)
+                },
+                hint = context.getString(R.string.bubble_tap_to_finish),
+                description = context.getString(R.string.bubble_listening_description),
+            ) { Waveform(animations) }
+            is BubbleUi.Finishing -> Pill(
+                text = state.partial.ifBlank { context.getString(R.string.bubble_transcribing) },
+                hint = null,
+                description = context.getString(R.string.bubble_transcribing),
+            ) { PulsingDots(animations) }
+            is BubbleUi.Review -> ReviewPanel()
+            is BubbleUi.Flash -> Pill(
+                text = state.message,
+                hint = null,
+                description = state.message,
+            ) {
+                Icon(
+                    imageVector = if (state.success) Icons.Rounded.Check else Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
+                )
             }
         }
     }
@@ -412,7 +476,7 @@ class BubbleOverlay(
         Row(
             modifier = Modifier
                 .heightIn(min = DOT_DP.dp)
-                .widthIn(min = 150.dp, max = 290.dp)
+                .width(PILL_DP.dp)
                 .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 8.dp)
                 .semantics {
                     contentDescription = description
@@ -422,21 +486,15 @@ class BubbleOverlay(
         ) {
             Box(Modifier.size(width = 40.dp, height = 36.dp), contentAlignment = Alignment.Center) { visual() }
             Spacer(Modifier.width(10.dp))
-            Column {
-                AnimatedContent(
-                    targetState = text,
-                    transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(120)) },
-                    label = "pillText",
-                ) { value ->
-                    Text(
-                        // Show the most recent words; the start is already on its way.
-                        text = value.takeLast(MAX_PILL_CHARS).let { if (value.length > MAX_PILL_CHARS) "…$it" else it },
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    // Show the most recent words; the start is already on its way.
+                    text = text.takeLast(MAX_PILL_CHARS).let { if (text.length > MAX_PILL_CHARS) "…$it" else it },
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (hint != null) {
                     Text(
                         text = hint,
@@ -607,7 +665,9 @@ class BubbleOverlay(
             var total = Offset.Zero
             var released = false
             var longPressed = false
-            val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis
+            // While dictating, a slow tap must not cancel: require a deliberate, longer hold.
+            val holdFactor = if (ui is BubbleUi.Idle) 1L else 2L
+            val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis * holdFactor
             while (!released) {
                 val remaining = longPressAt - SystemClock.uptimeMillis()
                 val event = if (!dragged && !longPressed && remaining > 0) {
@@ -642,8 +702,14 @@ class BubbleOverlay(
                 dragged -> endDrag()
                 longPressed -> Unit
                 else -> {
-                    bubbleView?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    actions.onTap()
+                    val now = SystemClock.uptimeMillis()
+                    val acts = ui is BubbleUi.Idle || ui is BubbleUi.Listening
+                    if (acts && now - lastTapAt > TAP_DEBOUNCE_MS) {
+                        lastTapAt = now
+                        // One short tick for start and for stop; nothing for ignored taps.
+                        bubbleView?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        actions.onTap()
+                    }
                 }
             }
         }
@@ -688,5 +754,8 @@ class BubbleOverlay(
         const val DISMISS_ZONE_DP = 190
         const val DISMISS_BOTTOM_DP = 56
         const val MAX_PILL_CHARS = 70
+        const val PILL_DP = 240
+        const val SHRINK_DELAY_MS = 450L
+        const val TAP_DEBOUNCE_MS = 400L
     }
 }
