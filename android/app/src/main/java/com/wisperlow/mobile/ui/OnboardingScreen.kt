@@ -120,9 +120,15 @@ fun OnboardingScreen(
                     TextButton(onClick = close) { Text(stringResource(R.string.action_done)) }
                 }
             }
+            val progress by androidx.compose.animation.core.animateFloatAsState(
+                (index + 1f) / steps.size,
+                animationSpec = Motion.slow(),
+                label = "guideProgress",
+            )
             LinearProgressIndicator(
-                progress = { (index + 1f) / steps.size },
+                progress = { progress },
                 modifier = Modifier.fillMaxWidth(),
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
             )
         }
 
@@ -130,8 +136,14 @@ fun OnboardingScreen(
             targetState = step,
             transitionSpec = {
                 val forward = targetState.ordinal > initialState.ordinal
-                (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
-                    (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
+                (
+                    slideInHorizontally(Motion.tween()) { if (forward) it / 6 else -it / 6 } +
+                        fadeIn(Motion.tween(), initialAlpha = 0f)
+                    ) togetherWith
+                    (
+                        slideOutHorizontally(Motion.fade()) { if (forward) -it / 8 else it / 8 } +
+                            fadeOut(Motion.fade())
+                        ) using androidx.compose.animation.SizeTransform(clip = false)
             },
             modifier = Modifier.weight(1f),
             label = "guideStep",
@@ -230,7 +242,11 @@ private fun StepTitle(title: Int, body: Int) {
 
 @Composable
 private fun DoneBanner(done: Boolean) {
-    if (!done) return
+    androidx.compose.animation.AnimatedVisibility(
+        visible = done,
+        enter = fadeIn(Motion.tween()) + androidx.compose.animation.expandVertically(Motion.tween()),
+        exit = fadeOut(Motion.fade()) + androidx.compose.animation.shrinkVertically(Motion.fade()),
+    ) {
     Surface(
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -246,6 +262,7 @@ private fun DoneBanner(done: Boolean) {
             androidx.compose.material3.Icon(Icons.Rounded.CheckCircle, contentDescription = null)
             Text(stringResource(R.string.status_done), style = MaterialTheme.typography.titleMedium)
         }
+    }
     }
 }
 
@@ -281,9 +298,19 @@ private fun ColumnScope.HowStep() {
     )
     items.forEachIndexed { i, (icon, title, body) ->
         val active = demoStepFor(phase) == i
+        val rowColor by androidx.compose.animation.animateColorAsState(
+            if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+            Motion.tween(),
+            label = "howRow",
+        )
+        val rowContent by androidx.compose.animation.animateColorAsState(
+            if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+            Motion.tween(),
+            label = "howRowContent",
+        )
         Surface(
-            color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            contentColor = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+            color = rowColor,
+            contentColor = rowContent,
             shape = MaterialTheme.shapes.medium,
             tonalElevation = if (active) 0.dp else 1.dp,
         ) {

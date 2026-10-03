@@ -14,6 +14,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Shared motion tokens so every screen moves with the same rhythm. */
+object Motion {
+    const val Short = 160
+    const val Medium = 280
+    const val Long = 420
+    val Easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    fun <T> tween() = androidx.compose.animation.core.tween<T>(Medium, easing = Easing)
+    fun <T> fade() = androidx.compose.animation.core.tween<T>(Short, easing = Easing)
+    fun <T> slow() = androidx.compose.animation.core.tween<T>(Long, easing = Easing)
+}
+
+/** Shared spacing scale. */
+object Space {
+    val Xs = 4.dp
+    val S = 8.dp
+    val M = 16.dp
+    val L = 24.dp
+}
+
 object WisperlowColors {
     val Ink = Color(0xFF19171F)
     val Violet = Color(0xFF7257E8)

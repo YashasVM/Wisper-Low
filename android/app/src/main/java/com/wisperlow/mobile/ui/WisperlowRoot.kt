@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,10 +47,16 @@ private enum class Tab(val label: Int, val icon: ImageVector) {
 fun WisperlowRoot(state: MainUiState, level: Float, viewModel: MainViewModel, actions: AppActions) {
     var showGuide by rememberSaveable { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        when {
+        val screen = when {
+            !state.settingsLoaded -> 0
+            !state.settings.onboardingCompleted || showGuide -> 1
+            else -> 2
+        }
+        androidx.compose.animation.Crossfade(screen, animationSpec = Motion.tween(), label = "root") { target ->
+        when (target) {
             // The splash screen stays up until settings load, so nothing flashes.
-            !state.settingsLoaded -> Box(Modifier.fillMaxSize())
-            !state.settings.onboardingCompleted || showGuide -> OnboardingScreen(
+            0 -> Box(Modifier.fillMaxSize())
+            1 -> OnboardingScreen(
                 state = state,
                 level = level,
                 actions = actions,
@@ -70,6 +77,7 @@ fun WisperlowRoot(state: MainUiState, level: Float, viewModel: MainViewModel, ac
                 ),
             )
             else -> MainTabs(state, level, viewModel, actions, onOpenGuide = { showGuide = true })
+        }
         }
     }
 }
@@ -104,6 +112,11 @@ private fun MainTabs(
             }
         },
     ) { padding ->
+        androidx.compose.animation.AnimatedContent(
+            targetState = tab,
+            transitionSpec = { androidx.compose.animation.fadeIn(Motion.tween()) togetherWith androidx.compose.animation.fadeOut(Motion.fade()) },
+            label = "tab",
+        ) { tab ->
         when (tab) {
             Tab.HOME -> HomeScreen(
                 state = state,
@@ -158,6 +171,7 @@ private fun MainTabs(
                     scope.launch { snackbar.showSnackbar(context.getString(R.string.settings_reset_position_done)) }
                 },
             )
+        }
         }
     }
 }
