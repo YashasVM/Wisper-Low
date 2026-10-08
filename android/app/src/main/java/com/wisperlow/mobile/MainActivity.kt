@@ -63,8 +63,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             WisperlowTheme {
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
-                val level by viewModel.level.collectAsStateWithLifecycle()
-                WisperlowRoot(state = state, level = level, viewModel = viewModel, actions = actions)
+                // Passed as a reader, not a value: only the leaves that draw it react to each sample.
+                val level = viewModel.level.collectAsStateWithLifecycle()
+                WisperlowRoot(state = state, level = { level.value }, viewModel = viewModel, actions = actions)
             }
         }
     }

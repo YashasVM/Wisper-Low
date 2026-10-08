@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -132,7 +131,7 @@ private fun orbIcon(step: GuideStep): ImageVector = when (step) {
 @Composable
 fun OnboardingScreen(
     state: MainUiState,
-    level: Float,
+    level: () -> Float,
     actions: AppActions,
     callbacks: OnboardingCallbacks,
 ) {
@@ -237,7 +236,7 @@ fun OnboardingScreen(
         ) {
             AuroraOrb(
                 spec = spec,
-                level = if (step == GuideStep.TRY) level else 0f,
+                level = if (step == GuideStep.TRY) level else NoLevel,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = orbAlpha },
@@ -389,7 +388,7 @@ private fun Wordmark(text: String) {
             }
             Text(
                 ch.toString(),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, letterSpacing = 4.sp),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.graphicsLayer {
                     alpha = t.value.coerceIn(0f, 1f)
@@ -525,7 +524,7 @@ private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
 }
 
 @Composable
-private fun TryStep(state: MainUiState, level: Float, callbacks: OnboardingCallbacks) {
+private fun TryStep(state: MainUiState, level: () -> Float, callbacks: OnboardingCallbacks) {
     Headline(R.string.try_step_title, R.string.try_step_body)
     if (!state.setup.model) ModelProgressLine(state.downloads)
     PracticeArea(

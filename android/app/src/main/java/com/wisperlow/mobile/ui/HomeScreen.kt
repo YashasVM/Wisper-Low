@@ -48,7 +48,7 @@ class HomeCallbacks(
 @Composable
 fun HomeScreen(
     state: MainUiState,
-    level: Float,
+    level: () -> Float,
     actions: AppActions,
     callbacks: HomeCallbacks,
     contentPadding: PaddingValues,
@@ -118,7 +118,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun BubbleStatusCard(state: MainUiState, level: Float, actions: AppActions, callbacks: HomeCallbacks) {
+private fun BubbleStatusCard(state: MainUiState, level: () -> Float, actions: AppActions, callbacks: HomeCallbacks) {
     val on = state.bubbleRunning
     val canRun = state.setup.canRunBubble
     val cardColor by animateColorAsState(
@@ -137,7 +137,7 @@ private fun BubbleStatusCard(state: MainUiState, level: Float, actions: AppActio
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
             AuroraOrb(
                 spec = spec,
-                level = if (on) level else 0f,
+                level = if (on) level else NoLevel,
                 modifier = Modifier.size(HeroOrbSize),
                 center = {
                     Icon(

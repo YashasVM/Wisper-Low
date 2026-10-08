@@ -258,8 +258,9 @@ class DictationService : Service(), BubbleActions {
     private fun startDictation() {
         flashJob?.cancel()
         local.update { it.copy(flash = null) }
-        // Remember the field now; the review editor could take focus later.
-        WisperlowAccessibilityService.captureTarget()
+        // Remember the field now; the review editor could take focus later. The lookup
+        // crosses into the other app, so keep it off the frame that starts the bubble animation.
+        scope.launch(Dispatchers.Default) { WisperlowAccessibilityService.captureTarget() }
         ownsSession = engine.start(
             listener = { result ->
                 ownsSession = false

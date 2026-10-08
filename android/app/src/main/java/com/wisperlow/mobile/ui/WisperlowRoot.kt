@@ -45,7 +45,7 @@ private enum class Tab(val label: Int, val icon: ImageVector) {
 }
 
 @Composable
-fun WisperlowRoot(state: MainUiState, level: Float, viewModel: MainViewModel, actions: AppActions) {
+fun WisperlowRoot(state: MainUiState, level: () -> Float, viewModel: MainViewModel, actions: AppActions) {
     var showGuide by rememberSaveable { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         val screen = when {
@@ -86,7 +86,7 @@ fun WisperlowRoot(state: MainUiState, level: Float, viewModel: MainViewModel, ac
 @Composable
 private fun MainTabs(
     state: MainUiState,
-    level: Float,
+    level: () -> Float,
     viewModel: MainViewModel,
     actions: AppActions,
     onOpenGuide: () -> Unit,
