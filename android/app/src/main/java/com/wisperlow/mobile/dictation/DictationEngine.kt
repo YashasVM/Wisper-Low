@@ -81,6 +81,12 @@ class DictationEngine @Inject constructor(
         Thread(runnable, "wisperlow-stt").apply { priority = Thread.NORM_PRIORITY }
     }.asCoroutineDispatcher()
 
+    // Opening and closing the microphone can block for tens of milliseconds (longer on some
+    // vendor HALs); doing it here keeps the tap animation smooth. One thread keeps start/stop ordered.
+    private val audioDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "wisperlow-mic")
+    }.asCoroutineDispatcher()
+
     private val audio = AudioEngine()
 
     // Touched only on the decode thread.
@@ -174,23 +180,38 @@ class DictationEngine @Inject constructor(
         // Fast path: the detector is already loaded. Otherwise it loads on the
         // decode thread and the audio captured meanwhile is replayed into it.
         vad?.let { activateDetector(s, it) }
-        audio.setErrorListener { message ->
-            Log.w(TAG, message)
-            scope.launch { if (session === s) finish(s) }
-        }
-        audio.setListener { samples, level -> onAudio(s, samples, level) }
-        if (!audio.start()) {
-            session = null
-            audio.setListener(null)
-            listener.onResult(Result.Failure(DictationError.MIC_UNAVAILABLE))
-            scheduleIdleRelease()
-            return false
-        }
         s.modelLoading = !_modelLoaded.value
-        Log.d(TAG, "timing tap->recording ${(System.nanoTime() - s.startedNanos) / 1_000_000} ms (modelWarm=${!s.modelLoading})")
+        // Show listening right away; the microphone opens on its own thread and a
+        // failure there ends the session with MIC_UNAVAILABLE.
         publishListening(s)
         s.consumer = scope.launch { consume(s, modelDir) }
+        scope.launch {
+            val opened = withContext(audioDispatcher) {
+                // Listeners are set here, after any queued stop() from the previous session cleared them.
+                if (session !== s || s.finishing) return@withContext true
+                audio.setErrorListener { message ->
+                    Log.w(TAG, message)
+                    scope.launch { if (session === s) finish(s) }
+                }
+                audio.setListener { samples, level -> onAudio(s, samples, level) }
+                audio.start()
+            }
+            Log.d(TAG, "timing tap->recording ${(System.nanoTime() - s.startedNanos) / 1_000_000} ms (modelWarm=${!s.modelLoading}, opened=$opened)")
+            if (opened || session !== s) return@launch
+            session = null
+            stopAudio()
+            s.boundaries.close()
+            s.consumer?.cancel()
+            _state.value = DictationState.Idle
+            listener.onResult(Result.Failure(DictationError.MIC_UNAVAILABLE))
+            scheduleIdleRelease()
+        }
         return true
+    }
+
+    /** Closes the microphone off the main thread, after any start still in flight. */
+    private fun stopAudio() {
+        scope.launch(audioDispatcher) { audio.stop() }
     }
 
     /** Resets [detector] for [s] and replays audio already captured, reacting to its events. */
@@ -238,7 +259,7 @@ class DictationEngine @Inject constructor(
         }
         val s = session ?: return
         session = null
-        audio.stop()
+        stopAudio()
         s.boundaries.close()
         s.consumer?.cancel()
         _level.value = 0f
@@ -295,7 +316,7 @@ class DictationEngine @Inject constructor(
         if (session !== s || s.finishing) return
         s.finishing = true
         s.finishNanos = System.nanoTime()
-        audio.stop()
+        stopAudio()
         _level.value = 0f
         val detector = s.detector
         // Drop most of the trailing silence that ended the session; it only

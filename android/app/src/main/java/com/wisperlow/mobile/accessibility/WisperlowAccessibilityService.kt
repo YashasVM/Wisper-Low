@@ -65,14 +65,18 @@ class WisperlowAccessibilityService : AccessibilityService() {
             }
         }
 
-        /** Remembers the focused field so later insertion cannot land in our own review box. */
+        /**
+         * Remembers the focused field so later insertion cannot land in our own review box.
+         * Safe off the main thread; the lookup is several IPC round trips into the other app.
+         */
         fun captureTarget(): Boolean = instance?.captureTargetImpl() ?: false
 
         fun insert(text: String): InsertResult = instance?.insertImpl(text) ?: InsertResult.NO_TARGET
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private var capturedTarget: AccessibilityNodeInfo? = null
+    // Written from a background thread by captureTarget(), read on the main thread by insert().
+    @Volatile private var capturedTarget: AccessibilityNodeInfo? = null
     private val recomputeKeyboard = Runnable { updateKeyboardVisibility() }
 
     override fun onServiceConnected() {
