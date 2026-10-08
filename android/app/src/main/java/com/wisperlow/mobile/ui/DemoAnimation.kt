@@ -60,7 +60,7 @@ private object Beat {
     const val Rest = 900L
 }
 
-/** Phases: 0 idle, 1 keyboard up with bubble, 2 listening, 3 typed, 4 rest. */
+/** Phases: 0 idle, 1 Wisperlow keyboard up, 2 listening, 3 typed, 4 rest. */
 fun demoStepFor(phase: Int): Int = when (phase) {
     0, 1 -> 0
     2 -> 1
@@ -103,7 +103,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
             phase = 0; typed = 0; report(0); delay(Beat.Idle)
             phase = 1; report(1); delay(Beat.Keyboard)
             phase = 2; report(2)
-            // Words appear in the bubble as they are "spoken".
+            // Words appear on the keyboard as they are "spoken".
             while (typed < sentence.length) {
                 typed++
                 delay(Beat.Word)
@@ -165,49 +165,7 @@ fun DemoAnimation(modifier: Modifier = Modifier, onPhase: (Int) -> Unit = {}) {
                 enter = slideInVertically(Motion.spring()) { it } + fadeIn(Motion.fade()),
                 exit = slideOutVertically(Motion.tween()) { it } + fadeOut(Motion.fade()),
             ) {
-                Keyboard(lineColor)
-            }
-        }
-
-        // The Wisperlow bubble, docked at the edge just above the keyboard.
-        AnimatedVisibility(
-            visible = phase in 1..3,
-            enter = scaleIn(Motion.bouncy()) + fadeIn(Motion.fade()),
-            exit = scaleOut(Motion.tween()) + fadeOut(Motion.fade()),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 132.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .background(bubbleColor, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 10.dp, vertical = Space.S)
-                    .animateContentSize(Motion.tween()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = when (phase) {
-                        2 -> Icons.Rounded.GraphicEq
-                        3 -> Icons.Rounded.Check
-                        else -> Icons.Rounded.Mic
-                    },
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-                if (phase == 2) {
-                    Text(
-                        sentence.take(typed).takeLast(18),
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        modifier = Modifier.width(96.dp),
-                    )
-                }
-                if (phase == 3) {
-                    Text(insertedLabel, color = Color.White, fontSize = 10.sp)
-                }
+                VoiceKeyboard(lineColor, bubbleColor, phase, sentence.take(typed), insertedLabel)
             }
         }
     }
@@ -228,32 +186,52 @@ private fun ChatLine(widthFraction: Float, color: Color, alignEnd: Boolean = fal
     }
 }
 
+/** The Wisperlow keyboard in miniature: live words on top, the mic in the middle. */
 @Composable
-private fun Keyboard(color: Color) {
+private fun VoiceKeyboard(color: Color, micColor: Color, phase: Int, heard: String, insertedLabel: String) {
     Column(
         Modifier
             .fillMaxWidth()
             .background(color, RoundedCornerShape(10.dp))
             .padding(6.dp),
         verticalArrangement = Arrangement.spacedBy(Space.Xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        repeat(3) { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(horizontal = (row * 6).dp)) {
-                repeat(10 - row * 2) {
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(16.dp)
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)),
-                    )
-                }
+        Text(
+            when (phase) {
+                2 -> heard.takeLast(28)
+                3 -> insertedLabel
+                else -> " "
+            },
+            fontSize = 9.sp,
+            maxLines = 1,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.S)) {
+            Box(Modifier.size(28.dp, 20.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)))
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .background(micColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = when (phase) {
+                        2 -> Icons.Rounded.GraphicEq
+                        3 -> Icons.Rounded.Check
+                        else -> Icons.Rounded.Mic
+                    },
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
             }
+            Box(Modifier.size(28.dp, 20.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)))
         }
         Box(
             Modifier
                 .fillMaxWidth(0.6f)
-                .height(16.dp)
-                .align(Alignment.CenterHorizontally)
+                .height(14.dp)
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)),
         )
     }

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wisperlow — Talk to your computer. Privately.</title>
+<link rel="icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #fbf7f2; --ink: #1d1a17; --muted: #7a726a; --card: #fff; --peach: #ffd8c2; --lilac: #e3dcff; --mint: #cff3e1; --sky: #d4ebff; --sun: #ffeaa8; --acc: #ff6a3d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  h1, h2, h3 { font-family: "Bricolage Grotesque", sans-serif; letter-spacing: -.03em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; }
+  .brand { display: flex; gap: 10px; align-items: center; font-family: "Bricolage Grotesque"; font-weight: 800; font-size: 20px; }
+  .brand img { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 6px 16px -6px rgba(0,0,0,.3); }
+  .nl { display: flex; gap: 6px; background: var(--card); padding: 6px; border-radius: 999px; box-shadow: 0 2px 0 rgba(0,0,0,.04), 0 10px 30px -15px rgba(0,0,0,.2); }
+  .nl a { padding: 8px 16px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: background .25s, color .25s; }
+  .nl a:hover { background: var(--bg); color: var(--ink); }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; border-radius: 999px; background: var(--ink); color: #fff; font-weight: 600; font-size: 15px; transition: transform .3s cubic-bezier(.34,1.56,.64,1), box-shadow .3s; box-shadow: 0 10px 24px -10px rgba(0,0,0,.5); }
+  .btn:hover { transform: translateY(-3px) scale(1.03); }
+  .btn.soft { background: var(--card); color: var(--ink); box-shadow: 0 2px 0 rgba(0,0,0,.05), 0 10px 30px -15px rgba(0,0,0,.25); }
+
+  .hero { text-align: center; padding: 60px 0 40px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--mint); border-radius: 999px; font-size: 14px; font-weight: 500; }
+  h1 { font-size: clamp(48px, 8vw, 112px); line-height: .95; font-weight: 800; margin: 26px auto 22px; max-width: 980px; }
+  h1 .hand { position: relative; display: inline-block; color: var(--acc); }
+  h1 .hand svg { position: absolute; left: -4%; bottom: -10px; width: 108%; height: 22px; }
+  h1 .hand path { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw 1.2s .7s cubic-bezier(.65,0,.35,1) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .hero p { font-size: 20px; color: var(--muted); max-width: 600px; margin: 0 auto 34px; line-height: 1.55; }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Orb */
+  .stage { position: relative; height: 420px; margin-top: 50px; display: grid; place-items: center; }
+  .orb { width: 190px; height: 190px; border-radius: 50%; position: relative; cursor: pointer; display: grid; place-items: center;
+    background: radial-gradient(circle at 30% 30%, #fff, #ffb38f 40%, #ff6a3d 75%, #d2421a); box-shadow: 0 30px 60px -20px rgba(255,106,61,.6), inset -10px -14px 30px rgba(0,0,0,.15), inset 10px 10px 30px rgba(255,255,255,.6);
+    animation: float 5s ease-in-out infinite; transition: transform .4s cubic-bezier(.34,1.56,.64,1); z-index: 2; }
+  .orb:hover { transform: scale(1.06); }
+  .orb svg { width: 60px; height: 60px; fill: #fff; filter: drop-shadow(0 2px 4px rgba(0,0,0,.2)); }
+  @keyframes float { 50% { translate: 0 -14px; } }
+  .ring { position: absolute; width: 190px; height: 190px; border-radius: 50%; border: 2px solid var(--acc); opacity: 0; }
+  .stage.live .ring { animation: ring 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
+  .stage.live .ring:nth-child(2) { animation-delay: .8s; } .stage.live .ring:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes ring { from { transform: scale(1); opacity: .6; } to { transform: scale(2.3); opacity: 0; } }
+  .bubble { position: absolute; background: var(--card); padding: 12px 18px; border-radius: 18px; font-size: 15px; box-shadow: 0 16px 40px -18px rgba(0,0,0,.3); max-width: 260px; text-align: left; opacity: 0; transform: translateY(10px) scale(.95); transition: all .6s cubic-bezier(.34,1.56,.64,1); }
+  .bubble.show { opacity: 1; transform: none; }
+  .bubble small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .b1 { left: 6%; top: 18%; } .b2 { right: 5%; top: 30%; } .b3 { left: 14%; bottom: 8%; } .b4 { right: 12%; bottom: 4%; }
+  .hint { position: absolute; bottom: -6px; font-size: 13px; color: var(--muted); }
+
+  section { padding: 110px 0; }
+  .sec-h { text-align: center; margin-bottom: 54px; }
+  .sec-h h2 { font-size: clamp(38px, 5.5vw, 68px); line-height: 1; font-weight: 800; }
+  .sec-h p { color: var(--muted); font-size: 18px; margin-top: 16px; }
+
+  .bento { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 230px; gap: 16px; }
+  .tile { border-radius: 28px; padding: 28px; position: relative; overflow: hidden; transition: transform .5s cubic-bezier(.34,1.56,.64,1); }
+  .tile:hover { transform: translateY(-6px) rotate(-.4deg); }
+  .tile h3 { font-size: 26px; line-height: 1.05; margin-bottom: 10px; }
+  .tile p { color: rgba(29,26,23,.7); font-size: 15px; line-height: 1.5; max-width: 340px; }
+  .t1 { grid-column: span 2; grid-row: span 2; background: var(--peach); }
+  .t2 { grid-column: span 2; background: var(--lilac); }
+  .t3 { background: var(--mint); } .t4 { background: var(--sun); }
+  .t5 { grid-column: span 2; background: var(--sky); } .t6 { grid-column: span 2; background: var(--ink); color: #fff; } .t6 p { color: rgba(255,255,255,.65); }
+  .big-emoji { position: absolute; right: 22px; bottom: 14px; font-size: 64px; transition: transform .6s cubic-bezier(.34,1.56,.64,1); }
+  .tile:hover .big-emoji { transform: rotate(-12deg) scale(1.15); }
+  .lock { position: absolute; left: 50%; bottom: 40px; translate: -50% 0; width: 78%; background: rgba(255,255,255,.75); border-radius: 20px; padding: 18px; font-size: 14px; }
+  .lock .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(0,0,0,.1); }
+  .lock .row:last-child { border: 0; }
+  .lock b { color: #1b9e5a; }
+  .eq { display: flex; gap: 5px; align-items: end; height: 50px; position: absolute; right: 28px; bottom: 28px; }
+  .eq i { width: 8px; border-radius: 4px; background: var(--ink); animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: -.2s; } .eq i:nth-child(3) { animation-delay: -.4s; } .eq i:nth-child(4) { animation-delay: -.6s; } .eq i:nth-child(5) { animation-delay: -.8s; }
+  @keyframes eq { 0%, 100% { height: 10px; } 50% { height: 50px; } }
+  .kbd { display: inline-block; padding: 8px 12px; background: rgba(255,255,255,.12); border-radius: 10px; border-bottom: 3px solid rgba(255,255,255,.25); font-size: 14px; margin-top: 18px; margin-right: 6px; transition: transform .1s; }
+  .kbd.down { transform: translateY(2px); border-bottom-width: 1px; background: var(--acc); }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .st { background: var(--card); border-radius: 28px; padding: 34px; box-shadow: 0 2px 0 rgba(0,0,0,.04), 0 20px 50px -30px rgba(0,0,0,.3); }
+  .st .num { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; font-family: "Bricolage Grotesque"; font-weight: 800; font-size: 20px; margin-bottom: 26px; }
+  .st h3 { font-size: 26px; margin-bottom: 8px; } .st p { color: var(--muted); line-height: 1.55; }
+
+  .final { background: var(--acc); color: #fff; border-radius: 40px; padding: 90px 30px; text-align: center; position: relative; overflow: hidden; }
+  .final h2 { font-size: clamp(44px, 7vw, 96px); line-height: .95; font-weight: 800; }
+  .final p { font-size: 19px; opacity: .85; margin: 18px 0 34px; }
+  .final .btn { background: #fff; color: var(--ink); }
+  .final .blob { position: absolute; border-radius: 50%; background: rgba(255,255,255,.12); animation: float 7s ease-in-out infinite; }
+  footer { padding: 40px 0; text-align: center; color: var(--muted); font-size: 14px; }
+
+  .pop { opacity: 0; transform: translateY(30px) scale(.97); transition: opacity .8s, transform .8s cubic-bezier(.34,1.56,.64,1); }
+  .pop.in { opacity: 1; transform: none; }
+
+  @media (max-width: 900px) {
+    .nl { display: none; }
+    .bento { grid-template-columns: 1fr 1fr; } .t1 { grid-row: span 2; }
+    .steps { grid-template-columns: 1fr; }
+    .bubble { display: none; }
+  }
+  @media (max-width: 560px) { .bento { grid-template-columns: 1fr; } .tile { grid-column: auto !important; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .pop { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="../assets/logo.png" alt="" />Wisperlow</a>
+    <div class="nl"><a href="#features">Features</a><a href="#how">How it works</a><a href="https://github.com/YashasVM/Wisper-Low">GitHub</a></div>
+    <a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Get it free</a>
+  </nav>
+
+  <header class="hero">
+    <span class="chip pop">🌱 Free, open source &amp; fully offline</span>
+    <h1 class="pop">Talk to your computer.<br /><span class="hand">Privately.<svg viewBox="0 0 300 20" preserveAspectRatio="none"><path d="M3 15 Q 80 2 150 10 T 297 6" fill="none" stroke="#ff6a3d" stroke-width="5" stroke-linecap="round" /></svg></span></h1>
+    <p class="pop">Hold a key, say what you mean, and Wisperlow types it for you — in any app. All the AI runs right on your device, so your voice stays yours.</p>
+    <div class="ctas pop"><a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download for desktop</a><a class="btn soft" href="https://github.com/YashasVM/Wisper-Low/releases">📱 Get it on Android</a></div>
+
+    <div class="stage" id="stage">
+      <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+      <div class="orb" id="orb" role="button" aria-label="Demo microphone"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" /></svg></div>
+      <div class="bubble b1"><small>Slack</small>Running five minutes late, start without me!</div>
+      <div class="bubble b2"><small>Notes</small>Buy oat milk, call mum, book the dentist.</div>
+      <div class="bubble b3"><small>Email</small>Thanks so much — the draft looks great.</div>
+      <div class="bubble b4"><small>Code editor</small>// TODO: cache the model on first load</div>
+      <div class="hint">tap the mic ✨</div>
+    </div>
+  </header>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-h pop"><h2>Everything you need.<br />Nothing you don't.</h2><p>Simple on the surface, seriously capable underneath.</p></div>
+    <div class="bento">
+      <div class="tile t1 pop"><h3>Your voice never leaves your device</h3><p>No cloud servers, no accounts, no tracking. Transcription happens on your own hardware.</p>
+        <div class="lock"><div class="row"><span>Audio uploaded</span><b>Never</b></div><div class="row"><span>Account required</span><b>No</b></div><div class="row"><span>Works offline</span><b>Yes</b></div></div></div>
+      <div class="tile t2 pop"><h3>Lightning fast</h3><p>GPU acceleration with Metal and Vulkan means words appear almost as you finish speaking.</p><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="tile t3 pop"><h3>Any app</h3><p>Pasted where your cursor is.</p><span class="big-emoji">✍️</span></div>
+      <div class="tile t4 pop"><h3>Many languages</h3><p>Plus translate to English.</p><span class="big-emoji">🌍</span></div>
+      <div class="tile t5 pop"><h3>On your phone too</h3><p>A friendly floating bubble on Android that dictates into any text box.</p><span class="big-emoji">📱</span></div>
+      <div class="tile t6 pop"><h3>One shortcut</h3><p>Push-to-talk or toggle. Your keys, your rules.</p><span class="kbd" id="k1">Ctrl</span><span class="kbd" id="k2">Space</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top: 0">
+  <div class="wrap">
+    <div class="sec-h pop"><h2>Easy as one, two, three.</h2></div>
+    <div class="steps">
+      <div class="st pop"><div class="num" style="background: var(--peach)">1</div><h3>Download</h3><p>Install Wisperlow and pick a model — small and quick, or large and precise.</p></div>
+      <div class="st pop"><div class="num" style="background: var(--lilac)">2</div><h3>Hold &amp; talk</h3><p>Press your shortcut anywhere and speak naturally. Silence is trimmed automatically.</p></div>
+      <div class="st pop"><div class="num" style="background: var(--mint)">3</div><h3>Done</h3><p>Let go, and your words appear right where you were typing. That's it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top: 0">
+  <div class="wrap">
+    <div class="final pop">
+      <span class="blob" style="width: 300px; height: 300px; left: -80px; top: -100px"></span>
+      <span class="blob" style="width: 200px; height: 200px; right: -50px; bottom: -60px; animation-delay: -3s"></span>
+      <h2>Give your fingers<br />a break.</h2>
+      <p>Free forever. macOS, Windows, Linux and Android.</p>
+      <a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download Wisperlow →</a>
+    </div>
+  </div>
+</section>
+
+<footer>Made with care · © 2026 Wisperlow · <a href="https://github.com/YashasVM/Wisper-Low">GitHub</a></footer>
+
+<script>
+  const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: 0.12 });
+  document.querySelectorAll(".pop").forEach((el, i) => { el.style.transitionDelay = (i % 3) * 0.08 + "s"; io.observe(el); });
+
+  // Orb demo: rings pulse, bubbles pop in turn
+  const stage = document.getElementById("stage"), bubbles = [...document.querySelectorAll(".bubble")];
+  let bi = 0, timer;
+  function cycle() {
+    stage.classList.add("live");
+    setTimeout(() => { bubbles[bi].classList.add("show"); bi = (bi + 1) % bubbles.length; if (bi === 0) setTimeout(() => bubbles.forEach((b) => b.classList.remove("show")), 2500); }, 1400);
+  }
+  cycle(); timer = setInterval(cycle, 2200);
+  document.getElementById("orb").addEventListener("click", () => { clearInterval(timer); cycle(); timer = setInterval(cycle, 2200); });
+
+  // Parallax tilt on orb
+  addEventListener("pointermove", (e) => {
+    const x = (e.clientX / innerWidth - 0.5) * 16, y = (e.clientY / innerHeight - 0.5) * 16;
+    document.getElementById("orb").style.transform = `translate(${x}px, ${y}px)`;
+  });
+
+  // Key press animation
+  const k1 = document.getElementById("k1"), k2 = document.getElementById("k2");
+  setInterval(() => { k1.classList.add("down"); setTimeout(() => k2.classList.add("down"), 120); setTimeout(() => { k1.classList.remove("down"); k2.classList.remove("down"); }, 1100); }, 2200);
+</script>
+</body>
+</html>

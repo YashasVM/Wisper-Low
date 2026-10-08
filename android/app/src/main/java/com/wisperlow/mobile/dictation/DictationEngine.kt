@@ -26,7 +26,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ChannelResult
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +59,7 @@ enum class DictationError {
 
 /**
  * The one owner of the microphone, voice detection and speech model. Every
- * surface (floating bubble, in-app practice) runs dictation through here so
+ * surface (voice keyboard, in-app practice) runs dictation through here so
  * only one recording can exist and the model is loaded once.
  *
  * Public methods must be called on the main thread. Native decoding runs on a
@@ -126,8 +130,14 @@ class DictationEngine @Inject constructor(
         var modelLoading = true
         val startedNanos = System.nanoTime()
         @Volatile var leadStart = 0
+        @Volatile var heard = false
         var lastBoundary = 0
         var finishNanos = 0L
+
+        /** Tentative text for speech after the last decoded phrase; replaced once that phrase is decoded. */
+        var preview = ""
+        var previewEnd = 0
+        var previewTooSlow = false
     }
 
     private var nextSessionId = 0L
@@ -325,7 +335,7 @@ class DictationEngine @Inject constructor(
         val end = (s.pcm.size - trailing.coerceAtLeast(0)).coerceAtLeast(0)
         s.boundaries.trySend(end)
         s.boundaries.close()
-        _state.value = DictationState.Finishing(joinParts(s))
+        _state.value = DictationState.Finishing(livePartial(s))
         scope.launch {
             s.consumer?.join()
             if (session !== s) return@launch
@@ -363,7 +373,10 @@ class DictationEngine @Inject constructor(
 
     private fun handleEvent(s: Session, detector: VadEngine, event: VadEvent?, captured: Int) {
         val heard = detector.heardSpeech
-        if (event == VadEvent.SpeechStart) s.leadStart = DictationTuning.leadStart(captured)
+        if (event == VadEvent.SpeechStart) {
+            s.leadStart = DictationTuning.leadStart(captured)
+            s.heard = true
+        }
         when {
             captured >= MAX_CAPTURE_SAMPLES -> scope.launch { finish(s) }
             event == VadEvent.EndOfSpeech -> scope.launch { finish(s) }
@@ -385,6 +398,7 @@ class DictationEngine @Inject constructor(
     }
 
     /** Decodes phrases in order as their boundaries arrive. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun consume(s: Session, modelDir: File) {
         if (s.detector == null) {
             val detector = withContext(decodeDispatcher) { ensureVad() }
@@ -410,7 +424,17 @@ class DictationEngine @Inject constructor(
         if (session === s && !s.finishing) publishListening(s)
         var start = 0
         var first = true
-        for (boundary in s.boundaries) {
+        while (true) {
+            // Between pauses, decode what has been said so far so words appear while speaking.
+            val next = select<ChannelResult<Int>?> {
+                s.boundaries.onReceiveCatching { it }
+                if (wantsPreview(s)) onTimeout(PREVIEW_INTERVAL_MS) { null }
+            }
+            if (next == null) {
+                previewTail(s, engine, if (first) s.leadStart else start)
+                continue
+            }
+            val boundary = next.getOrNull() ?: break
             if (first) {
                 // Skip leading silence: fewer samples to decode, same words.
                 start = s.leadStart.coerceAtMost(boundary)
@@ -429,21 +453,50 @@ class DictationEngine @Inject constructor(
             Log.d(TAG, "timing decode ${pcm.size / 16} ms audio in ${(System.nanoTime() - t0) / 1_000_000} ms")
             val cleaned = TextCleaner.clean(text)
             if (!TextCleaner.looksLikeGibberish(cleaned)) s.parts += cleaned
+            // While finishing, keep the stale preview on screen until the last phrase replaces it.
+            if (!s.finishing) s.preview = ""
             if (session === s) {
                 _state.value = if (s.finishing) {
-                    DictationState.Finishing(joinParts(s))
+                    DictationState.Finishing(livePartial(s))
                 } else {
-                    DictationState.Listening(joinParts(s), modelLoading = false)
+                    DictationState.Listening(livePartial(s), modelLoading = false)
                 }
             }
         }
     }
 
     private fun publishListening(s: Session) {
-        _state.value = DictationState.Listening(joinParts(s), s.modelLoading)
+        _state.value = DictationState.Listening(livePartial(s), s.modelLoading)
+    }
+
+    private fun wantsPreview(s: Session): Boolean =
+        s.settings.keyboard.livePreview && session === s && !s.finishing && s.heard && !s.previewTooSlow
+
+    /** Decodes the unfinished phrase from [from] to now, for display only. */
+    private suspend fun previewTail(s: Session, engine: SttEngine, from: Int) {
+        val end = s.pcm.size
+        val begin = from.coerceIn(0, end)
+        val length = end - begin
+        if (length < PREVIEW_MIN_SAMPLES || length > PREVIEW_MAX_SAMPLES || end - s.previewEnd < PREVIEW_STEP_SAMPLES) return
+        s.previewEnd = end
+        val pcm = s.pcm.slice(begin, end)
+        val t0 = System.nanoTime()
+        val text = withContext(decodeDispatcher) { engine.transcribe(pcm) }
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        // A phone too slow to keep up stops previewing rather than delaying the real transcript.
+        if (ms > PREVIEW_BUDGET_MS) {
+            Log.i(TAG, "Live preview off for this session: ${length / 16} ms audio took $ms ms")
+            s.previewTooSlow = true
+        }
+        if (session !== s || s.finishing) return
+        s.preview = TextCleaner.clean(text)
+        publishListening(s)
     }
 
     private fun joinParts(s: Session): String = TextCleaner.clean(s.parts.joinToString(" "))
+
+    private fun livePartial(s: Session): String =
+        if (s.preview.isBlank()) joinParts(s) else TextCleaner.clean((s.parts + s.preview).joinToString(" "))
 
     private fun compose(s: Session): String =
         PersonalDictionary.apply(joinParts(s), s.settings.personalDictionary)
@@ -526,6 +579,11 @@ class DictationEngine @Inject constructor(
         private const val KEEP_TRAILING_SAMPLES = SAMPLE_RATE * 3 / 10
         private const val IDLE_RELEASE_MS = 5 * 60_000L
         private const val LEVEL_INTERVAL_NANOS = 60_000_000L
+        private const val PREVIEW_INTERVAL_MS = 450L
+        private const val PREVIEW_MIN_SAMPLES = SAMPLE_RATE * 6 / 10
+        private const val PREVIEW_MAX_SAMPLES = SAMPLE_RATE * 12
+        private const val PREVIEW_STEP_SAMPLES = SAMPLE_RATE * 4 / 10
+        private const val PREVIEW_BUDGET_MS = 900L
     }
 }
 

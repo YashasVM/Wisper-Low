@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wisperlow — Speak. It types. Nothing leaves your device.</title>
+<meta name="description" content="Private, local speech-to-text for desktop and Android. Press a shortcut, talk, and your words appear in any app." />
+<link rel="icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #07070c;
+    --fg: #f4f4f8;
+    --muted: #9a9ab0;
+    --line: rgba(255,255,255,.08);
+    --a: #7c5cff;
+    --b: #22d3ee;
+    --c: #f472b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: Inter, system-ui, sans-serif; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+
+  /* Aurora background */
+  .aurora { position: fixed; inset: -20%; z-index: -2; filter: blur(90px) saturate(140%); opacity: .55; }
+  .aurora span { position: absolute; border-radius: 50%; mix-blend-mode: screen; animation: drift 22s ease-in-out infinite alternate; }
+  .aurora span:nth-child(1) { width: 50vw; height: 50vw; background: var(--a); top: 5%; left: 10%; }
+  .aurora span:nth-child(2) { width: 40vw; height: 40vw; background: var(--b); top: 25%; right: 5%; animation-duration: 28s; animation-delay: -6s; }
+  .aurora span:nth-child(3) { width: 35vw; height: 35vw; background: var(--c); bottom: 0; left: 35%; animation-duration: 32s; animation-delay: -12s; }
+  @keyframes drift { to { transform: translate(8vw, -6vh) scale(1.15) rotate(30deg); } }
+  .grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .06;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  nav { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 28px;
+    padding: 10px 12px 10px 18px; border: 1px solid var(--line); border-radius: 999px; background: rgba(12,12,20,.55); backdrop-filter: blur(18px); font-size: 14px; }
+  nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  nav .brand img { width: 22px; height: 22px; border-radius: 6px; }
+  nav .links { display: flex; gap: 22px; color: var(--muted); }
+  nav .links a:hover { color: var(--fg); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; font-weight: 600; font-size: 14px; transition: transform .25s, box-shadow .25s; }
+  .btn-primary { background: var(--fg); color: #0b0b12; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 40px -10px rgba(124,92,255,.8); }
+  .btn-ghost { border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+  .btn-ghost:hover { background: rgba(255,255,255,.08); }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  .hero { min-height: 100vh; display: grid; place-items: center; text-align: center; padding-top: 120px; }
+  .pill { display: inline-flex; gap: 8px; align-items: center; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--muted); font-size: 13px; }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 12px #34d399; animation: pulse 2s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  h1 { font-size: clamp(44px, 8vw, 104px); line-height: .95; letter-spacing: -.045em; font-weight: 800; margin: 28px 0 22px; }
+  h1 .grad { background: linear-gradient(100deg, var(--a), var(--b) 45%, var(--c)); -webkit-background-clip: text; background-clip: text; color: transparent; background-size: 200%; animation: shine 8s linear infinite; }
+  @keyframes shine { to { background-position: 200%; } }
+  .sub { max-width: 620px; margin: 0 auto 36px; color: var(--muted); font-size: 19px; line-height: 1.6; }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Demo window */
+  .demo { margin: 72px auto 0; max-width: 820px; border-radius: 20px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); backdrop-filter: blur(20px); box-shadow: 0 40px 120px -30px rgba(124,92,255,.5); overflow: hidden; text-align: left; }
+  .demo .bar { display: flex; gap: 7px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .demo .bar b { width: 11px; height: 11px; border-radius: 50%; background: #2a2a38; }
+  .demo .body { padding: 28px 30px 34px; min-height: 170px; font-size: 20px; line-height: 1.6; }
+  .demo .caret { display: inline-block; width: 2px; height: 1.1em; background: var(--b); vertical-align: -3px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .overlay-pill { display: flex; align-items: center; gap: 14px; width: fit-content; margin: 0 auto 26px; padding: 10px 18px; border-radius: 999px; background: #000; border: 1px solid var(--line); font-size: 13px; color: var(--muted); transition: opacity .4s, transform .4s; }
+  .overlay-pill canvas { width: 140px; height: 28px; }
+  .kbd { font-family: "JetBrains Mono", monospace; font-size: 12px; padding: 3px 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; color: var(--fg); }
+
+  section { padding: 120px 0; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--b); }
+  h2 { font-size: clamp(34px, 5vw, 60px); letter-spacing: -.035em; line-height: 1.02; margin: 14px 0 18px; font-weight: 750; }
+  .lead { color: var(--muted); font-size: 18px; max-width: 560px; line-height: 1.6; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 56px; }
+  .card { position: relative; padding: 30px; border-radius: 20px; border: 1px solid var(--line); background: rgba(255,255,255,.025); overflow: hidden; transition: transform .4s cubic-bezier(.2,.8,.2,1), border-color .4s; }
+  .card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 50%), rgba(124,92,255,.18), transparent 40%); opacity: 0; transition: opacity .3s; }
+  .card:hover::before { opacity: 1; }
+  .card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,.18); }
+  .card .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(124,92,255,.3), rgba(34,211,238,.2)); margin-bottom: 22px; font-size: 20px; }
+  .card h3 { font-size: 19px; margin-bottom: 10px; letter-spacing: -.01em; }
+  .card p { color: var(--muted); line-height: 1.6; font-size: 15px; }
+  .card.wide { grid-column: span 2; }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 64px; position: relative; }
+  .steps::before { content: ""; position: absolute; top: 27px; left: 12%; right: 12%; height: 1px; background: linear-gradient(90deg, transparent, var(--line), var(--a), var(--line), transparent); }
+  .step { text-align: center; padding: 0 14px; }
+  .step .n { width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); background: var(--bg); font-family: "JetBrains Mono", monospace; position: relative; }
+  .step.lit .n { border-color: var(--a); box-shadow: 0 0 30px -4px var(--a); }
+  .step h4 { margin-bottom: 8px; }
+  .step p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+
+  .models { display: flex; gap: 12px; overflow: hidden; margin-top: 48px; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+  .track { display: flex; gap: 12px; animation: scroll 30s linear infinite; flex-shrink: 0; }
+  .track span { padding: 14px 22px; border: 1px solid var(--line); border-radius: 14px; white-space: nowrap; color: var(--muted); background: rgba(255,255,255,.02); }
+  @keyframes scroll { to { transform: translateX(calc(-100% - 12px)); } }
+
+  .cta { text-align: center; border: 1px solid var(--line); border-radius: 32px; padding: 90px 24px; background: radial-gradient(ellipse at top, rgba(124,92,255,.25), transparent 60%); }
+  .platforms { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+  footer { padding: 50px 0; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  footer .wrap { display: flex; justify-content: space-between; }
+
+  .reveal { opacity: 0; transform: translateY(30px); filter: blur(6px); transition: opacity 1s cubic-bezier(.2,.8,.2,1), transform 1s cubic-bezier(.2,.8,.2,1), filter 1s; }
+  .reveal.in { opacity: 1; transform: none; filter: none; }
+  .d1 { transition-delay: .08s; } .d2 { transition-delay: .16s; } .d3 { transition-delay: .24s; }
+
+  @media (max-width: 860px) {
+    nav .links { display: none; }
+    .grid, .steps { grid-template-columns: 1fr; }
+    .card.wide { grid-column: auto; }
+    .steps { gap: 36px; } .steps::before { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .reveal { opacity: 1; transform: none; filter: none; } }
+</style>
+</head>
+<body>
+<div class="aurora"><span></span><span></span><span></span></div>
+<div class="grain"></div>
+
+<nav>
+  <a class="brand" href="#"><img src="../assets/logo.png" alt="" />Wisperlow</a>
+  <div class="links"><a href="#features">Features</a><a href="#how">How it works</a><a href="#models">Models</a></div>
+  <a class="btn btn-primary" href="https://github.com/YashasVM/Wisper-Low/releases">Download</a>
+</nav>
+
+<header class="hero wrap">
+  <div>
+    <div class="pill reveal"><i></i>100% on-device · Open source</div>
+    <h1 class="reveal d1">Speak.<br /><span class="grad">It types.</span></h1>
+    <p class="sub reveal d2">Wisperlow turns your voice into text in any app. Press a shortcut, talk, release — transcribed locally on your hardware. No cloud. No account. No audio ever leaves your device.</p>
+    <div class="ctas reveal d3">
+      <a class="btn btn-primary" href="https://github.com/YashasVM/Wisper-Low/releases">Download free →</a>
+      <a class="btn btn-ghost" href="https://github.com/YashasVM/Wisper-Low">★ Star on GitHub</a>
+    </div>
+
+    <div class="demo reveal d3">
+      <div class="bar"><b></b><b></b><b></b></div>
+      <div class="body">
+        <div class="overlay-pill" id="pill"><span class="kbd">Ctrl</span><span class="kbd">Space</span><canvas id="wave" width="280" height="56"></canvas><span id="state">Listening</span></div>
+        <span id="typed"></span><span class="caret"></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features" class="wrap">
+  <div class="eyebrow reveal">Why Wisperlow</div>
+  <h2 class="reveal d1">Dictation that respects<br />your privacy and your time.</h2>
+  <p class="lead reveal d2">Everything runs on your machine with GPU acceleration, so it's fast, private and works offline.</p>
+  <div class="grid">
+    <div class="card wide reveal"><div class="ic">🔒</div><h3>Private by architecture</h3><p>Audio is processed by models running on your own CPU or GPU. There's no transcription server to trust, because there isn't one.</p></div>
+    <div class="card reveal d1"><div class="ic">⚡</div><h3>GPU accelerated</h3><p>Metal on macOS, Vulkan on Windows and Linux.</p></div>
+    <div class="card reveal"><div class="ic">⌨️</div><h3>Works in every app</h3><p>Text is pasted straight into whatever window has focus.</p></div>
+    <div class="card reveal d1"><div class="ic">🎙️</div><h3>Push-to-talk or toggle</h3><p>Configurable global shortcuts, with voice activity detection to trim silence.</p></div>
+    <div class="card reveal d2"><div class="ic">🌍</div><h3>Dozens of languages</h3><p>Multilingual models plus built-in translation to English.</p></div>
+    <div class="card wide reveal"><div class="ic">📱</div><h3>Desktop and Android</h3><p>Native apps for macOS, Windows and Linux, plus an Android keyboard bubble that dictates into any text field.</p></div>
+    <div class="card reveal d1"><div class="ic">🕘</div><h3>History built in</h3><p>Every transcription is saved locally so you can find and reuse it.</p></div>
+  </div>
+</section>
+
+<section id="how" class="wrap">
+  <div class="eyebrow reveal">How it works</div>
+  <h2 class="reveal d1">From keypress to text<br />in under a second.</h2>
+  <div class="steps" id="steps">
+    <div class="step reveal"><div class="n">01</div><h4>Press</h4><p>Hold your global shortcut from anywhere.</p></div>
+    <div class="step reveal d1"><div class="n">02</div><h4>Speak</h4><p>Silero VAD filters out silence in real time.</p></div>
+    <div class="step reveal d2"><div class="n">03</div><h4>Transcribe</h4><p>Whisper or Parakeet runs locally on your GPU.</p></div>
+    <div class="step reveal d3"><div class="n">04</div><h4>Paste</h4><p>Text lands in the active app, instantly.</p></div>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap"><div class="eyebrow reveal">Models</div><h2 class="reveal d1">Pick the model that fits.</h2><p class="lead reveal d2">From tiny and instant to large and precise. Download once, run forever.</p></div>
+  <div class="models">
+    <div class="track"><span>Whisper Small</span><span>Whisper Medium</span><span>Whisper Turbo</span><span>Whisper Large</span><span>Parakeet</span><span>Moonshine</span><span>SenseVoice</span><span>Silero VAD</span></div>
+    <div class="track" aria-hidden="true"><span>Whisper Small</span><span>Whisper Medium</span><span>Whisper Turbo</span><span>Whisper Large</span><span>Parakeet</span><span>Moonshine</span><span>SenseVoice</span><span>Silero VAD</span></div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="cta reveal">
+    <h2>Your voice, your device.</h2>
+    <p class="lead" style="margin: 0 auto">Free and open source. Get started in a minute.</p>
+    <div class="platforms">
+      <a class="btn btn-primary" href="https://github.com/YashasVM/Wisper-Low/releases"> macOS</a>
+      <a class="btn btn-ghost" href="https://github.com/YashasVM/Wisper-Low/releases">Windows</a>
+      <a class="btn btn-ghost" href="https://github.com/YashasVM/Wisper-Low/releases">Linux</a>
+      <a class="btn btn-ghost" href="https://github.com/YashasVM/Wisper-Low/releases">Android</a>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap"><span>© 2026 Wisperlow</span><a href="https://github.com/YashasVM/Wisper-Low">GitHub</a></div></footer>
+
+<script>
+  // Reveal on scroll
+  const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: 0.15 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  // Spotlight on cards
+  document.querySelectorAll(".card").forEach((c) => c.addEventListener("pointermove", (e) => {
+    const r = c.getBoundingClientRect();
+    c.style.setProperty("--mx", e.clientX - r.left + "px");
+    c.style.setProperty("--my", e.clientY - r.top + "px");
+  }));
+
+  // Light up steps sequentially
+  const steps = [...document.querySelectorAll(".step")];
+  let si = 0;
+  setInterval(() => { steps.forEach((s, i) => s.classList.toggle("lit", i === si)); si = (si + 1) % steps.length; }, 1200);
+
+  // Waveform + typing demo
+  const cv = document.getElementById("wave"), ctx = cv.getContext("2d");
+  let listening = true, t = 0;
+  function draw() {
+    t += 0.08;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const bars = 28, w = cv.width / bars;
+    for (let i = 0; i < bars; i++) {
+      const amp = listening ? (Math.sin(t + i * 0.5) * 0.5 + 0.5) * (Math.sin(t * 0.7 + i) * 0.4 + 0.6) : 0.08;
+      const h = Math.max(4, amp * cv.height * 0.9);
+      const g = ctx.createLinearGradient(0, 0, cv.width, 0);
+      g.addColorStop(0, "#7c5cff"); g.addColorStop(1, "#22d3ee");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.roundRect(i * w + 2, (cv.height - h) / 2, w - 4, h, 3);
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  const lines = [
+    "Hey team, quick update: the release build is green and ready to ship tomorrow morning.",
+    "Remind me to call Priya about the design review at 4 pm.",
+    "Wisperlow runs entirely on my laptop, so nothing I say leaves this machine.",
+  ];
+  const typed = document.getElementById("typed"), state = document.getElementById("state");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  (async function loop() {
+    for (let k = 0; ; k = (k + 1) % lines.length) {
+      typed.textContent = ""; listening = true; state.textContent = "Listening";
+      await sleep(2200);
+      listening = false; state.textContent = "Transcribing…";
+      await sleep(600);
+      state.textContent = "Done";
+      for (const ch of lines[k]) { typed.textContent += ch; await sleep(18); }
+      await sleep(2600);
+    }
+  })();
+</script>
+</body>
+</html>

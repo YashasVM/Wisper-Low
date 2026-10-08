@@ -71,7 +71,6 @@ fun WisperlowRoot(state: MainUiState, level: () -> Float, viewModel: MainViewMod
                     onClearPractice = { viewModel.clearPractice() },
                     onFinish = {
                         viewModel.completeOnboarding()
-                        if (state.setup.canRunBubble) actions.startBubble()
                         showGuide = false
                     },
                     onClose = if (state.settings.onboardingCompleted) ({ showGuide = false }) else null,
@@ -178,10 +177,6 @@ private fun MainTabs(
                 listState = settingsList,
                 contentPadding = padding,
                 onOpenGuide = onOpenGuide,
-                onPositionReset = {
-                    viewModel.resetBubblePosition()
-                    scope.launch { snackbar.showSnackbar(context.getString(R.string.settings_reset_position_done)) }
-                },
             )
         }
         }

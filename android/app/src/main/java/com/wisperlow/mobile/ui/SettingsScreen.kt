@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,7 @@ import com.wisperlow.mobile.MainUiState
 import com.wisperlow.mobile.MainViewModel
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.settings.AutoStop
+import com.wisperlow.mobile.settings.KeyboardPrefs
 
 /** Index of the speech model section, so other screens can scroll straight to it. */
 const val SETTINGS_MODEL_ITEM = 5
@@ -44,7 +48,6 @@ fun SettingsScreen(
     listState: LazyListState,
     contentPadding: PaddingValues,
     onOpenGuide: () -> Unit,
-    onPositionReset: () -> Unit,
 ) {
     val settings = state.settings
     LazyColumn(
@@ -55,27 +58,69 @@ fun SettingsScreen(
     ) {
         item { ScreenTitle(stringResource(R.string.settings_title)) }
 
-        item { SectionHeader(stringResource(R.string.settings_section_bubble)) }
+        item { SectionHeader(stringResource(R.string.settings_section_keyboard)) }
         item {
             SectionCard {
-                SwitchRow(
-                    title = stringResource(R.string.settings_bubble_on),
-                    body = stringResource(R.string.settings_bubble_on_body),
-                    checked = state.bubbleRunning,
-                    enabled = state.setup.canRunBubble || state.bubbleRunning,
-                    onCheckedChange = { if (it) actions.startBubble() else actions.stopBubble() },
-                )
-                HorizontalDivider()
-                SwitchRow(
-                    title = stringResource(R.string.settings_only_typing),
-                    body = stringResource(
-                        if (state.setup.accessibility) R.string.settings_only_typing_body else R.string.settings_only_typing_needs_a11y,
+                LinkRow(
+                    stringResource(R.string.settings_keyboard_list),
+                    stringResource(
+                        if (state.setup.keyboardEnabled) R.string.settings_keyboard_list_on else R.string.settings_keyboard_list_off,
                     ),
-                    checked = settings.bubbleOnlyWhenTyping,
-                    onCheckedChange = { viewModel.setBubbleOnlyWhenTyping(it) },
+                    actions.openKeyboardSettings,
                 )
                 HorizontalDivider()
-                LinkRow(stringResource(R.string.settings_reset_position), null, onPositionReset)
+                LinkRow(stringResource(R.string.settings_keyboard_pick), null, actions.pickKeyboard)
+                HorizontalDivider()
+                val kb = settings.keyboard
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_autocorrect),
+                    body = stringResource(R.string.settings_typing_autocorrect_body),
+                    checked = kb.autoCorrect,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(autoCorrect = on) } },
+                )
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_autocap),
+                    body = null,
+                    checked = kb.autoCapitalize,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(autoCapitalize = on) } },
+                )
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_double_space),
+                    body = null,
+                    checked = kb.doubleSpacePeriod,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(doubleSpacePeriod = on) } },
+                )
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_number_row),
+                    body = null,
+                    checked = kb.numberRow,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(numberRow = on) } },
+                )
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_haptics),
+                    body = null,
+                    checked = kb.haptics,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(haptics = on) } },
+                )
+                SwitchRow(
+                    title = stringResource(R.string.settings_typing_sound),
+                    body = null,
+                    checked = kb.sound,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(sound = on) } },
+                )
+                Text(stringResource(R.string.settings_typing_height), style = MaterialTheme.typography.titleMedium)
+                Slider(
+                    value = kb.heightScale,
+                    onValueChange = { v -> viewModel.updateKeyboard { it.copy(heightScale = v) } },
+                    valueRange = KeyboardPrefs.MIN_HEIGHT_SCALE..KeyboardPrefs.MAX_HEIGHT_SCALE,
+                )
+                HorizontalDivider()
+                val context = LocalContext.current
+                val cleared = stringResource(R.string.settings_forget_words_done)
+                LinkRow(stringResource(R.string.settings_forget_words), stringResource(R.string.settings_forget_words_body)) {
+                    viewModel.forgetLearnedWords()
+                    Toast.makeText(context, cleared, Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -105,6 +150,13 @@ fun SettingsScreen(
                     body = stringResource(R.string.settings_review_body),
                     checked = settings.reviewBeforeInsert,
                     onCheckedChange = { viewModel.setReviewBeforeInsert(it) },
+                )
+                HorizontalDivider()
+                SwitchRow(
+                    title = stringResource(R.string.settings_live_preview),
+                    body = stringResource(R.string.settings_live_preview_body),
+                    checked = settings.keyboard.livePreview,
+                    onCheckedChange = { on -> viewModel.updateKeyboard { it.copy(livePreview = on) } },
                 )
                 HorizontalDivider()
                 SwitchRow(

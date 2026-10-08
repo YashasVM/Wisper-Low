@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wisperlow — Say it. It's written.</title>
+<link rel="icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #f5f2ec; --ink: #141414; --muted: #6d6a64; --line: #dcd7cd; --accent: #e5532d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: "Inter Tight", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  .serif { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+
+  header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: border-color .3s; }
+  header.top.scrolled { border-color: var(--line); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; font-size: 14px; }
+  .brand { display: flex; gap: 10px; align-items: center; font-weight: 600; }
+  .brand img { width: 26px; height: 26px; border-radius: 7px; }
+  .navl { display: flex; gap: 34px; color: var(--muted); }
+  .navl a { position: relative; }
+  .navl a::after { content: ""; position: absolute; left: 0; right: 100%; bottom: -4px; height: 1px; background: var(--ink); transition: right .35s ease; }
+  .navl a:hover { color: var(--ink); } .navl a:hover::after { right: 0; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 500; font-size: 14px; transition: background .3s, transform .3s; }
+  .btn:hover { background: var(--accent); transform: translateY(-1px); }
+  .btn.line { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+  .btn.line:hover { background: var(--ink); color: var(--bg); }
+
+  .hero { padding: 110px 0 60px; }
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .14em; border-bottom: 1px solid var(--line); padding-bottom: 18px; }
+  .big { font-size: clamp(64px, 13vw, 210px); line-height: .86; letter-spacing: -.035em; margin-top: 40px; }
+  .big .line { display: block; overflow: hidden; padding: 0 .06em .14em 0; margin-bottom: -.14em; }
+  .big .line > span { display: inline-block; transform: translateY(105%); animation: rise 1.2s cubic-bezier(.16,1,.3,1) forwards; }
+  .big .line:nth-child(2) > span { animation-delay: .12s; }
+  .big em { color: var(--accent); }
+  @keyframes rise { to { transform: none; } }
+  .hero-foot { display: grid; grid-template-columns: 1.2fr 1fr; gap: 60px; margin-top: 56px; align-items: end; }
+  .hero-foot p { font-size: 21px; line-height: 1.5; max-width: 520px; }
+  .hero-foot .ctas { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+
+  /* Live transcript strip */
+  .strip { margin-top: 80px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); padding: 34px 0; display: grid; grid-template-columns: 180px 1fr; gap: 30px; align-items: center; }
+  .rec { display: flex; align-items: center; gap: 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .14em; }
+  .rec i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: rp 1.4s infinite; }
+  @keyframes rp { 0% { box-shadow: 0 0 0 0 rgba(229,83,45,.5); } 100% { box-shadow: 0 0 0 14px rgba(229,83,45,0); } }
+  .words { font-size: clamp(26px, 3.4vw, 44px); line-height: 1.2; min-height: 2.4em; }
+  .words span { opacity: 0; filter: blur(8px); display: inline-block; transition: opacity .5s, filter .5s, transform .5s; transform: translateY(8px); margin-right: .25em; }
+  .words span.on { opacity: 1; filter: none; transform: none; }
+
+  section { padding: 140px 0; }
+  .label { font-size: 13px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1.6fr; gap: 60px; }
+  h2 { font-size: clamp(44px, 6vw, 92px); line-height: .95; letter-spacing: -.02em; }
+  h2 em { color: var(--accent); }
+
+  .list { margin-top: 70px; border-top: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: 80px 1fr 1.3fr; gap: 30px; padding: 34px 0; border-bottom: 1px solid var(--line); align-items: baseline; transition: padding .4s cubic-bezier(.16,1,.3,1), background .4s; cursor: default; }
+  .row:hover { padding-left: 18px; background: rgba(0,0,0,.025); }
+  .row .no { color: var(--muted); font-size: 14px; }
+  .row h3 { font-size: 40px; line-height: 1; }
+  .row p { color: var(--muted); line-height: 1.6; font-size: 17px; }
+
+  .quote { text-align: center; padding: 160px 0; background: var(--ink); color: var(--bg); }
+  .quote blockquote { font-size: clamp(38px, 5.5vw, 80px); line-height: 1.05; max-width: 1000px; margin: 0 auto; }
+  .quote blockquote em { color: var(--accent); }
+  .quote .cap { margin-top: 30px; color: #8d8a84; font-size: 13px; text-transform: uppercase; letter-spacing: .14em; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); margin-top: 70px; }
+  .stat { padding: 34px 24px 0 0; border-right: 1px solid var(--line); }
+  .stat:last-child { border: 0; }
+  .stat b { display: block; font-size: 72px; line-height: 1; }
+  .stat span { color: var(--muted); font-size: 14px; }
+
+  .final { text-align: center; }
+  .final h2 { font-size: clamp(56px, 10vw, 160px); }
+  .final .ctas { display: flex; gap: 12px; justify-content: center; margin-top: 44px; flex-wrap: wrap; }
+  footer { border-top: 1px solid var(--line); padding: 34px 0; font-size: 13px; color: var(--muted); }
+  footer .wrap { display: flex; justify-content: space-between; }
+
+  .rv { opacity: 0; transform: translateY(40px); transition: opacity 1.1s cubic-bezier(.16,1,.3,1), transform 1.1s cubic-bezier(.16,1,.3,1); }
+  .rv.in { opacity: 1; transform: none; }
+
+  @media (max-width: 860px) {
+    .navl { display: none; }
+    .hero-foot, .two, .strip { grid-template-columns: 1fr; gap: 24px; }
+    .hero-foot .ctas { justify-content: flex-start; }
+    .row { grid-template-columns: 1fr; gap: 10px; }
+    .stats { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .rv, .big .line > span { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="../assets/logo.png" alt="" />Wisperlow</a>
+    <nav class="navl"><a href="#principles">Principles</a><a href="#numbers">Numbers</a><a href="https://github.com/YashasVM/Wisper-Low">Source</a></nav>
+    <a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="padding-bottom: 0">
+    <div class="wrap">
+      <div class="meta"><span>Local speech-to-text</span><span>macOS · Windows · Linux · Android</span></div>
+      <h1 class="big serif"><span class="line"><span>Say it.</span></span><span class="line"><span><em>It's written.</em></span></span></h1>
+      <div class="hero-foot">
+        <p class="rv">Wisperlow is a quiet little tool that turns your voice into text, right where your cursor is. It runs entirely on your computer — no cloud, no account, no one listening.</p>
+        <div class="ctas rv"><a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download for free ↗</a><a class="btn line" href="https://github.com/YashasVM/Wisper-Low">View source</a></div>
+      </div>
+      <div class="strip rv">
+        <div class="rec"><i></i>Recording</div>
+        <div class="words serif" id="words"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="principles">
+    <div class="wrap">
+      <div class="two">
+        <div class="label rv">( Principles )</div>
+        <h2 class="serif rv">Built on a simple idea: <em>your words</em> belong to you.</h2>
+      </div>
+      <div class="list">
+        <div class="row rv"><span class="no">01</span><h3 class="serif">Local, always</h3><p>Whisper, Parakeet and friends run on your own CPU or GPU. Audio never touches a server — there's no server to touch.</p></div>
+        <div class="row rv"><span class="no">02</span><h3 class="serif">Anywhere you type</h3><p>One global shortcut, push-to-talk or toggle. The result is pasted straight into the app you're already using.</p></div>
+        <div class="row rv"><span class="no">03</span><h3 class="serif">Fast by default</h3><p>Metal and Vulkan acceleration, plus voice activity detection that trims silence before the model ever sees it.</p></div>
+        <div class="row rv"><span class="no">04</span><h3 class="serif">Many languages</h3><p>Multilingual models with optional translation to English, and a history of everything you've dictated.</p></div>
+        <div class="row rv"><span class="no">05</span><h3 class="serif">Open source</h3><p>Read every line. Build it yourself. Script it from the command line with flags like <code>--toggle-transcription</code>.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="quote">
+    <div class="wrap">
+      <blockquote class="serif rv">“The fastest keyboard is the one <em>you already speak</em> with.”</blockquote>
+      <div class="cap rv">— The Wisperlow idea</div>
+    </div>
+  </div>
+
+  <section id="numbers">
+    <div class="wrap">
+      <div class="two">
+        <div class="label rv">( By the numbers )</div>
+        <h2 class="serif rv">Small app. <em>Big</em> models.</h2>
+      </div>
+      <div class="stats">
+        <div class="stat rv"><b class="serif" data-n="0">0</b><span>bytes of audio uploaded</span></div>
+        <div class="stat rv"><b class="serif" data-n="4">0</b><span>model families supported</span></div>
+        <div class="stat rv"><b class="serif" data-n="4">0</b><span>platforms</span></div>
+        <div class="stat rv"><b class="serif" data-n="99">0</b><span>languages via Whisper</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2 class="serif rv">Start <em>talking.</em></h2>
+      <div class="ctas rv"><a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download Wisperlow</a><a class="btn line" href="https://github.com/YashasVM/Wisper-Low">GitHub</a></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>© 2026 Wisperlow</span><span>Made for people who think out loud.</span></div></footer>
+
+<script>
+  const topBar = document.getElementById("top");
+  addEventListener("scroll", () => topBar.classList.toggle("scrolled", scrollY > 10), { passive: true });
+
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("in");
+    const n = e.target.querySelector("[data-n]");
+    if (n) countUp(n);
+    io.unobserve(e.target);
+  }), { threshold: 0.2 });
+  document.querySelectorAll(".rv").forEach((el, i) => { el.style.transitionDelay = (i % 4) * 0.07 + "s"; io.observe(el); });
+
+  function countUp(el) {
+    const target = +el.dataset.n, start = performance.now();
+    (function f(now) {
+      const p = Math.min(1, (now - start) / 1400), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * e);
+      if (p < 1) requestAnimationFrame(f);
+    })(start);
+  }
+
+  const phrases = [
+    "Draft a reply saying I'll be ten minutes late.",
+    "Note to self: the best ideas arrive on walks.",
+    "Schedule the launch review for Thursday at noon.",
+  ];
+  const box = document.getElementById("words");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  (async () => {
+    for (let k = 0; ; k = (k + 1) % phrases.length) {
+      box.innerHTML = phrases[k].split(" ").map((w) => `<span>${w}</span>`).join("");
+      const spans = [...box.children];
+      for (const s of spans) { s.classList.add("on"); await sleep(170); }
+      await sleep(2400);
+      for (const s of spans) s.classList.remove("on");
+      await sleep(600);
+    }
+  })();
+</script>
+</body>
+</html>

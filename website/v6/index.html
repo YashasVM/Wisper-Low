@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wisperlow — your voice is now a keyboard</title>
+<meta name="description" content="Private, local speech-to-text for desktop and Android. Hold a key, speak, and your words appear in any app." />
+<link rel="icon" href="../assets/wisperlow-mark.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #0e0e0c; --bg2: #161613; --fg: #f2ede4; --dim: #8b877e; --line: #2a2925; --acc: #ff5a1f; --ease: cubic-bezier(.16,1,.3,1); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .d { font-family: Unbounded, sans-serif; text-transform: uppercase; letter-spacing: -.02em; }
+  .mono { font-family: "JetBrains Mono", monospace; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 0 56px; }
+  ::selection { background: var(--acc); color: var(--bg); }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: .05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* Header */
+  .top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 76px; font-size: 14px; }
+  .brand { justify-self: start; display: flex; align-items: center; gap: 10px; font-family: Unbounded; font-weight: 600; font-size: 15px; }
+  .brand img { width: 28px; height: 28px; transition: transform .6s var(--ease); }
+  .brand:hover img { transform: rotate(-90deg) scale(1.1); }
+  .top .mid { color: var(--dim); }
+  .top .r { justify-self: end; display: flex; gap: 28px; }
+  .ul { position: relative; }
+  .ul::after { content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: right; transition: transform .5s var(--ease); }
+  .ul:hover::after { transform: scaleX(1); transform-origin: left; }
+
+  /* Hero */
+  .hero { min-height: calc(100vh - 76px - 72px); display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 36px; position: relative; }
+  h1 { font-size: clamp(48px, 9.4vw, 144px); line-height: .9; font-weight: 800; }
+  h1 .row { display: block; white-space: nowrap; }
+  h1 .row.indent { padding-left: 8vw; }
+  h1 .row.acc { color: var(--acc); padding-left: 12vw; }
+  h1 .ch { display: inline-block; transform: translateY(110%) rotate(8deg); opacity: 0; animation: ch 1s var(--ease) forwards; }
+  h1 .row { overflow: hidden; padding-bottom: .04em; }
+  @keyframes ch { to { transform: none; opacity: 1; } }
+  .badge { position: absolute; right: 2vw; top: 41%; width: 120px; height: 120px; display: grid; place-items: center; }
+  .badge svg.ring { position: absolute; inset: 0; animation: spin 14s linear infinite; }
+  .badge img { width: 34px; height: 34px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hero-foot { display: flex; justify-content: space-between; align-items: end; gap: 40px; margin-top: 44px; opacity: 0; animation: fade 1s 1.3s var(--ease) forwards; }
+  .hero-foot p { max-width: 380px; color: #c9c4ba; line-height: 1.55; font-size: 16px; }
+  @keyframes fade { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  .btns { display: flex; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 12px; height: 60px; padding: 0 30px; border-radius: 999px; font-weight: 600; font-size: 15px; border: 1.5px solid var(--fg); position: relative; overflow: hidden; isolation: isolate; transition: color .5s var(--ease), border-color .5s; }
+  .btn::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--fg); border-radius: inherit; transform: translateY(101%); transition: transform .5s var(--ease); }
+  .btn:hover { color: var(--bg); } .btn:hover::before { transform: none; }
+  .btn.solid { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+  .btn .arr { transition: transform .5s var(--ease); } .btn:hover .arr { transform: translateY(3px); }
+
+  /* Marquee */
+  .marq { background: var(--acc); color: var(--bg); overflow: hidden; white-space: nowrap; height: 72px; display: flex; align-items: center; }
+  .marq .t { display: inline-flex; align-items: center; animation: mq 30s linear infinite; font-family: Unbounded; font-weight: 800; font-size: 40px; text-transform: uppercase; letter-spacing: -.03em; }
+  .marq .t span { padding: 0 22px; } .marq .t i { font-style: normal; font-size: 20px; }
+  @keyframes mq { to { transform: translateX(-50%); } }
+
+  section { padding: 150px 0; border-bottom: 1px solid var(--line); }
+  .lbl { font-size: 14px; color: var(--dim); margin-bottom: 40px; display: flex; gap: 10px; }
+  .lbl b { color: var(--acc); font-weight: 500; }
+  h2 { font-size: clamp(40px, 6.4vw, 104px); line-height: .92; font-weight: 800; }
+  h2 em { font-style: normal; color: var(--acc); }
+
+  /* Idea */
+  .idea { font-size: clamp(26px, 3.2vw, 48px); line-height: 1.18; font-weight: 500; letter-spacing: -.02em; max-width: 1150px; }
+  .idea .w { opacity: .14; transition: opacity .3s; }
+  .idea .w.on { opacity: 1; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 110px; border-top: 1px solid var(--line); }
+  .stat { padding: 30px 30px 0 0; }
+  .stat b { display: block; font-family: Unbounded; font-weight: 800; font-size: clamp(44px, 5vw, 80px); letter-spacing: -.04em; line-height: 1; }
+  .stat b small { font-size: .45em; color: var(--acc); margin-left: 4px; }
+  .stat span { color: var(--dim); font-size: 14px; display: block; margin-top: 12px; }
+
+  /* Live demo */
+  .demo { display: grid; grid-template-columns: 1fr 1.1fr; gap: 80px; align-items: center; margin-top: 80px; }
+  .demo p.copy { color: #c9c4ba; font-size: 18px; line-height: 1.6; max-width: 460px; }
+  .kbd { display: inline-flex; gap: 8px; margin-top: 30px; }
+  .kbd span { font-family: "JetBrains Mono"; font-size: 13px; padding: 10px 14px; border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 10px; background: var(--bg2); transition: all .12s; }
+  .kbd.down span { transform: translateY(2px); border-bottom-width: 1px; border-color: var(--acc); color: var(--acc); }
+  .stage { background: var(--bg2); border: 1px solid var(--line); border-radius: 28px; padding: 34px; position: relative; overflow: hidden; }
+  .stage .app { font-size: 12px; color: var(--dim); display: flex; justify-content: space-between; margin-bottom: 22px; }
+  .stage .txt { font-size: 26px; line-height: 1.35; min-height: 140px; letter-spacing: -.01em; }
+  .stage .txt .caret { display: inline-block; width: 2px; height: 1em; background: var(--acc); vertical-align: -3px; animation: bl 1s steps(1) infinite; }
+  @keyframes bl { 50% { opacity: 0; } }
+  .pill { display: flex; align-items: center; gap: 16px; margin-top: 30px; height: 64px; padding: 0 22px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); transition: border-color .4s; }
+  .pill.live { border-color: var(--acc); }
+  .pill .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dim); transition: background .3s; }
+  .pill.live .dot { background: var(--acc); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,90,31,.6); } 100% { box-shadow: 0 0 0 12px rgba(255,90,31,0); } }
+  .pill canvas { flex: 1; height: 34px; width: 100%; }
+  .pill .st { font-size: 12px; color: var(--dim); min-width: 92px; text-align: right; }
+
+  /* Pipeline */
+  .pipe { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 90px; border-top: 1px solid var(--line); }
+  .hop { padding: 34px 34px 10px 0; position: relative; }
+  .hop::before { content: ""; position: absolute; top: -1px; left: 0; height: 2px; width: 0; background: var(--acc); transition: width 1.1s var(--ease); }
+  .hop.in::before { width: calc(100% - 34px); }
+  .hop .n { font-size: 13px; color: var(--dim); }
+  .hop .k { font-family: Unbounded; font-weight: 800; font-size: 28px; margin: 40px 0 6px; }
+  .hop .s { color: var(--acc); font-size: 14px; margin-bottom: 16px; }
+  .hop p { color: #b7b2a8; line-height: 1.6; font-size: 15px; }
+
+  /* Features list */
+  .feats { margin-top: 80px; border-top: 1px solid var(--line); }
+  .feat { display: grid; grid-template-columns: 90px 1fr 1.2fr 60px; gap: 30px; align-items: center; padding: 34px 0; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; isolation: isolate; transition: color .5s var(--ease); }
+  .feat::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--acc); transform: scaleY(0); transform-origin: bottom; transition: transform .6s var(--ease); }
+  .feat:hover { color: var(--bg); } .feat:hover::before { transform: none; }
+  .feat .n { font-size: 14px; padding-left: 4px; }
+  .feat h3 { font-family: Unbounded; font-weight: 800; font-size: clamp(22px, 2.6vw, 38px); text-transform: uppercase; letter-spacing: -.02em; transition: transform .6s var(--ease); }
+  .feat:hover h3 { transform: translateX(14px); }
+  .feat p { color: var(--dim); line-height: 1.55; transition: color .5s; } .feat:hover p { color: var(--bg); }
+  .feat .a { font-size: 26px; justify-self: end; padding-right: 8px; transition: transform .6s var(--ease); } .feat:hover .a { transform: rotate(-45deg); }
+
+  /* Models */
+  .models { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 80px; }
+  .model { text-align: left; border: 1px solid var(--line); border-radius: 28px; padding: 34px; min-height: 380px; display: flex; flex-direction: column; transition: transform .6s var(--ease), background .4s, border-color .4s; }
+  .model:hover { transform: translateY(-10px); }
+  .model.sel { background: var(--fg); color: var(--bg); border-color: var(--fg); transform: translateY(-10px); }
+  .model .t { font-size: 14px; display: flex; justify-content: space-between; }
+  .model .big { font-family: Unbounded; font-weight: 800; font-size: 54px; letter-spacing: -.04em; margin-top: auto; line-height: 1; }
+  .model ul { list-style: none; margin-top: 20px; border-top: 1px solid currentColor; opacity: .75; }
+  .model li { padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent); font-size: 15px; display: flex; justify-content: space-between; }
+
+  /* Install tabs */
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 70px; border-bottom: 1px solid var(--line); }
+  .tab { text-align: left; padding: 22px 0; position: relative; color: var(--dim); transition: color .3s; }
+  .tab b { display: block; font-family: Unbounded; font-weight: 800; font-size: 26px; text-transform: uppercase; }
+  .tab small { font-size: 13px; }
+  .tab::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--acc); transform: scaleX(0); transform-origin: left; transition: transform .6s var(--ease); }
+  .tab.on { color: var(--fg); } .tab.on::after { transform: none; }
+  .pane { display: none; grid-template-columns: 1fr 1fr; gap: 60px; padding-top: 50px; animation: fade .7s var(--ease); }
+  .pane.on { display: grid; }
+  .dl { display: flex; justify-content: space-between; align-items: center; padding: 26px 30px; border: 1px solid var(--line); border-radius: 20px; margin-bottom: 12px; transition: background .4s, border-color .4s, color .4s; }
+  .dl:hover { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+  .dl b { display: block; font-size: 18px; } .dl small { opacity: .7; font-size: 13px; }
+  .steps { list-style: none; counter-reset: s; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 50px 1fr; padding: 18px 0; border-bottom: 1px solid var(--line); }
+  .steps li::before { content: counter(s); font-family: Unbounded; font-weight: 800; color: var(--acc); font-size: 20px; }
+  .steps b { display: block; margin-bottom: 4px; } .steps span { color: var(--dim); font-size: 15px; }
+
+  /* FAQ */
+  .faq { margin-top: 70px; border-top: 1px solid var(--line); }
+  .q { border-bottom: 1px solid var(--line); }
+  .q button { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 38px 0; text-align: left; font-size: clamp(20px, 2vw, 28px); font-weight: 500; letter-spacing: -.01em; transition: color .3s; }
+  .q button:hover { color: var(--acc); }
+  .q .pl { font-size: 30px; transition: transform .5s var(--ease); }
+  .q.open .pl { transform: rotate(45deg); color: var(--acc); }
+  .q .a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .6s var(--ease); }
+  .q.open .a { grid-template-rows: 1fr; }
+  .q .a > div { overflow: hidden; color: #b7b2a8; font-size: 17px; line-height: 1.65; max-width: 800px; }
+  .q .a p { padding-bottom: 36px; }
+
+  /* Footer */
+  footer { padding-top: 120px; overflow: hidden; }
+  .cta { text-align: center; }
+  .cta h2 { font-size: clamp(48px, 9vw, 150px); }
+  .cta .btn { margin-top: 50px; height: 76px; padding: 0 44px; font-size: 17px; }
+  .giant { font-family: Unbounded; font-weight: 900; text-transform: uppercase; font-size: 15.6vw; letter-spacing: -.05em; line-height: .78; text-align: center; margin-top: 130px; white-space: nowrap; color: var(--fg); }
+  .giant span { display: inline-block; transform: translateY(100%); transition: transform 1s var(--ease); }
+  .giant.in span { transform: none; }
+  .fbar { display: flex; justify-content: space-between; padding: 30px 0 34px; font-size: 14px; color: var(--dim); border-top: 1px solid var(--line); }
+  .fbar nav { display: flex; gap: 24px; color: var(--fg); }
+
+  .rv { opacity: 0; transform: translateY(40px); transition: opacity 1s var(--ease), transform 1.1s var(--ease); }
+  .rv.in { opacity: 1; transform: none; }
+
+  @media (max-width: 960px) {
+    .wrap { padding: 0 22px; }
+    .top .mid { display: none; } .top { grid-template-columns: 1fr auto; }
+    h1 .row.indent, h1 .row.acc { padding-left: 0; }
+    h1 .row { white-space: normal; }
+    .badge { display: none; }
+    .hero-foot, .demo, .pane { flex-direction: column; align-items: start; grid-template-columns: 1fr; }
+    .stats, .pipe, .models { grid-template-columns: 1fr 1fr; }
+    .feat { grid-template-columns: 50px 1fr 40px; } .feat p { display: none; }
+    .tabs { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } .rv, h1 .ch, .hero-foot, .giant span { opacity: 1; transform: none; } .idea .w { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><img src="../assets/wisperlow-mark.svg" alt="" />Wisperlow</a>
+    <span class="mid">Voice → Any app</span>
+    <div class="r"><a class="ul" href="#how">How it works</a><a class="ul" href="https://github.com/YashasVM/Wisper-Low">GitHub ↗</a></div>
+  </header>
+
+  <div class="hero">
+    <h1 class="d" id="h1"><span class="row">Your voice</span><span class="row indent">is now a</span><span class="row acc">keyboard.</span></h1>
+    <div class="badge" aria-hidden="true">
+      <svg class="ring" viewBox="0 0 120 120"><defs><path id="c" d="M60 60m-46 0a46 46 0 1 1 92 0a46 46 0 1 1-92 0" /></defs><text font-family="Inter" font-size="10.5" font-weight="600" letter-spacing="3.2" fill="#f2ede4"><textPath href="#c">FREE · OPEN SOURCE · ON-DEVICE ·</textPath></text></svg>
+      <img src="../assets/wisperlow-mark.svg" alt="" />
+    </div>
+    <div class="hero-foot">
+      <p>Hold a key, talk, let go. Wisperlow transcribes on your own hardware and types the words wherever your cursor is. No cloud, no account, nobody listening.</p>
+      <div class="btns"><a class="btn solid" href="#install">Download <span class="arr">↓</span></a><a class="btn" href="#how">How it works</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="marq"><div class="t" id="mq"></div></div>
+
+<section>
+  <div class="wrap">
+    <div class="lbl rv"><b>(01)</b> The idea</div>
+    <p class="idea" id="idea">You think faster than you type. Wisperlow lets you just say it — a global shortcut, a local Whisper model on your GPU, and the text lands in Slack, your editor or your email. Your audio never leaves the machine, because there's no server to send it to.</p>
+    <div class="stats">
+      <div class="stat rv"><b data-to="0">0</b><span>bytes of audio uploaded</span></div>
+      <div class="stat rv"><b data-to="4">0</b><span>platforms — macOS, Windows, Linux, Android</span></div>
+      <div class="stat rv"><b data-to="99">0<small>+</small></b><span>languages via Whisper</span></div>
+      <div class="stat rv"><b data-to="1">0<small>key</small></b><span>to start talking</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lbl rv"><b>(02)</b> Try it</div>
+    <h2 class="d rv">Hold. Talk.<br /><em>Let go.</em></h2>
+    <div class="demo">
+      <div class="rv">
+        <p class="copy">Press and hold your shortcut anywhere on your system. A tiny overlay listens while you speak, voice activity detection trims the silence, and the moment you release, the text is pasted in place.</p>
+        <div class="kbd" id="kbd"><span>Ctrl</span><span>Space</span></div>
+      </div>
+      <div class="stage rv">
+        <div class="app"><span id="appname">Slack — #launch</span><span class="mono">on-device</span></div>
+        <div class="txt"><span id="typed"></span><span class="caret"></span></div>
+        <div class="pill" id="pill"><span class="dot"></span><canvas id="wave" width="600" height="68"></canvas><span class="st mono" id="st">Idle</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="lbl rv"><b>(03)</b> How it works</div>
+    <h2 class="d rv">Four steps.<br /><em>Zero servers.</em></h2>
+    <div class="pipe">
+      <div class="hop rv"><div class="n">01</div><div class="k">Press</div><div class="s mono">Global shortcut</div><p>Push-to-talk or toggle, from any app. Or trigger it from scripts with <span class="mono">--toggle-transcription</span>.</p></div>
+      <div class="hop rv"><div class="n">02</div><div class="k">Listen</div><div class="s mono">Silero VAD</div><p>The mic is captured and resampled, and voice activity detection drops the silence before inference.</p></div>
+      <div class="hop rv"><div class="n">03</div><div class="k">Transcribe</div><div class="s mono">Whisper · Parakeet</div><p>The model runs locally, accelerated by Metal on macOS and Vulkan on Windows and Linux.</p></div>
+      <div class="hop rv"><div class="n">04</div><div class="k">Paste</div><div class="s mono">Active window</div><p>Text is inserted where your cursor is and saved to your local history.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lbl rv"><b>(04)</b> Features</div>
+    <div class="feats">
+      <div class="feat rv"><span class="n mono">01</span><h3>Fully local</h3><p>No accounts, no relay, no telemetry. Works on a plane.</p><span class="a">→</span></div>
+      <div class="feat rv"><span class="n mono">02</span><h3>Any app</h3><p>If it has a text cursor, Wisperlow can type into it.</p><span class="a">→</span></div>
+      <div class="feat rv"><span class="n mono">03</span><h3>GPU fast</h3><p>Metal and Vulkan acceleration. Text appears as you let go.</p><span class="a">→</span></div>
+      <div class="feat rv"><span class="n mono">04</span><h3>Translate</h3><p>Speak one of dozens of languages, get English out.</p><span class="a">→</span></div>
+      <div class="feat rv"><span class="n mono">05</span><h3>Android bubble</h3><p>A floating mic that dictates into any text field on your phone.</p><span class="a">→</span></div>
+      <div class="feat rv"><span class="n mono">06</span><h3>History</h3><p>Every transcription saved locally, ready to copy again.</p><span class="a">→</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lbl rv"><b>(05)</b> Models</div>
+    <h2 class="d rv">Pick your<br /><em>brain.</em></h2>
+    <div class="models">
+      <button class="model rv"><div class="t"><span>Quick</span><span class="mono">01</span></div><div class="big">Small</div><ul><li><span>Family</span><span>Whisper</span></li><li><span>Best for</span><span>Older laptops</span></li><li><span>Feel</span><span>Instant</span></li></ul></button>
+      <button class="model rv sel"><div class="t"><span>Balanced (recommended)</span><span class="mono">02</span></div><div class="big">Turbo</div><ul><li><span>Family</span><span>Whisper</span></li><li><span>Best for</span><span>Most machines</span></li><li><span>Feel</span><span>Fast + accurate</span></li></ul></button>
+      <button class="model rv"><div class="t"><span>Precise</span><span class="mono">03</span></div><div class="big">Large</div><ul><li><span>Family</span><span>Whisper</span></li><li><span>Best for</span><span>Strong GPUs</span></li><li><span>Feel</span><span>Most accurate</span></li></ul></button>
+    </div>
+    <p class="rv" style="margin-top: 30px; color: var(--dim)">Also available: Whisper Medium, Parakeet, Moonshine and SenseVoice.</p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="lbl rv"><b>(06)</b> Install</div>
+    <h2 class="d rv">Get it on<br /><em>everything.</em></h2>
+    <div class="tabs rv" role="tablist">
+      <button class="tab on" data-p="mac"><b>macOS</b><small>Apple silicon + Intel</small></button>
+      <button class="tab" data-p="win"><b>Windows</b><small>10 / 11</small></button>
+      <button class="tab" data-p="lin"><b>Linux</b><small>AppImage · deb</small></button>
+      <button class="tab" data-p="and"><b>Android</b><small>Phone</small></button>
+    </div>
+    <div class="pane on" id="mac"><div><a class="dl" href="https://github.com/YashasVM/Wisper-Low/releases"><div><b>Wisperlow for macOS</b><small>.dmg — Metal accelerated</small></div><span>↓</span></a><a class="ul" style="color: var(--dim); font-size: 14px" href="https://github.com/YashasVM/Wisper-Low/releases">All files &amp; release notes ↗</a></div><ol class="steps"><li><div><b>Open the .dmg</b><span>Drag Wisperlow into Applications.</span></div></li><li><div><b>Allow accessibility</b><span>Needed so your shortcut works everywhere.</span></div></li><li><div><b>Pick a model</b><span>It downloads once, then runs offline.</span></div></li></ol></div>
+    <div class="pane" id="win"><div><a class="dl" href="https://github.com/YashasVM/Wisper-Low/releases"><div><b>Wisperlow for Windows</b><small>.exe installer — Vulkan accelerated</small></div><span>↓</span></a></div><ol class="steps"><li><div><b>Run the installer</b><span>Wisperlow starts in the system tray.</span></div></li><li><div><b>Set your shortcut</b><span>Push-to-talk or toggle.</span></div></li><li><div><b>Pick a model</b><span>Download once, run offline forever.</span></div></li></ol></div>
+    <div class="pane" id="lin"><div><a class="dl" href="https://github.com/YashasVM/Wisper-Low/releases"><div><b>Wisperlow for Linux</b><small>AppImage / .deb — Vulkan + OpenBLAS</small></div><span>↓</span></a></div><ol class="steps"><li><div><b>Install the package</b><span>Or run the AppImage directly.</span></div></li><li><div><b>Bind the CLI</b><span>Map <span class="mono">--toggle-transcription</span> in your WM.</span></div></li><li><div><b>Pick a model</b><span>Download once, run offline forever.</span></div></li></ol></div>
+    <div class="pane" id="and"><div><a class="dl" href="https://github.com/YashasVM/Wisper-Low/releases"><div><b>Wisperlow for Android</b><small>.apk — floating dictation bubble</small></div><span>↓</span></a></div><ol class="steps"><li><div><b>Install the APK</b><span>Allow installs from your browser once.</span></div></li><li><div><b>Enable the bubble</b><span>Grant overlay and microphone access.</span></div></li><li><div><b>Tap and talk</b><span>Text goes into whatever field is focused.</span></div></li></ol></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lbl rv"><b>(07)</b> FAQ</div>
+    <div class="faq">
+      <div class="q rv"><button>Does any of my audio go to the cloud?<span class="pl">+</span></button><div class="a"><div><p>No. Transcription runs on your own CPU or GPU. The only network traffic is the one-time model download that you start yourself.</p></div></div></div>
+      <div class="q rv"><button>Does it work offline?<span class="pl">+</span></button><div class="a"><div><p>Yes. Once a model is downloaded, Wisperlow works with no internet connection at all.</p></div></div></div>
+      <div class="q rv"><button>Which model should I pick?<span class="pl">+</span></button><div class="a"><div><p>Start with Whisper Turbo. If it feels slow on your machine, step down to Small; if you have a strong GPU and want maximum accuracy, try Large.</p></div></div></div>
+      <div class="q rv"><button>Can I control it from scripts?<span class="pl">+</span></button><div class="a"><div><p>Yes. Flags like <span class="mono">--toggle-transcription</span>, <span class="mono">--cancel</span> and <span class="mono">--start-hidden</span> talk to the running instance, so you can bind them in your window manager.</p></div></div></div>
+      <div class="q rv"><button>What does it cost?<span class="pl">+</span></button><div class="a"><div><p>Nothing. Wisperlow is free and open source.</p></div></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="marq"><div class="t" id="mq2"></div></div>
+
+<footer>
+  <div class="wrap">
+    <div class="cta"><h2 class="d rv">Stop typing.<br /><em>Start talking.</em></h2><a class="btn solid rv" href="#install">Get Wisperlow <span class="arr">↓</span></a></div>
+    <div class="giant" id="giant"></div>
+    <div class="fbar"><span>© Wisperlow — made by <a class="ul" style="color: var(--fg)" href="https://github.com/YashasVM">yashas</a></span><nav><a class="ul" href="https://github.com/YashasVM/Wisper-Low">GitHub</a><a class="ul" href="https://github.com/YashasVM/Wisper-Low/releases">Releases</a><a class="ul" href="https://github.com/YashasVM/Wisper-Low/issues">Issues</a></nav></div>
+  </div>
+</footer>
+
+<script>
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Hero: split letters
+  let delay = 0.15;
+  $$("#h1 .row").forEach((row) => {
+    row.innerHTML = [...row.textContent].map((c) => c === " " ? " " : `<span class="ch" style="animation-delay:${(delay += 0.035).toFixed(3)}s">${c}</span>`).join("");
+  });
+
+  // Marquees
+  const mq = (id, words) => { const h = words.map((w) => `<span>${w}</span><i>✦</i>`).join(""); $(id).innerHTML = h + h; };
+  mq("#mq", ["On-device", "Push-to-talk", "Whisper + Parakeet", "Metal + Vulkan", "Any app", "Translate", "Zero cloud", "Open source"]);
+  mq("#mq2", ["Hold", "Talk", "Release", "Repeat"]);
+
+  // Footer giant wordmark
+  $("#giant").innerHTML = [..."WISPERLOW"].map((c, i) => `<span style="transition-delay:${i * 0.05}s">${c}</span>`).join("");
+
+  // Reveal + count-ups
+  const count = (el) => {
+    const to = +el.dataset.to, suffix = el.querySelector("small")?.outerHTML || "", t0 = performance.now();
+    (function f(t) { const p = Math.min(1, (t - t0) / 1500), e = 1 - Math.pow(1 - p, 4); el.innerHTML = Math.round(to * e) + suffix; if (p < 1) requestAnimationFrame(f); })(t0);
+  };
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("in");
+    const n = e.target.querySelector("[data-to]"); if (n) count(n);
+    io.unobserve(e.target);
+  }), { threshold: 0.15 });
+  $$(".rv, #giant").forEach((el) => { if (el.classList.contains("rv")) el.style.transitionDelay = ($$(".rv", el.parentElement).indexOf(el) % 4) * 0.08 + "s"; io.observe(el); });
+
+  // Scroll-driven word highlight
+  const idea = $("#idea");
+  idea.innerHTML = idea.textContent.split(" ").map((w) => `<span class="w">${w}</span>`).join(" ");
+  const words = $$(".w", idea);
+  const onScroll = () => {
+    const r = idea.getBoundingClientRect(), vh = innerHeight;
+    const p = Math.min(1, Math.max(0, (vh * 0.85 - r.top) / (r.height + vh * 0.35)));
+    const n = Math.round(p * words.length);
+    words.forEach((w, i) => w.classList.toggle("on", i < n));
+  };
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+
+  // Model picker
+  $$(".model").forEach((m) => m.addEventListener("click", () => { $$(".model").forEach((x) => x.classList.remove("sel")); m.classList.add("sel"); }));
+
+  // Tabs
+  $$(".tab").forEach((t) => t.addEventListener("click", () => {
+    $$(".tab").forEach((x) => x.classList.toggle("on", x === t));
+    $$(".pane").forEach((p) => p.classList.toggle("on", p.id === t.dataset.p));
+  }));
+
+  // FAQ accordion
+  $$(".q button").forEach((b) => b.addEventListener("click", () => b.parentElement.classList.toggle("open")));
+
+  // Demo
+  const cv = $("#wave"), ctx = cv.getContext("2d"), pill = $("#pill"), st = $("#st"), typed = $("#typed"), kbd = $("#kbd"), app = $("#appname");
+  let live = false, t = 0;
+  (function draw() {
+    t += 0.09; ctx.clearRect(0, 0, cv.width, cv.height);
+    const n = 48, w = cv.width / n;
+    for (let i = 0; i < n; i++) {
+      const env = Math.sin((i / n) * Math.PI);
+      const a = live ? (0.25 + 0.75 * Math.abs(Math.sin(t + i * 0.45) * Math.cos(t * 0.6 + i * 0.2))) * env : 0.04;
+      const h = Math.max(4, a * cv.height);
+      ctx.fillStyle = live ? "#ff5a1f" : "#3a3934";
+      ctx.beginPath(); ctx.roundRect(i * w + 2, (cv.height - h) / 2, w - 5, h, 3); ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  })();
+  const script = [
+    ["Slack — #launch", "Build is green. Tagging the release tonight, notes go out in the morning."],
+    ["Mail — Reply", "Thanks so much, the new draft reads beautifully. Let's ship it."],
+    ["VS Code — audio.rs", "// TODO: reuse the resampler instead of allocating per chunk"],
+    ["Notes", "Idea: a quiet mode that only listens while I hold the key."],
+  ];
+  (async () => {
+    for (let k = 0; ; k = (k + 1) % script.length) {
+      const [name, line] = script[k];
+      app.textContent = name; typed.textContent = "";
+      await sleep(700);
+      kbd.classList.add("down"); live = true; pill.classList.add("live"); st.textContent = "Listening";
+      await sleep(2200);
+      kbd.classList.remove("down"); live = false; pill.classList.remove("live"); st.textContent = "Transcribing";
+      await sleep(500); st.textContent = "Pasted";
+      for (const ch of line) { typed.textContent += ch; await sleep(17); }
+      await sleep(2600);
+    }
+  })();
+</script>
+</body>
+</html>

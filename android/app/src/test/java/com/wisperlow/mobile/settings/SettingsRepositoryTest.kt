@@ -13,7 +13,6 @@ class SettingsRepositoryTest {
         assertFalse(defaults.reviewBeforeInsert)
         assertEquals(AutoStop.NORMAL, defaults.autoStop)
         assertTrue(defaults.historyEnabled)
-        assertTrue(defaults.bubbleOnlyWhenTyping)
         assertFalse(defaults.onboardingCompleted)
     }
 

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WISPERLOW — Talk. It types. Nobody listens.</title>
+<link rel="icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink: #000; --paper: #fffdf5; --yellow: #ffe500; --pink: #ff6bd6; --blue: #4d7cff; --green: #3dffa2; --orange: #ff7a2f; --b: 3px solid var(--ink); --sh: 6px 6px 0 var(--ink); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--paper); color: var(--ink); font-family: "Space Grotesk", sans-serif; font-weight: 500; overflow-x: hidden;
+    background-image: radial-gradient(var(--ink) 1.2px, transparent 1.2px); background-size: 24px 24px; }
+  a { color: inherit; text-decoration: none; }
+  .disp { font-family: "Archivo Black", sans-serif; text-transform: uppercase; letter-spacing: -.02em; }
+  .mono { font-family: "Space Mono", monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  ::selection { background: var(--pink); }
+
+  .box { border: var(--b); box-shadow: var(--sh); background: #fff; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 16px 26px; border: var(--b); box-shadow: var(--sh); font-family: "Archivo Black"; text-transform: uppercase; font-size: 16px; background: var(--yellow); transition: transform .12s, box-shadow .12s; cursor: pointer; }
+  .btn:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--ink); }
+  .btn:active { transform: translate(6px, 6px); box-shadow: 0 0 0 var(--ink); }
+  .btn.pink { background: var(--pink); } .btn.white { background: #fff; }
+
+  /* NAV */
+  nav { position: sticky; top: 0; z-index: 30; background: var(--paper); border-bottom: var(--b); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 76px; }
+  .logo { display: flex; align-items: center; gap: 12px; font-size: 24px; }
+  .logo img { width: 44px; height: 44px; border: var(--b); box-shadow: 3px 3px 0 var(--ink); background: var(--pink); transition: transform .3s; }
+  .logo:hover img { transform: rotate(-12deg); }
+  .links { display: flex; gap: 8px; }
+  .links a { padding: 8px 14px; border: 3px solid transparent; font-weight: 700; }
+  .links a:hover { border: var(--b); background: var(--green); box-shadow: 3px 3px 0 var(--ink); }
+  nav .btn { padding: 11px 18px; font-size: 14px; }
+
+  /* HERO */
+  .hero { padding: 70px 0 90px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 50px; align-items: center; }
+  .tag { display: inline-block; padding: 6px 12px; border: var(--b); background: var(--green); font-family: "Space Mono"; font-weight: 700; font-size: 13px; transform: rotate(-2deg); box-shadow: 3px 3px 0 var(--ink); }
+  h1 { font-size: clamp(48px, 6.4vw, 92px); line-height: .9; margin: 24px 0 24px; }
+  h1 .hl, h1 .strike { white-space: nowrap; }
+  h1 .hl { display: inline-block; background: var(--yellow); border: var(--b); padding: 0 .12em; box-shadow: var(--sh); transform: rotate(-2deg); margin: .06em 0; }
+  h1 .strike { position: relative; display: inline-block; }
+  h1 .strike::after { content: ""; position: absolute; left: -4%; right: -4%; top: 52%; height: .12em; background: var(--pink); border: 3px solid var(--ink); transform: rotate(-3deg) scaleX(0); transform-origin: left; animation: strike .6s 1s cubic-bezier(.7,0,.3,1) forwards; }
+  @keyframes strike { to { transform: rotate(-3deg) scaleX(1); } }
+  .hero p { font-size: 20px; line-height: 1.5; max-width: 540px; margin-bottom: 34px; }
+  .ctas { display: flex; gap: 16px; flex-wrap: wrap; }
+  .oss { margin-top: 26px; font-family: "Space Mono"; font-size: 13px; }
+
+  /* DEMO WIDGET */
+  .demo { position: relative; }
+  .win { border: var(--b); box-shadow: 12px 12px 0 var(--ink); background: #fff; }
+  .win .bar { display: flex; justify-content: space-between; align-items: center; border-bottom: var(--b); padding: 10px 14px; background: var(--blue); color: #fff; font-family: "Space Mono"; font-weight: 700; font-size: 13px; }
+  .win .dots { display: flex; gap: 6px; } .win .dots i { width: 14px; height: 14px; border: 2px solid var(--ink); background: #fff; display: block; }
+  .win .body { padding: 22px; }
+  .field { border: var(--b); min-height: 130px; padding: 16px; font-size: 20px; line-height: 1.45; background: var(--paper); }
+  .caret { display: inline-block; width: 3px; height: 1.05em; background: var(--ink); vertical-align: -3px; animation: bl 1s steps(1) infinite; }
+  @keyframes bl { 50% { opacity: 0; } }
+  .ctrl { display: flex; align-items: center; gap: 16px; margin-top: 18px; }
+  .mic { width: 74px; height: 74px; border: var(--b); box-shadow: var(--sh); background: var(--pink); display: grid; place-items: center; cursor: pointer; transition: transform .12s, box-shadow .12s, background .2s; flex-shrink: 0; }
+  .mic svg { width: 32px; height: 32px; }
+  .mic:active, .mic.on { transform: translate(6px, 6px); box-shadow: 0 0 0 var(--ink); background: var(--green); }
+  .bars { flex: 1; height: 74px; border: var(--b); display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 10px; background: #fff; }
+  .bars i { width: 7px; height: 8px; background: var(--ink); display: block; transition: height .08s; }
+  .status { font-family: "Space Mono"; font-weight: 700; font-size: 12px; margin-top: 14px; display: flex; justify-content: space-between; }
+  .status b { padding: 2px 8px; border: 2px solid var(--ink); background: var(--yellow); }
+  .sticker { position: absolute; border: var(--b); box-shadow: 4px 4px 0 var(--ink); padding: 10px 14px; font-family: "Archivo Black"; text-transform: uppercase; font-size: 14px; z-index: 3; animation: wob 3s ease-in-out infinite; }
+  .s1 { background: var(--yellow); top: -26px; right: -14px; transform: rotate(8deg); }
+  .s2 { background: var(--green); bottom: -24px; left: -18px; transform: rotate(-6deg); animation-delay: -1.5s; }
+  .star { position: absolute; width: 96px; height: 96px; right: -40px; bottom: 60px; z-index: 3; animation: spin 10s linear infinite; }
+  @keyframes wob { 50% { translate: 0 -8px; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* MARQUEE */
+  .marq { border-top: var(--b); border-bottom: var(--b); background: var(--ink); color: var(--yellow); overflow: hidden; white-space: nowrap; padding: 18px 0; transform: rotate(-1.5deg); margin: 20px -20px; }
+  .marq.alt { background: var(--pink); color: var(--ink); transform: rotate(1.5deg); margin-top: -14px; }
+  .marq div { display: inline-block; animation: mq 22s linear infinite; font-size: 28px; }
+  .marq.alt div { animation-direction: reverse; }
+  .marq span { margin: 0 22px; }
+  @keyframes mq { to { transform: translateX(-50%); } }
+
+  section { padding: 110px 0; }
+  .sh { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 50px; }
+  h2 { font-size: clamp(42px, 6vw, 84px); line-height: .9; }
+  h2 .u { background: var(--green); padding: 0 .1em; border: var(--b); }
+  .sh p { max-width: 380px; font-size: 18px; line-height: 1.5; }
+
+  /* FEATURES */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  .card { border: var(--b); box-shadow: var(--sh); padding: 28px; transition: transform .15s, box-shadow .15s; position: relative; }
+  .card:hover { transform: translate(-4px, -4px) rotate(-.6deg); box-shadow: 10px 10px 0 var(--ink); }
+  .card .ic { width: 58px; height: 58px; border: var(--b); background: #fff; display: grid; place-items: center; font-size: 28px; margin-bottom: 22px; box-shadow: 3px 3px 0 var(--ink); }
+  .card h3 { font-family: "Archivo Black"; text-transform: uppercase; font-size: 24px; line-height: 1; margin-bottom: 12px; }
+  .card p { font-size: 16px; line-height: 1.5; }
+  .card .no { position: absolute; top: 20px; right: 22px; font-family: "Space Mono"; font-weight: 700; }
+  .c1 { background: var(--yellow); } .c2 { background: var(--pink); } .c3 { background: var(--blue); color: #fff; } .c3 .ic { color: var(--ink); }
+  .c4 { background: var(--green); } .c5 { background: #fff; } .c6 { background: var(--orange); }
+
+  /* STEPS */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); border: var(--b); box-shadow: 10px 10px 0 var(--ink); background: #fff; }
+  .step { padding: 30px 24px 36px; border-right: var(--b); transition: background .25s; }
+  .step:last-child { border-right: 0; }
+  .step .n { font-family: "Archivo Black"; font-size: 64px; line-height: 1; -webkit-text-stroke: 3px var(--ink); color: transparent; transition: color .25s; }
+  .step h4 { font-family: "Archivo Black"; text-transform: uppercase; font-size: 22px; margin: 22px 0 8px; }
+  .step p { line-height: 1.5; }
+  .step code { display: inline-block; margin-top: 14px; font-family: "Space Mono"; font-size: 12px; border: 2px solid var(--ink); padding: 2px 6px; background: var(--paper); }
+  .step.on { background: var(--yellow); } .step.on .n { color: var(--pink); }
+
+  /* MODELS */
+  .models { display: flex; flex-wrap: wrap; gap: 14px; }
+  .chip { border: var(--b); padding: 14px 20px; font-family: "Archivo Black"; text-transform: uppercase; font-size: 18px; box-shadow: 4px 4px 0 var(--ink); background: #fff; transition: transform .15s, background .15s; cursor: default; }
+  .chip:hover { transform: rotate(-3deg) scale(1.05); }
+  .chip:nth-child(5n+1):hover { background: var(--yellow); } .chip:nth-child(5n+2):hover { background: var(--pink); } .chip:nth-child(5n+3):hover { background: var(--green); } .chip:nth-child(5n+4):hover { background: var(--blue); color: #fff; } .chip:nth-child(5n):hover { background: var(--orange); }
+
+  /* COMPARE */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  .col { border: var(--b); box-shadow: var(--sh); }
+  .col h3 { font-family: "Archivo Black"; text-transform: uppercase; font-size: 22px; padding: 18px 22px; border-bottom: var(--b); }
+  .col ul { list-style: none; } .col li { padding: 16px 22px; border-bottom: 2px dashed var(--ink); font-size: 17px; display: flex; gap: 12px; }
+  .col li:last-child { border-bottom: 0; }
+  .bad { background: #fff; } .bad h3 { background: #ddd; } .bad li { color: #555; text-decoration: line-through; text-decoration-thickness: 2px; }
+  .good { background: #fff; } .good h3 { background: var(--green); }
+
+  /* FINAL */
+  .final { border: var(--b); box-shadow: 14px 14px 0 var(--ink); background: var(--yellow); padding: 80px 30px; text-align: center; position: relative; overflow: hidden; }
+  .final h2 { font-size: clamp(56px, 10vw, 150px); }
+  .final p { font-size: 20px; margin: 20px 0 36px; }
+  .final .ctas { justify-content: center; }
+  footer { border-top: var(--b); background: var(--ink); color: var(--paper); margin-top: 110px; }
+  footer .wrap { display: flex; justify-content: space-between; padding: 30px 24px; font-family: "Space Mono"; font-size: 14px; }
+
+  .pop { opacity: 0; transform: translateY(40px) rotate(-1deg); transition: opacity .5s, transform .6s cubic-bezier(.34,1.7,.5,1); }
+  .pop.in { opacity: 1; transform: none; }
+
+  @media (max-width: 920px) {
+    .links { display: none; }
+    .hero, .grid, .compare { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr 1fr; } .step { border-bottom: var(--b); }
+    .star { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .pop { opacity: 1; transform: none; } h1 .strike::after { transform: rotate(-3deg); } }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="logo disp" href="#"><img src="../assets/logo.png" alt="" />Wisperlow</a>
+    <div class="links"><a href="#features">Features</a><a href="#how">How</a><a href="#models">Models</a><a href="https://github.com/YashasVM/Wisper-Low">GitHub</a></div>
+    <a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download ↓</a>
+  </div>
+</nav>
+
+<header class="wrap hero">
+  <div>
+    <span class="tag">● 100% OFFLINE · OPEN SOURCE</span>
+    <h1 class="disp">Talk.<br /><span class="hl">It types.</span><br />No <span class="strike">cloud</span>.</h1>
+    <p>Hold a key, say the thing, let go. Wisperlow transcribes it <b>on your own machine</b> and drops the text wherever your cursor is. No servers. No account. Nobody listening.</p>
+    <div class="ctas"><a class="btn" href="https://github.com/YashasVM/Wisper-Low/releases">Download free →</a><a class="btn white" href="https://github.com/YashasVM/Wisper-Low">★ Star on GitHub</a></div>
+    <div class="oss">macOS / Windows / Linux / Android</div>
+  </div>
+
+  <div class="demo">
+    <span class="sticker s1">Try it! ↓</span>
+    <span class="sticker s2">0 bytes uploaded</span>
+    <svg class="star" viewBox="0 0 100 100"><path d="M50 2 61 35 96 35 68 56 79 90 50 69 21 90 32 56 4 35 39 35Z" fill="#ff6bd6" stroke="#000" stroke-width="4" stroke-linejoin="round" /></svg>
+    <div class="win">
+      <div class="bar"><span>untitled.txt</span><div class="dots"><i></i><i></i><i></i></div></div>
+      <div class="body">
+        <div class="field" id="field"><span id="txt"></span><span class="caret"></span></div>
+        <div class="ctrl">
+          <div class="mic" id="mic" role="button" aria-label="Hold to talk"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" /></svg></div>
+          <div class="bars" id="bars"></div>
+        </div>
+        <div class="status"><span>HOLD THE MIC (or Space)</span><b id="st">IDLE</b></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="marq disp"><div id="m1"></div></div>
+<div class="marq alt disp"><div id="m2"></div></div>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sh"><h2 class="disp pop">Small app.<br /><span class="u">Big</span> brain.</h2><p class="pop">Everything you need to stop typing, and nothing that phones home.</p></div>
+    <div class="grid">
+      <div class="card c1 pop"><span class="no">01</span><div class="ic">🔒</div><h3>Private for real</h3><p>Models run on your CPU or GPU. Audio never leaves your device, so there's nothing to leak.</p></div>
+      <div class="card c2 pop"><span class="no">02</span><div class="ic">⚡</div><h3>Stupid fast</h3><p>Metal on macOS, Vulkan on Windows &amp; Linux. Text shows up the moment you let go.</p></div>
+      <div class="card c3 pop"><span class="no">03</span><div class="ic">⌨️</div><h3>Any app</h3><p>Slack, email, your editor, a browser tab. If it has a cursor, Wisperlow types into it.</p></div>
+      <div class="card c4 pop"><span class="no">04</span><div class="ic">🎙️</div><h3>Push-to-talk</h3><p>Hold or toggle with your own global shortcut. Silero VAD trims the silence.</p></div>
+      <div class="card c5 pop"><span class="no">05</span><div class="ic">🌍</div><h3>Many languages</h3><p>Multilingual models, plus translate-to-English with one switch.</p></div>
+      <div class="card c6 pop"><span class="no">06</span><div class="ic">📱</div><h3>Android too</h3><p>A floating mic bubble that dictates into any text field on your phone.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top: 0">
+  <div class="wrap">
+    <div class="sh"><h2 class="disp pop">Key → <span class="u">Text</span></h2><p class="pop">Four steps, all on your machine, usually under a second.</p></div>
+    <div class="steps pop">
+      <div class="step"><div class="n">01</div><h4>Press</h4><p>Hold your global shortcut from anywhere.</p><code>shortcut.rs</code></div>
+      <div class="step"><div class="n">02</div><h4>Speak</h4><p>Mic captured and silence filtered out.</p><code>vad/</code></div>
+      <div class="step"><div class="n">03</div><h4>Think</h4><p>Whisper or Parakeet runs locally on GPU.</p><code>transcription.rs</code></div>
+      <div class="step"><div class="n">04</div><h4>Paste</h4><p>Text lands in the active app. Done.</p><code>clipboard</code></div>
+    </div>
+  </div>
+</section>
+
+<section id="models" style="padding-top: 0">
+  <div class="wrap">
+    <div class="sh"><h2 class="disp pop">Pick your<br /><span class="u">model</span>.</h2><p class="pop">Tiny and instant or huge and precise. Download once, run offline forever.</p></div>
+    <div class="models pop">
+      <span class="chip">Whisper Small</span><span class="chip">Whisper Medium</span><span class="chip">Whisper Turbo</span><span class="chip">Whisper Large</span><span class="chip">Parakeet</span><span class="chip">Moonshine</span><span class="chip">SenseVoice</span>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top: 0">
+  <div class="wrap">
+    <div class="sh"><h2 class="disp pop">Them <span class="u">vs</span> us.</h2></div>
+    <div class="compare">
+      <div class="col bad pop"><h3>Cloud dictation</h3><ul><li>✕ Uploads your voice</li><li>✕ Needs an account</li><li>✕ Breaks offline</li><li>✕ Monthly subscription</li></ul></div>
+      <div class="col good pop"><h3>Wisperlow</h3><ul><li>✓ Stays on your device</li><li>✓ No sign-up, ever</li><li>✓ Works on a plane</li><li>✓ Free &amp; open source</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top: 0">
+  <div class="wrap">
+    <div class="final pop">
+      <h2 class="disp">Stop<br />typing.</h2>
+      <p>Free forever. Grab it for your desktop or phone.</p>
+      <div class="ctas"><a class="btn pink" href="https://github.com/YashasVM/Wisper-Low/releases">Download Wisperlow →</a><a class="btn white" href="https://github.com/YashasVM/Wisper-Low">View source</a></div>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap"><span>© 2026 WISPERLOW</span><a href="https://github.com/YashasVM/Wisper-Low">GITHUB ↗</a></div></footer>
+
+<script>
+  // Scroll reveal
+  const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: 0.12 });
+  document.querySelectorAll(".pop").forEach((el, i) => { el.style.transitionDelay = (i % 3) * 0.07 + "s"; io.observe(el); });
+
+  // Marquees
+  const fill = (id, words) => { const s = words.map((w) => `<span>${w}</span><span>✦</span>`).join(""); document.getElementById(id).innerHTML = s + s; };
+  fill("m1", ["Private", "Offline", "Fast", "Open source", "No account", "Any app"]);
+  fill("m2", ["Whisper", "Parakeet", "Metal", "Vulkan", "Push-to-talk", "Translate"]);
+
+  // Steps cycle
+  const steps = [...document.querySelectorAll(".step")]; let si = 0;
+  setInterval(() => { steps.forEach((s, i) => s.classList.toggle("on", i === si)); si = (si + 1) % steps.length; }, 1000);
+
+  // Interactive demo
+  const bars = document.getElementById("bars"), mic = document.getElementById("mic"), txt = document.getElementById("txt"), st = document.getElementById("st");
+  for (let i = 0; i < 26; i++) bars.appendChild(document.createElement("i"));
+  const B = [...bars.children];
+  const lines = [
+    "Running ten minutes late, start the standup without me.",
+    "Remember to tag the release after the build goes green.",
+    "Wisperlow just typed this and nothing left my laptop.",
+    "Buy coffee beans, call mum, book the dentist.",
+  ];
+  let li = 0, rec = false, busy = false, auto = true, t = 0;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  (function anim() { t += 0.25; B.forEach((b, i) => { b.style.height = rec ? 8 + Math.abs(Math.sin(t + i * 0.7) * Math.cos(t * 0.6 + i)) * 52 + "px" : "8px"; }); requestAnimationFrame(anim); })();
+
+  function start() { if (busy || rec) return; rec = true; mic.classList.add("on"); st.textContent = "LISTENING"; st.style.background = "#3dffa2"; txt.textContent = ""; }
+  async function stop() {
+    if (!rec) return; rec = false; busy = true; mic.classList.remove("on");
+    st.textContent = "TRANSCRIBING"; st.style.background = "#ff6bd6"; await sleep(450);
+    st.textContent = "DONE"; st.style.background = "#ffe500";
+    for (const ch of lines[li]) { txt.textContent += ch; await sleep(16); }
+    li = (li + 1) % lines.length; busy = false;
+  }
+  const user = (fn) => (e) => { auto = false; e.preventDefault?.(); fn(); };
+  mic.addEventListener("pointerdown", user(start));
+  addEventListener("pointerup", () => !auto && stop());
+  addEventListener("keydown", (e) => { if (e.code === "Space" && !e.repeat && e.target === document.body) user(start)(e); });
+  addEventListener("keyup", (e) => { if (e.code === "Space" && !auto) stop(); });
+
+  // Autoplay until the user takes over
+  (async () => { await sleep(900); while (auto) { start(); await sleep(1800); if (!auto) break; await stop(); await sleep(2600); } })();
+</script>
+</body>
+</html>
