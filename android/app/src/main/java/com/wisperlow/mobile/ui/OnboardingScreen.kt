@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -389,7 +388,7 @@ private fun Wordmark(text: String) {
             }
             Text(
                 ch.toString(),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, letterSpacing = 4.sp),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.graphicsLayer {
                     alpha = t.value.coerceIn(0f, 1f)

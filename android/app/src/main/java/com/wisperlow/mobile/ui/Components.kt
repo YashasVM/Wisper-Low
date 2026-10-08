@@ -115,7 +115,8 @@ fun SectionCard(
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
+        // Small mono caps, like the labels on the Wisperlow site.
+        text = text.uppercase(),
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
         modifier = modifier.padding(start = Space.Xs, top = Space.S).semantics { heading() },
