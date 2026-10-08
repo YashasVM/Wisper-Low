@@ -11,7 +11,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.OvershootInterpolator
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -24,9 +24,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,13 +35,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,7 +67,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.heading
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
@@ -77,6 +76,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -88,6 +88,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -101,6 +103,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.ui.WisperlowColors
 import com.wisperlow.mobile.ui.WisperlowTheme
+import com.wisperlow.mobile.ui.rememberSmoothedLevel
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -157,6 +160,9 @@ class BubbleOverlay(
     private var rawTop = 0f
     private var snapAnimator: ValueAnimator? = null
 
+    /** Finger down on the bubble (and not dragging): shrinks it slightly so the tap feels physical. */
+    private var pressed by mutableStateOf(false)
+
     /** Bumped on touch or keyboard changes so the idle bubble wakes up to full opacity. */
     private var activity by mutableIntStateOf(0)
 
@@ -173,7 +179,8 @@ class BubbleOverlay(
         val height = windowHeightFor(state)
         view.removeCallbacks(shrinkWindow)
         if (state is BubbleUi.Idle && lp.width != WindowManager.LayoutParams.WRAP_CONTENT) {
-            // Let the pill finish collapsing inside the big window, then shrink it.
+            // Let the pill finish collapsing inside the big window, then shrink it. The size
+            // animation's finish callback normally does this sooner; this is the fallback.
             if (lp.flags != flags) {
                 lp.flags = flags
                 runCatching { windowManager.updateViewLayout(view, lp) }
@@ -193,7 +200,7 @@ class BubbleOverlay(
     private val shrinkWindow = Runnable {
         val view = bubbleView ?: return@Runnable
         val lp = params ?: return@Runnable
-        if (ui !is BubbleUi.Idle) return@Runnable
+        if (ui !is BubbleUi.Idle || lp.width == WindowManager.LayoutParams.WRAP_CONTENT) return@Runnable
         lp.width = WindowManager.LayoutParams.WRAP_CONTENT
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT
         applyPlacement()
@@ -444,14 +451,13 @@ class BubbleOverlay(
 
     // ---- UI ----
 
-    // The content lambda reads the captured `state`; the AnimatedContent target is only the state's class (the transition key).
-    @android.annotation.SuppressLint("UnusedContentLambdaTargetStateParameter")
     @Composable
     private fun Bubble() {
         val state = ui
         val animations = ValueAnimator.areAnimatorsEnabled()
+        // Critically damped: an overshoot would poke past the fixed-size window and get clipped.
         val sizeSpec = if (animations) {
-            spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+            spring<IntSize>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
         } else {
             snap()
         }
@@ -461,7 +467,7 @@ class BubbleOverlay(
             is BubbleUi.Flash -> if (state.success) WisperlowColors.BubbleSuccess else WisperlowColors.BubbleSurface
             else -> WisperlowColors.BubbleSurface
         }
-        val color by animateColorAsState(target, if (animations) tween(260) else snap(), label = "bubbleColor")
+        val color by animateColorAsState(target, if (animations) tween(240) else snap(), label = "bubbleColor")
         val anchor = if (rightSide) Alignment.TopEnd else Alignment.TopStart
         // A resting bubble dims after a few seconds so it covers less of the app.
         var faded by remember { mutableStateOf(false) }
@@ -477,119 +483,155 @@ class BubbleOverlay(
             animationSpec = if (animations) tween(400) else snap(),
             label = "bubbleAlpha",
         )
+        val press by animateFloatAsState(
+            if (pressed) PRESSED_SCALE else 1f,
+            animationSpec = if (animations) spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium) else snap(),
+            label = "bubblePress",
+        )
         // The window is fixed-size while active; this box morphs inside it, anchored to the docked edge.
         Box(Modifier.fillMaxSize(), contentAlignment = anchor) {
             Box(
                 modifier = Modifier
                     .padding(4.dp)
-                    .alpha(alpha)
-                    .animateContentSize(animationSpec = sizeSpec, alignment = anchor)
+                    // Layer-only reads: fading and press feedback redraw without recomposing.
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        scaleX = press
+                        scaleY = press
+                    }
+                    .animateContentSize(animationSpec = sizeSpec, alignment = anchor) { _, _ ->
+                        // Shrink the window only once the pill has fully collapsed, never mid-animation.
+                        if (ui is BubbleUi.Idle) bubbleView?.let { it.removeCallbacks(shrinkWindow); it.post(shrinkWindow) }
+                    }
                     .background(color.copy(alpha = 0.96f), shape)
                     .border(1.dp, WisperlowColors.BubbleOutline, shape)
                     .then(if (state is BubbleUi.Review) Modifier else Modifier.pointerInput(Unit) { gestures() }),
             ) {
-                AnimatedContent(
-                    targetState = state::class,
-                    transitionSpec = {
-                        fadeIn(tween(160, delayMillis = 60)) togetherWith fadeOut(tween(100)) using null
-                    },
-                    contentAlignment = anchor,
-                    label = "bubbleContent",
-                ) { _ -> BubbleBody(state, animations) }
+                if (state is BubbleUi.Review) ReviewPanel() else Pill(state, animations)
             }
         }
     }
 
+    /** What the round slot at the docked edge shows. It never moves, so the dot reads as one object. */
+    private enum class Glyph { MIC, WAVE, DOTS, CHECK, ERROR }
+
+    /** Last pill label, kept so the text can fade out while the pill collapses back into the dot. */
+    private var lastPillText = ""
+    private var lastPillHint: String? = null
+
     @Composable
-    private fun BubbleBody(state: BubbleUi, animations: Boolean) {
+    private fun Pill(state: BubbleUi, animations: Boolean) {
+        val idle = state is BubbleUi.Idle
+        val description: String
         when (state) {
-            BubbleUi.Idle -> IdleDot()
-            is BubbleUi.Listening -> Pill(
-                text = when {
+            is BubbleUi.Listening -> {
+                lastPillText = when {
                     state.partial.isNotBlank() -> state.partial
                     state.modelLoading -> context.getString(R.string.bubble_loading_keep_talking)
                     else -> context.getString(R.string.bubble_listening)
-                },
+                }
                 // The second line would not fit the fixed-height window at large font scales.
-                hint = if (LocalDensity.current.fontScale > 1.3f) null else context.getString(R.string.bubble_tap_to_finish),
-                description = context.getString(R.string.bubble_listening_description),
-            ) { Waveform(animations) }
-            is BubbleUi.Finishing -> Pill(
-                text = state.partial.ifBlank { context.getString(R.string.bubble_transcribing) },
-                hint = null,
-                description = context.getString(R.string.bubble_transcribing),
-            ) { PulsingDots(animations) }
-            is BubbleUi.Review -> ReviewPanel()
-            is BubbleUi.Flash -> Pill(
-                text = state.message,
-                hint = null,
-                description = state.message,
-            ) {
-                Icon(
-                    imageVector = if (state.success) Icons.Rounded.Check else Icons.Rounded.ErrorOutline,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(26.dp),
-                )
+                lastPillHint = if (LocalDensity.current.fontScale > 1.3f) null else context.getString(R.string.bubble_tap_to_finish)
+                description = context.getString(R.string.bubble_listening_description)
             }
+            is BubbleUi.Finishing -> {
+                lastPillText = state.partial.ifBlank { context.getString(R.string.bubble_transcribing) }
+                lastPillHint = null
+                description = context.getString(R.string.bubble_transcribing)
+            }
+            is BubbleUi.Flash -> {
+                lastPillText = state.message
+                lastPillHint = null
+                description = state.message
+            }
+            else -> description = context.getString(R.string.bubble_tap_to_start)
         }
-    }
-
-    @Composable
-    private fun IdleDot() {
+        val glyph = when (state) {
+            is BubbleUi.Listening -> Glyph.WAVE
+            is BubbleUi.Finishing -> Glyph.DOTS
+            is BubbleUi.Flash -> if (state.success) Glyph.CHECK else Glyph.ERROR
+            else -> Glyph.MIC
+        }
+        // Text arrives after the pill has started to open and leaves before it closes.
+        val textAlpha by animateFloatAsState(
+            if (idle) 0f else 1f,
+            animationSpec = when {
+                !animations -> snap()
+                idle -> tween(90)
+                else -> tween(180, delayMillis = 70)
+            },
+            label = "pillText",
+        )
+        val dockEnd = rightSide
+        // The measured width switches at once and animateContentSize above eases the visible
+        // size toward it. The row itself always lays out at full pill width, overflowing
+        // inward from the docked edge, so nothing reflows while the outline grows or shrinks.
         Box(
             modifier = Modifier
-                .size(DOT_DP.dp)
-                .semantics {
-                    contentDescription = context.getString(R.string.bubble_tap_to_start)
-                    role = Role.Button
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-        }
-    }
-
-    @Composable
-    private fun Pill(
-        text: String,
-        hint: String?,
-        description: String,
-        visual: @Composable () -> Unit,
-    ) {
-        Row(
-            modifier = Modifier
-                .heightIn(min = DOT_DP.dp)
-                .width(PILL_DP.dp)
-                .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 8.dp)
+                .size(width = if (idle) DOT_DP.dp else PILL_DP.dp, height = DOT_DP.dp)
                 .semantics {
                     contentDescription = description
                     role = Role.Button
                 },
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(width = 40.dp, height = 36.dp), contentAlignment = Alignment.Center) { visual() }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    // Show the most recent words; the start is already on its way.
-                    text = text.takeLast(MAX_PILL_CHARS).let { if (text.length > MAX_PILL_CHARS) "…$it" else it },
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (hint != null) {
+            Row(
+                modifier = Modifier
+                    .wrapContentWidth(if (dockEnd) Alignment.End else Alignment.Start, unbounded = true)
+                    .requiredWidth(PILL_DP.dp)
+                    .fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!dockEnd) GlyphSlot(glyph, animations)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(start = if (dockEnd) 18.dp else 2.dp, end = if (dockEnd) 2.dp else 18.dp)
+                        .graphicsLayer { alpha = textAlpha },
+                ) {
+                    val text = lastPillText
                     Text(
-                        text = hint,
-                        color = Color.White.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.labelSmall,
+                        // Show the most recent words; the start is already on its way.
+                        text = text.takeLast(MAX_PILL_CHARS).let { if (text.length > MAX_PILL_CHARS) "…$it" else it },
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    lastPillHint?.let { hint ->
+                        Text(
+                            text = hint,
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (dockEnd) GlyphSlot(glyph, animations)
+            }
+        }
+    }
+
+    @Composable
+    private fun GlyphSlot(glyph: Glyph, animations: Boolean) {
+        Box(Modifier.size(DOT_DP.dp), contentAlignment = Alignment.Center) {
+            Crossfade(glyph, animationSpec = if (animations) tween(180) else snap(), label = "bubbleGlyph") { shown ->
+                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    when (shown) {
+                        Glyph.MIC -> GlyphIcon(Icons.Rounded.Mic, 28.dp)
+                        Glyph.WAVE -> Waveform(animations)
+                        Glyph.DOTS -> PulsingDots(animations)
+                        Glyph.CHECK -> GlyphIcon(Icons.Rounded.Check, 26.dp)
+                        Glyph.ERROR -> GlyphIcon(Icons.Rounded.ErrorOutline, 26.dp)
+                    }
                 }
             }
         }
+    }
+
+    @Composable
+    private fun GlyphIcon(icon: ImageVector, size: Dp) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(size))
     }
 
     @Composable
@@ -703,7 +745,7 @@ class BubbleOverlay(
         } else {
             remember { mutableFloatStateOf(0f) }
         }
-        val loudness by animateFloatAsState(micLevel, animationSpec = tween(90), label = "level")
+        val loudness by rememberSmoothedLevel { micLevel }
         Canvas(Modifier.size(width = 36.dp, height = 32.dp)) {
             val bars = 5
             val slot = size.width / bars
@@ -753,59 +795,66 @@ class BubbleOverlay(
 
     private suspend fun PointerInputScope.gestures() {
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            activity++
-            val slop = viewConfiguration.touchSlop
-            var dragged = false
-            var total = Offset.Zero
-            var released = false
-            var longPressed = false
-            // While dictating, a slow tap must not cancel: require a deliberate, longer hold.
-            val holdFactor = if (ui is BubbleUi.Idle) 1L else 2L
-            val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis * holdFactor
-            while (!released) {
-                val remaining = longPressAt - SystemClock.uptimeMillis()
-                val event = if (!dragged && !longPressed && remaining > 0) {
-                    withTimeoutOrNull(remaining) { awaitPointerEvent() }
-                } else {
-                    awaitPointerEvent()
-                }
-                if (event == null) {
-                    // The finger stayed still past the long-press timeout.
-                    longPressed = true
-                    bubbleView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    actions.onLongPress()
-                    continue
-                }
-                val change = event.changes.firstOrNull() ?: break
-                if (!change.pressed) {
-                    released = true
-                    break
-                }
-                val delta = change.position - change.previousPosition
-                total += delta
-                if (!dragged && !longPressed && total.getDistance() > slop && ui is BubbleUi.Idle) {
-                    dragged = true
-                    startDrag()
-                }
-                if (dragged) {
-                    moveBy(delta.x, delta.y)
-                    change.consume()
-                }
-            }
-            when {
-                dragged -> endDrag()
-                longPressed -> Unit
-                else -> {
-                    val now = SystemClock.uptimeMillis()
-                    val acts = ui is BubbleUi.Idle || ui is BubbleUi.Listening
-                    if (acts && now - lastTapAt > TAP_DEBOUNCE_MS) {
-                        lastTapAt = now
-                        // One short tick for start and for stop; nothing for ignored taps.
-                        bubbleView?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                        actions.onTap()
+            try {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                activity++
+                pressed = true
+                val slop = viewConfiguration.touchSlop
+                var dragged = false
+                var total = Offset.Zero
+                var released = false
+                var longPressed = false
+                // While dictating, a slow tap must not cancel: require a deliberate, longer hold.
+                val holdFactor = if (ui is BubbleUi.Idle) 1L else 2L
+                val longPressAt = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis * holdFactor
+                while (!released) {
+                    val remaining = longPressAt - SystemClock.uptimeMillis()
+                    val event = if (!dragged && !longPressed && remaining > 0) {
+                        withTimeoutOrNull(remaining) { awaitPointerEvent() }
+                    } else {
+                        awaitPointerEvent()
+                    }
+                    if (event == null) {
+                        // The finger stayed still past the long-press timeout.
+                        longPressed = true
+                        bubbleView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        actions.onLongPress()
+                        continue
+                    }
+                    val change = event.changes.firstOrNull() ?: break
+                    if (!change.pressed) {
+                        released = true
+                        break
+                    }
+                    val delta = change.position - change.previousPosition
+                    total += delta
+                    if (!dragged && !longPressed && total.getDistance() > slop && ui is BubbleUi.Idle) {
+                        dragged = true
+                        pressed = false
+                        startDrag()
+                    }
+                    if (dragged) {
+                        moveBy(delta.x, delta.y)
+                        change.consume()
                     }
                 }
+                when {
+                    dragged -> endDrag()
+                    longPressed -> Unit
+                    else -> {
+                        val now = SystemClock.uptimeMillis()
+                        val acts = ui is BubbleUi.Idle || ui is BubbleUi.Listening
+                        if (acts && now - lastTapAt > TAP_DEBOUNCE_MS) {
+                            lastTapAt = now
+                            // One short tick for start and for stop; nothing for ignored taps.
+                            bubbleView?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            actions.onTap()
+                        }
+                    }
+                }
+            } finally {
+                // Also reached when the gesture is cancelled, e.g. the review panel replaces the pill.
+                pressed = false
             }
         }
     }
@@ -855,7 +904,8 @@ class BubbleOverlay(
         const val IDLE_FADED_ALPHA = 0.6f
         const val MAX_PILL_CHARS = 70
         const val PILL_DP = 240
-        const val SHRINK_DELAY_MS = 320L
+        const val PRESSED_SCALE = 0.92f
+        const val SHRINK_DELAY_MS = 700L
         const val TAP_DEBOUNCE_MS = 400L
     }
 }
