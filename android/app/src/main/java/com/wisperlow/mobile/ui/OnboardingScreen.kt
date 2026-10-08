@@ -132,7 +132,7 @@ private fun orbIcon(step: GuideStep): ImageVector = when (step) {
 @Composable
 fun OnboardingScreen(
     state: MainUiState,
-    level: Float,
+    level: () -> Float,
     actions: AppActions,
     callbacks: OnboardingCallbacks,
 ) {
@@ -237,7 +237,7 @@ fun OnboardingScreen(
         ) {
             AuroraOrb(
                 spec = spec,
-                level = if (step == GuideStep.TRY) level else 0f,
+                level = if (step == GuideStep.TRY) level else NoLevel,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = orbAlpha },
@@ -525,7 +525,7 @@ private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
 }
 
 @Composable
-private fun TryStep(state: MainUiState, level: Float, callbacks: OnboardingCallbacks) {
+private fun TryStep(state: MainUiState, level: () -> Float, callbacks: OnboardingCallbacks) {
     Headline(R.string.try_step_title, R.string.try_step_body)
     if (!state.setup.model) ModelProgressLine(state.downloads)
     PracticeArea(

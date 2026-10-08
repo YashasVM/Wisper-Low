@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -26,7 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wisperlow.mobile.PracticeUi
@@ -39,7 +40,7 @@ import com.wisperlow.mobile.dictation.DictationState
 fun PracticeArea(
     practice: PracticeUi,
     dictation: DictationState,
-    level: Float,
+    level: () -> Float,
     modelReady: Boolean,
     onToggle: () -> Unit,
     onTextChange: (String) -> Unit,
@@ -96,21 +97,23 @@ fun PracticeArea(
 }
 
 @Composable
-private fun MicButton(listening: Boolean, finishing: Boolean, level: Float, enabled: Boolean, onClick: () -> Unit) {
-    val pulse by animateFloatAsState(
-        targetValue = if (listening) 1f + (level * 4f).coerceIn(0f, 1f) * 0.35f else 1f,
-        animationSpec = Motion.level(),
-        label = "micPulse",
-    )
+private fun MicButton(listening: Boolean, finishing: Boolean, level: () -> Float, enabled: Boolean, onClick: () -> Unit) {
+    val live by rememberSmoothedLevel(level)
+    // The halo grows out of the button and fades instead of popping in and out.
+    val halo by animateFloatAsState(if (listening) 1f else 0f, Motion.spring(), label = "micHalo")
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(72.dp)) {
-        if (listening) {
-            Box(
-                Modifier
-                    .size(64.dp)
-                    .scale(pulse)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
-            )
-        }
+        Box(
+            Modifier
+                .size(64.dp)
+                .graphicsLayer {
+                    val shown = halo.coerceIn(0f, 1f)
+                    val scale = (0.8f + 0.2f * shown) * (1f + (live * 4f).coerceIn(0f, 1f) * 0.35f * shown)
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = shown
+                }
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
+        )
         val source = remember { MutableInteractionSource() }
         FilledIconButton(
             onClick = onClick,
@@ -119,18 +122,29 @@ private fun MicButton(listening: Boolean, finishing: Boolean, level: Float, enab
             modifier = Modifier.size(60.dp).pressScale(source),
             colors = IconButtonDefaults.filledIconButtonColors(),
         ) {
-            if (finishing) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-            } else {
-                Icon(
-                    if (listening) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                    contentDescription = stringResource(if (listening) R.string.bubble_insert else R.string.try_start),
-                    modifier = Modifier.size(30.dp),
-                )
+            Crossfade(
+                targetState = when {
+                    finishing -> MicGlyph.WORKING
+                    listening -> MicGlyph.STOP
+                    else -> MicGlyph.MIC
+                },
+                animationSpec = Motion.fade(),
+                label = "micGlyph",
+            ) { glyph ->
+                when (glyph) {
+                    MicGlyph.WORKING -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                    else -> Icon(
+                        if (glyph == MicGlyph.STOP) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                        contentDescription = stringResource(if (glyph == MicGlyph.STOP) R.string.bubble_insert else R.string.try_start),
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
             }
         }
     }
 }
+
+private enum class MicGlyph { MIC, STOP, WORKING }
 
 fun errorText(error: DictationError): Int = when (error) {
     DictationError.NO_MODEL -> R.string.error_no_model

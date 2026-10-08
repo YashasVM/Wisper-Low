@@ -5,14 +5,21 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,6 +55,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.selection.toggleable
+import kotlinx.coroutines.flow.collectLatest
 
 /** Like stringResource, but keeps <b> markup from strings.xml as bold text. */
 @Composable
@@ -196,6 +204,28 @@ fun Modifier.pressScale(source: InteractionSource, pressedScale: Float = 0.97f):
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) pressedScale else 1f, Motion.spring(), label = "pressScale")
     return graphicsLayer { scaleX = scale; scaleY = scale }
+}
+
+/**
+ * Follows a live 0..1 signal such as the mic level with a critically damped spring.
+ * Samples arrive ~16 times a second; restarting a tween on each one makes visuals
+ * stutter, while a spring keeps its velocity across targets. Read the result in a
+ * draw or graphicsLayer block so it never recomposes.
+ */
+@Composable
+fun rememberSmoothedLevel(level: () -> Float): State<Float> {
+    val smooth = remember { Animatable(0f) }
+    val current by rememberUpdatedState(level)
+    LaunchedEffect(smooth) {
+        snapshotFlow { current().coerceIn(0f, 1f) }.collectLatest { target ->
+            if (Motion.enabled) {
+                smooth.animateTo(target, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+            } else {
+                smooth.snapTo(target)
+            }
+        }
+    }
+    return smooth.asState()
 }
 
 /** Screen title in the display style used by onboarding. */

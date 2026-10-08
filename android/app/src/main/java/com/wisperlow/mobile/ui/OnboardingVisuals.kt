@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +62,9 @@ class OrbSpec(
     val complete: Boolean = false,
 )
 
+/** Level reader for an orb that should not react to the microphone. */
+val NoLevel: () -> Float = { 0f }
+
 /**
  * One persistent orb for the whole flow. Colors, energy, ring and check are animated
  * state, so moving between steps morphs it instead of swapping in a new picture.
@@ -70,7 +72,7 @@ class OrbSpec(
  * recomposition out of the frame loop.
  */
 @Composable
-fun AuroraOrb(spec: OrbSpec, level: Float, modifier: Modifier = Modifier, center: @Composable () -> Unit = {}) {
+fun AuroraOrb(spec: OrbSpec, level: () -> Float, modifier: Modifier = Modifier, center: @Composable () -> Unit = {}) {
     val c1 by animateColorAsState(spec.primary, Motion.slow(), label = "orbC1")
     val c2 by animateColorAsState(spec.secondary, Motion.slow(), label = "orbC2")
     val energy by animateFloatAsState(spec.energy, Motion.spring(), label = "orbEnergy")
@@ -89,7 +91,7 @@ fun AuroraOrb(spec: OrbSpec, level: Float, modifier: Modifier = Modifier, center
             burst.snapTo(1f)
         }
     }
-    val live by rememberUpdatedState(level.coerceIn(0f, 1f))
+    val live by rememberSmoothedLevel(level)
 
     val transition = rememberInfiniteTransition(label = "orb")
     val phase by transition.animateFloat(
