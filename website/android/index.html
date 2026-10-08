@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d0503" />
+<title>wisperlow | offline dictation for android</title>
+<meta name="description" content="A floating mic bubble that types your voice into any Android app. On-device, any keyboard, no cloud detour." />
+<link rel="icon" href="mark.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0d0503; --block: #1b0d09;
+    --text: #e4d4b6; --muted: #b3a38c; --faint: #a28f79; --line: #e4d4b626;
+    --accent: #e58a57; --ok: #4ade80;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif: "Instrument Serif", Georgia, serif;
+    --ease: cubic-bezier(.22,1,.36,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--accent); color: var(--bg); }
+
+  /* dithered ember field */
+  #ember { position: fixed; inset: 0; width: 100%; height: 100vh; image-rendering: pixelated; z-index: -2; opacity: 0; transition: opacity 2s ease;
+    mask-image: linear-gradient(#000 0%, rgba(0,0,0,.85) 35%, rgba(0,0,0,.25) 75%, transparent 100%); }
+  #ember.on { opacity: 1; }
+  .veil { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse 60% 55% at 50% 52%, rgba(13,5,3,.92), rgba(13,5,3,.55) 60%, transparent 100%); }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- hero ---------- */
+  .shell { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; padding-top: 60px; padding-bottom: 60px; }
+  .brand-name { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .brand-name h1 { font-family: var(--serif); font-weight: 400; font-size: 88px; line-height: .9; letter-spacing: -.02em; }
+  .tagline { font-family: var(--mono); font-size: 13px; color: var(--faint); }
+  .tagline b { color: var(--accent); font-weight: 400; }
+  .intro { font-size: 34px; line-height: 1.2; letter-spacing: -.03em; margin-top: 28px; }
+  .swap { color: var(--accent); display: inline-block; transition: opacity .35s ease, transform .35s var(--ease), filter .35s; }
+  .swap.out { opacity: 0; transform: translateY(-8px); filter: blur(4px); }
+  .lede { color: var(--muted); margin-top: 20px; max-width: 460px; font-size: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 28px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta span { display: inline-flex; align-items: center; gap: 8px; }
+  .meta span::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .gh { display: inline-flex; align-items: center; gap: 9px; margin-top: 30px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 9px; font-size: 14px; color: var(--muted); background: rgba(22,9,7,.6); transition: color .25s, border-color .25s; }
+  .gh:hover { color: var(--text); border-color: rgba(229,138,87,.5); }
+  .gh svg { width: 16px; height: 16px; }
+  .fade { opacity: 0; transform: translateY(10px); animation: in 1s var(--ease) forwards; }
+  @keyframes in { to { opacity: 1; transform: none; } }
+
+  /* download card */
+  .dl { background: linear-gradient(180deg, rgba(30,13,9,.92), rgba(22,9,7,.92)); border: 1px solid var(--line); border-radius: 22px; padding: 26px; box-shadow: 0 40px 120px -40px rgba(0,0,0,.9); backdrop-filter: blur(8px); }
+  .dl-h { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .dl-h b { font-weight: 500; font-size: 15px; }
+  .dl-h span { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: blink 2.4s infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+
+  .main-apk { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 11px 16px; border-radius: 10px; background: linear-gradient(180deg, #f0a073, #e58a57); color: #1a0a05; font-size: 14px; box-shadow: 0 10px 26px -12px rgba(229,138,87,.7); transition: transform .4s var(--ease), box-shadow .4s; }
+  .main-apk:hover { transform: translateY(-1px); box-shadow: 0 14px 32px -12px rgba(229,138,87,.85); }
+  .main-apk svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .main-apk b { font-weight: 600; }
+  .main-apk small { flex: 1; font-size: 13px; opacity: .7; }
+  .main-apk .s { font-family: var(--mono); font-size: 12px; }
+
+  .others { margin-top: 18px; font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .apks { list-style: none; margin-top: 8px; }
+  .apk { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: 14px; transition: padding .4s var(--ease), color .25s; }
+  .apks li:last-child .apk { border-bottom: 0; }
+  .apk:hover { padding-left: 10px; color: var(--accent); }
+  .apk .n { flex: 1; } .apk .n small { color: var(--faint); margin-left: 8px; font-size: 13px; }
+  .apk .s { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  .dl-f { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--faint); }
+  .dl-f a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .dl-f a:hover { color: var(--text); }
+
+  /* ---------- why ---------- */
+  .why { display: grid; grid-template-columns: 1fr 1.15fr; align-items: start; gap: 80px; padding: 100px 0 40px; border-top: 1px solid var(--line); }
+  .why-l { position: sticky; top: 60px; }
+  .label { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .big { font-family: var(--serif); font-size: 48px; line-height: 1.05; letter-spacing: -.01em; margin-top: 16px; }
+  .big em { color: var(--accent); }
+  .prose p { color: var(--muted); font-size: 16px; line-height: 1.7; }
+  .prose p + p { margin-top: 16px; }
+  .prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .chips span { font-size: 13px; padding: 5px 11px; border-radius: 7px; background: var(--block); border: 1px solid var(--line); color: var(--muted); }
+  .prose b { color: var(--text); font-weight: 500; }
+
+  footer { margin-top: 110px; padding: 40px 0 34px; border-top: 1px solid var(--line); }
+  .f-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; flex-wrap: wrap; }
+  .f-word { font-family: var(--serif); font-size: 64px; line-height: .9; letter-spacing: -.02em; }
+  .f-word em { color: var(--accent); }
+  .f-links { display: flex; gap: 22px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .f-links a { transition: color .25s; } .f-links a:hover { color: var(--accent); }
+  .f-bot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 30px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .f-bot a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+  .rv { opacity: 0; transform: translateY(14px); transition: opacity .9s var(--ease), transform .9s var(--ease); }
+  .rv.in { opacity: 1; transform: none; }
+
+  @media (max-width: 920px) {
+    .wrap { padding: 0 22px; }
+    .shell { grid-template-columns: 1fr; gap: 44px; min-height: 0; padding-top: 80px; }
+    .brand-name h1 { font-size: 64px; } .intro { font-size: 28px; }
+    .why { grid-template-columns: 1fr; gap: 28px; padding-top: 70px; }
+    .big { font-size: 38px; }
+    .why-l { position: static; }
+    .f-word { font-size: 48px; }
+    .dl { padding: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } .fade, .rv { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<canvas id="ember" aria-hidden="true"></canvas>
+<div class="veil"></div>
+
+<div class="wrap">
+  <main class="shell">
+    <section>
+      <div class="brand-name fade" style="animation-delay: .05s"><h1>wisperlow</h1><p class="tagline">/wis·per·low/ <b>android</b></p></div>
+      <p class="intro fade" style="animation-delay: .15s">Talk into <span class="swap" id="swap">WhatsApp</span>.<br />It types. Nothing leaves your phone.</p>
+      <p class="lede fade" style="animation-delay: .25s">A small floating bubble that docks above whatever keyboard you already use. Tap, speak, pause, and the words land in the field. Speech runs on-device with Parakeet.</p>
+      <div class="meta fade" style="animation-delay: .35s"><span>works offline</span><span>any keyboard</span><span>open source</span></div>
+      <a class="gh fade" style="animation-delay: .45s" href="https://github.com/YashasVM/Wisper-Low"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Star on GitHub <span>↗</span></a>
+    </section>
+
+    <section class="dl fade" style="animation-delay: .3s" aria-label="Download">
+      <div class="dl-h"><b>Download</b><span><i class="dot"></i>v0.3.0 · android 10+</span></div>
+      <a class="main-apk" href="https://github.com/YashasVM/Wisper-Low/releases/download/android-v0.3.0/wisperlow-android-0.3.0-arm64-v8a.apk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
+        <b>Download APK</b><small>arm64 · most phones</small>
+        <span class="s">31 MB</span>
+      </a>
+      <p class="others">Other builds</p>
+      <ul class="apks">
+        <li><a class="apk" href="https://github.com/YashasVM/Wisper-Low/releases/download/android-v0.3.0/wisperlow-android-0.3.0-universal.apk"><span class="n">universal<small>if arm64 won't install</small></span><span class="s">80 MB ↓</span></a></li>
+        <li><a class="apk" href="https://github.com/YashasVM/Wisper-Low/releases/download/android-v0.3.0/wisperlow-android-0.3.0-armeabi-v7a.apk"><span class="n">armeabi-v7a<small>older 32-bit phones</small></span><span class="s">23 MB ↓</span></a></li>
+        <li><a class="apk" href="https://github.com/YashasVM/Wisper-Low/releases/download/android-v0.3.0/wisperlow-android-0.3.0-x86_64.apk"><span class="n">x86_64<small>emulators, Chromebooks</small></span><span class="s">35 MB ↓</span></a></li>
+      </ul>
+      <div class="dl-f"><span>Free, no account</span><a href="https://github.com/YashasVM/Wisper-Low/releases/tag/android-v0.3.0">Release notes</a></div>
+    </section>
+  </main>
+
+  <section class="why rv">
+    <div class="why-l">
+      <p class="label">( why I built it )</p>
+      <p class="big">Voice typing shouldn't need to <em>ship your words somewhere.</em></p>
+    </div>
+    <div class="prose">
+      <p>Every phone keyboard has a mic button, and most of them send what you say to a server. I didn't want my messages, notes and half-finished thoughts going through someone else's computer just so I could avoid typing.</p>
+      <p>Wisperlow does the whole thing on the phone: <b>the speech model, voice detection, cleanup, your personal dictionary and history</b>. Once the model is downloaded you can switch on airplane mode and it keeps working. No account, no ads, no cloud detour.</p>
+      <p>I also didn't want to replace my keyboard. So instead of a new keyboard, it's a small bubble that sits next to the one you already have: <b>Gboard, Samsung, SwiftKey, anything</b>. Tap it, talk, pause, and the text lands in whatever field you're in.</p>
+      <p>It runs NVIDIA's <b>Parakeet</b> models, which are fast enough to feel instant on a normal phone. English plus 24 European languages by default, with a smaller English-only model for older devices.</p>
+      <p>It's free and <a href="https://github.com/YashasVM/Wisper-Low">open source on GitHub</a>, so you can read exactly what it does with your voice: nothing.</p>
+      <div class="chips"><span>works offline</span><span>any keyboard</span><span>android 10+</span><span>open source</span><span>no ads</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="f-top">
+      <p class="f-word">Speak <em>low.</em></p>
+      <nav class="f-links">
+        <a href="https://github.com/YashasVM/Wisper-Low">GitHub</a>
+        <a href="https://github.com/YashasVM/Wisper-Low/releases">Releases</a>
+        <a href="https://github.com/YashasVM/Wisper-Low/issues">Report a bug</a>
+        <a href="https://yash0.in">yash0.in</a>
+      </nav>
+    </div>
+    <div class="f-bot"><span>Made by <a href="https://yash0.in">yashas</a> · MIT licensed</span><span>Your voice never leaves your phone.</span></div>
+  </footer>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- dithered ember field ---- */
+  const cv = $("#ember"), cx = cv.getContext("2d");
+  const CELL = 5; let W, H, img;
+  const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+  const pal = [[13, 5, 3], [52, 9, 4], [112, 18, 6], [176, 32, 8], [232, 62, 18]];
+  function size() { W = Math.ceil(innerWidth / CELL); H = Math.ceil(innerHeight / CELL); cv.width = W; cv.height = H; img = cx.createImageData(W, H); }
+  size(); addEventListener("resize", size);
+  let mx = 0.5, my = 0.3;
+  addEventListener("pointermove", (e) => { mx = e.clientX / innerWidth; my = e.clientY / innerHeight; });
+  function frame(t) {
+    t *= 0.00022;
+    const d = img.data;
+    for (let y = 0; y < H; y++) {
+      const fy = y / H;
+      for (let x = 0; x < W; x++) {
+        const fx = x / W;
+        let v = Math.sin(fx * 7.0 + t * 3 + Math.sin(fy * 5.0 - t * 2) * 1.6)
+              + Math.sin(fy * 9.0 - t * 4 + Math.sin(fx * 6.0 + t) * 1.2)
+              + Math.sin((fx + fy) * 5.5 + t * 2.4);
+        v = v / 6 + 0.5;
+        const dx = fx - mx, dy = fy - my;
+        v += 0.22 * Math.exp(-(dx * dx * 6 + dy * dy * 10));
+        v *= 1.15 - fy * 0.9;
+        const q = Math.min(pal.length - 1, Math.max(0, Math.floor(v * (pal.length - 1) + bayer[(y & 3) * 4 + (x & 3)] - 0.25)));
+        const c = pal[q], i = (y * W + x) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    cx.putImageData(img, 0, 0);
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame); cv.classList.add("on"); setTimeout(() => (cv.style.transition = "none"), 2100);
+  addEventListener("scroll", () => { cv.style.opacity = Math.max(0.16, 1 - scrollY / (innerHeight * 0.9)).toFixed(3); }, { passive: true });
+
+  /* ---- headline app swap ---- */
+  const apps = ["WhatsApp", "Gmail", "Notes", "Slack", "Telegram", "Docs"]; let ai = 0;
+  setInterval(async () => { const s = $("#swap"); s.classList.add("out"); await sleep(350); ai = (ai + 1) % apps.length; s.textContent = apps[ai]; s.classList.remove("out"); }, 2200);
+
+  /* ---- reveal ---- */
+  const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: 0.12 });
+  document.querySelectorAll(".rv").forEach((el) => io.observe(el));
+</script>
+</body>
+</html>

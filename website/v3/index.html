@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>wisperlow — local speech-to-text, engineered</title>
+<link rel="icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #0a0a0a; --panel: #111; --fg: #e8e8e8; --dim: #6b6b6b; --line: #222; --acc: #c6ff3d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: "Space Grotesk", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 64px 64px; mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 70%); opacity: .6; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: "JetBrains Mono", monospace; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+  ::selection { background: var(--acc); color: #000; }
+
+  nav { display: flex; justify-content: space-between; align-items: center; height: 72px; font-size: 13px; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-family: "JetBrains Mono", monospace; font-weight: 700; }
+  nav .brand img { width: 24px; height: 24px; filter: grayscale(1) contrast(1.2); }
+  nav .links { display: flex; gap: 28px; color: var(--dim); font-family: "JetBrains Mono", monospace; }
+  nav .links a:hover { color: var(--acc); }
+  .btn { font-family: "JetBrains Mono", monospace; font-size: 13px; padding: 11px 18px; border: 1px solid var(--fg); display: inline-flex; gap: 10px; align-items: center; transition: all .2s; position: relative; }
+  .btn:hover { background: var(--acc); color: #000; border-color: var(--acc); box-shadow: 4px 4px 0 var(--fg); transform: translate(-2px, -2px); }
+  .btn.solid { background: var(--acc); color: #000; border-color: var(--acc); }
+
+  .hero { padding: 90px 0 60px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 50px; align-items: center; }
+  .tag { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--acc); }
+  h1 { font-size: clamp(48px, 7vw, 96px); line-height: .92; letter-spacing: -.04em; font-weight: 700; margin: 22px 0 26px; }
+  h1 .hl { color: var(--acc); }
+  h1 .scr { display: inline-block; min-width: 4ch; }
+  .hero p { color: #a5a5a5; font-size: 18px; line-height: 1.6; max-width: 520px; }
+  .hero .ctas { display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+  .install { margin-top: 26px; font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--dim); }
+  .install b { color: var(--fg); font-weight: 400; }
+
+  .term { background: var(--panel); border: 1px solid var(--line); font-family: "JetBrains Mono", monospace; font-size: 13px; box-shadow: 12px 12px 0 rgba(198,255,61,.08); }
+  .term .hd { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+  .term .bd { padding: 18px; min-height: 330px; line-height: 1.75; white-space: pre-wrap; }
+  .term .ok { color: var(--acc); } .term .d { color: var(--dim); } .term .w { color: #fff; }
+  .cur { display: inline-block; width: 8px; height: 15px; background: var(--acc); vertical-align: -2px; animation: bl 1s steps(1) infinite; }
+  @keyframes bl { 50% { opacity: 0; } }
+
+  .ticker { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; white-space: nowrap; padding: 16px 0; font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--dim); }
+  .ticker div { display: inline-block; animation: tk 40s linear infinite; }
+  .ticker span { margin: 0 26px; } .ticker span::before { content: "◆ "; color: var(--acc); }
+  @keyframes tk { to { transform: translateX(-50%); } }
+
+  section { padding: 120px 0; }
+  .sh { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 56px; flex-wrap: wrap; }
+  h2 { font-size: clamp(36px, 5vw, 64px); letter-spacing: -.035em; line-height: 1; }
+  .sh p { color: var(--dim); max-width: 380px; line-height: 1.6; }
+
+  /* pipeline */
+  .pipe { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); position: relative; }
+  .node { padding: 26px 20px 30px; border-right: 1px solid var(--line); position: relative; transition: background .4s; }
+  .node:last-child { border-right: 0; }
+  .node .k { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--dim); }
+  .node h3 { font-size: 22px; margin: 34px 0 8px; }
+  .node p { color: var(--dim); font-size: 13px; line-height: 1.55; }
+  .node code { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--acc); }
+  .node.on { background: rgba(198,255,61,.06); }
+  .node.on .k { color: var(--acc); }
+  .pipe .bar { position: absolute; left: 0; top: -1px; height: 2px; background: var(--acc); box-shadow: 0 0 14px var(--acc); width: 20%; transition: transform .6s cubic-bezier(.7,0,.3,1); }
+
+  .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .f { background: var(--bg); padding: 34px 28px; min-height: 230px; position: relative; overflow: hidden; }
+  .f::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2px; background: var(--acc); transform: scaleX(0); transform-origin: left; transition: transform .5s cubic-bezier(.7,0,.3,1); }
+  .f:hover::after { transform: scaleX(1); }
+  .f .k { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--acc); }
+  .f h3 { font-size: 22px; margin: 50px 0 10px; }
+  .f p { color: var(--dim); font-size: 15px; line-height: 1.55; }
+
+  table { width: 100%; border-collapse: collapse; font-family: "JetBrains Mono", monospace; font-size: 14px; }
+  td { padding: 18px 10px; border-bottom: 1px solid var(--line); }
+  td:first-child { color: var(--acc); white-space: nowrap; }
+  td:last-child { color: var(--dim); }
+  tr { transition: background .2s; } tr:hover { background: var(--panel); }
+
+  .end { border: 1px solid var(--line); padding: 80px 40px; text-align: center; background: radial-gradient(circle at 50% 120%, rgba(198,255,61,.15), transparent 60%); }
+  .end h2 { font-size: clamp(44px, 7vw, 100px); }
+  .end .ctas { display: flex; gap: 12px; justify-content: center; margin-top: 40px; flex-wrap: wrap; }
+  footer { padding: 40px 0; font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--dim); }
+  footer .wrap { display: flex; justify-content: space-between; }
+
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.8,.2,1); }
+  .rv.in { opacity: 1; transform: none; }
+
+  @media (max-width: 900px) {
+    nav .links { display: none; }
+    .hero, .feat { grid-template-columns: 1fr; }
+    .pipe { grid-template-columns: 1fr; } .node { border-right: 0; border-bottom: 1px solid var(--line); } .pipe .bar { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .rv { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="../assets/logo.png" alt="" />wisperlow</a>
+    <div class="links"><a href="#pipeline">/pipeline</a><a href="#features">/features</a><a href="#cli">/cli</a></div>
+    <a class="btn" href="https://github.com/YashasVM/Wisper-Low">github ↗</a>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <div class="tag rv">// v0.9.5 — open source</div>
+      <h1 class="rv">Voice in.<br />Text out.<br /><span class="hl">Zero <span class="scr" id="scr">cloud</span>.</span></h1>
+      <p class="rv">A speech-to-text engine that lives on your machine. Rust + Tauri, GPU-accelerated Whisper and Parakeet, Silero VAD, and a global hotkey that pastes into any app.</p>
+      <div class="ctas rv"><a class="btn solid" href="https://github.com/YashasVM/Wisper-Low/releases">$ download</a><a class="btn" href="#pipeline">read the pipeline</a></div>
+      <div class="install rv">macos · windows · linux · android</div>
+    </div>
+    <div class="term rv">
+      <div class="hd"><span>~/wisperlow — session</span><span id="clock">00:00.000</span></div>
+      <div class="bd" id="term"></div>
+    </div>
+  </header>
+</div>
+
+<div class="ticker"><div id="tick"></div></div>
+
+<section id="pipeline">
+  <div class="wrap">
+    <div class="sh"><h2 class="rv">The pipeline.</h2><p class="rv">Every stage runs locally. Trace a keypress all the way to pasted text.</p></div>
+    <div class="pipe rv" id="pipe">
+      <div class="bar" id="pbar"></div>
+      <div class="node"><div class="k">[01] input</div><h3>Shortcut</h3><p>Global hotkey, push-to-talk or toggle.</p><code>shortcut.rs</code></div>
+      <div class="node"><div class="k">[02] capture</div><h3>Microphone</h3><p>cpal capture, resampled to 16 kHz.</p><code>audio_toolkit/</code></div>
+      <div class="node"><div class="k">[03] filter</div><h3>VAD</h3><p>Silero drops silence before inference.</p><code>vad/</code></div>
+      <div class="node"><div class="k">[04] infer</div><h3>Model</h3><p>Whisper / Parakeet on Metal or Vulkan.</p><code>transcription.rs</code></div>
+      <div class="node"><div class="k">[05] output</div><h3>Paste</h3><p>Into the focused app, saved to history.</p><code>clipboard</code></div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="padding-top: 0">
+  <div class="wrap">
+    <div class="sh"><h2 class="rv">Spec sheet.</h2><p class="rv">No telemetry pipeline, no account, no subscription.</p></div>
+    <div class="feat rv">
+      <div class="f"><div class="k">0x01</div><h3>On-device only</h3><p>Audio never leaves the machine. Works fully offline after the model download.</p></div>
+      <div class="f"><div class="k">0x02</div><h3>GPU acceleration</h3><p>Metal on Apple silicon, Vulkan on Windows and Linux.</p></div>
+      <div class="f"><div class="k">0x03</div><h3>Model choice</h3><p>Whisper Small → Large, Turbo, Parakeet, Moonshine, SenseVoice.</p></div>
+      <div class="f"><div class="k">0x04</div><h3>Translate</h3><p>Speak any supported language, get English text.</p></div>
+      <div class="f"><div class="k">0x05</div><h3>Android bubble</h3><p>Floating mic that dictates into any text field.</p></div>
+      <div class="f"><div class="k">0x06</div><h3>Scriptable</h3><p>CLI flags drive a running instance from your WM or scripts.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="cli" style="padding-top: 0">
+  <div class="wrap">
+    <div class="sh"><h2 class="rv">CLI.</h2><p class="rv">Bind these to your window manager. They talk to the running instance.</p></div>
+    <table class="rv">
+      <tr><td>--toggle-transcription</td><td>Start or stop recording on the running instance</td></tr>
+      <tr><td>--toggle-post-process</td><td>Toggle recording with post-processing</td></tr>
+      <tr><td>--cancel</td><td>Cancel the current operation</td></tr>
+      <tr><td>--start-hidden</td><td>Launch to the tray without a window</td></tr>
+      <tr><td>--no-tray</td><td>Run without a system tray icon</td></tr>
+      <tr><td>--debug</td><td>Verbose trace logging</td></tr>
+    </table>
+  </div>
+</section>
+
+<section style="padding-top: 0">
+  <div class="wrap">
+    <div class="end rv">
+      <div class="tag">// ready when you are</div>
+      <h2>Stop typing.</h2>
+      <div class="ctas"><a class="btn solid" href="https://github.com/YashasVM/Wisper-Low/releases">$ download wisperlow</a><a class="btn" href="https://github.com/YashasVM/Wisper-Low">★ star the repo</a></div>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap"><span>© 2026 wisperlow</span><span>built with rust + tauri</span></div></footer>
+
+<script>
+  const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))), { threshold: 0.12 });
+  document.querySelectorAll(".rv").forEach((el) => io.observe(el));
+
+  // Scramble word
+  const words = ["cloud", "latency", "accounts", "uploads", "servers"];
+  const scr = document.getElementById("scr"), chars = "abcdefghijklmnopqrstuvwxyz#%&*";
+  let wi = 0;
+  setInterval(() => {
+    wi = (wi + 1) % words.length;
+    const target = words[wi]; let f = 0;
+    const id = setInterval(() => {
+      scr.textContent = target.split("").map((c, i) => (i < f / 2 ? c : chars[(Math.random() * chars.length) | 0])).join("");
+      if (++f > target.length * 2) clearInterval(id);
+    }, 35);
+  }, 2600);
+
+  // Ticker
+  const items = ["whisper", "parakeet", "moonshine", "sensevoice", "silero vad", "metal", "vulkan", "rust", "tauri 2", "offline", "push-to-talk", "translate", "history"];
+  const tick = document.getElementById("tick");
+  tick.innerHTML = [...items, ...items].map((s) => `<span>${s}</span>`).join("");
+
+  // Pipeline sweep
+  const nodes = [...document.querySelectorAll(".node")], pbar = document.getElementById("pbar");
+  let ni = 0;
+  setInterval(() => { nodes.forEach((n, i) => n.classList.toggle("on", i === ni)); pbar.style.transform = `translateX(${ni * 100}%)`; ni = (ni + 1) % nodes.length; }, 1100);
+
+  // Terminal session
+  const term = document.getElementById("term"), clock = document.getElementById("clock");
+  const t0 = performance.now();
+  (function c() { const ms = (performance.now() - t0) % 60000; clock.textContent = `${String((ms / 1000) | 0).padStart(2, "0")}.${String((ms % 1000) | 0).padStart(3, "0")}`; requestAnimationFrame(c); })();
+  const script = [
+    ['<span class="d">[shortcut]</span> ctrl+space <span class="ok">pressed</span>', 350],
+    ['<span class="d">[audio]</span>    mic opened · 48kHz → 16kHz', 350],
+    ['<span class="d">[vad]</span>      speech detected', 900],
+    ['<span class="d">[vad]</span>      trimmed 0.41s silence', 300],
+    ['<span class="d">[shortcut]</span> released', 300],
+    ['<span class="d">[model]</span>    whisper-turbo · vulkan', 500],
+    ['<span class="d">[model]</span>    <span class="ok">done in 284ms</span>', 300],
+    ["", 0],
+  ];
+  const outputs = [
+    "Ship the fix tonight and tag the release in the morning.",
+    "Add a note that the meeting moved to Friday.",
+    "Refactor the audio manager before adding the new device picker.",
+  ];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  (async () => {
+    for (let k = 0; ; k = (k + 1) % outputs.length) {
+      term.innerHTML = '<span class="d">$</span> wisperlow --start-hidden\n';
+      for (const [l, d] of script) { term.innerHTML += l + "\n"; await sleep(d); }
+      term.innerHTML += '<span class="ok">→</span> <span class="w" id="out"></span><span class="cur"></span>';
+      const out = document.getElementById("out");
+      for (const ch of outputs[k]) { out.textContent += ch; await sleep(22); }
+      term.innerHTML = term.innerHTML.replace('<span class="cur"></span>', "") + '\n<span class="d">[paste]</span>    <span class="ok">inserted into active window</span><span class="cur"></span>';
+      await sleep(3200);
+    }
+  })();
+</script>
+</body>
+</html>
