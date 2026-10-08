@@ -1,4 +1,4 @@
-package com.wisperlow.mobile.accessibility
+package com.wisperlow.mobile.keyboard
 
 /** Fits dictated text between the characters around the cursor like a typist would. */
 internal object SmartSpacing {

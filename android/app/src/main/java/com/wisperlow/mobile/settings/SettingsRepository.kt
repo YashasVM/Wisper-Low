@@ -7,7 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
-import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wisperlow.mobile.stt.ModelCatalog
@@ -45,9 +45,6 @@ enum class AutoStop(val silenceMs: Long) {
 
 data class WisperlowSettings(
     val selectedModelId: String = ModelCatalog.DEFAULT.id,
-    val bubbleEnabled: Boolean = true,
-    /** Show the bubble only while a keyboard is open in another app. Needs Accessibility. */
-    val bubbleOnlyWhenTyping: Boolean = true,
     /** Show an editable preview before inserting instead of typing immediately. */
     val reviewBeforeInsert: Boolean = false,
     val autoStop: AutoStop = AutoStop.NORMAL,
@@ -56,7 +53,27 @@ data class WisperlowSettings(
     val historyEnabled: Boolean = true,
     val personalDictionary: Map<String, String> = emptyMap(),
     val onboardingCompleted: Boolean = false,
+    val keyboard: KeyboardPrefs = KeyboardPrefs(),
 )
+
+/** How the keyboard types; dictation settings live on [WisperlowSettings] itself. */
+data class KeyboardPrefs(
+    val autoCorrect: Boolean = true,
+    val autoCapitalize: Boolean = true,
+    val doubleSpacePeriod: Boolean = true,
+    val numberRow: Boolean = false,
+    val haptics: Boolean = true,
+    val sound: Boolean = false,
+    /** Decode speech while it is still being spoken so words appear as they are said. */
+    val livePreview: Boolean = true,
+    /** Key height relative to the default, from [MIN_HEIGHT_SCALE] to [MAX_HEIGHT_SCALE]. */
+    val heightScale: Float = 1f,
+) {
+    companion object {
+        const val MIN_HEIGHT_SCALE = 0.8f
+        const val MAX_HEIGHT_SCALE = 1.3f
+    }
+}
 
 @Singleton
 class SettingsRepository @Inject constructor(
@@ -64,19 +81,20 @@ class SettingsRepository @Inject constructor(
 ) {
     private object Keys {
         val selectedModelId = stringPreferencesKey("selected_model_id")
-        val bubbleEnabled = booleanPreferencesKey("bubble_enabled")
-        val bubbleOnlyWhenTyping = booleanPreferencesKey("bubble_only_when_typing")
         val reviewBeforeInsert = booleanPreferencesKey("review_before_insert")
         val autoStop = stringPreferencesKey("auto_stop")
         val keepModelLoaded = booleanPreferencesKey("keep_model_loaded")
         val historyEnabled = booleanPreferencesKey("history_enabled")
         val dictionary = stringPreferencesKey("personal_dictionary")
         val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
-        // Older builds stored a pixel x under "bubble_x"; a new key keeps it from being read as a side.
-        val bubbleSide = intPreferencesKey("bubble_side")
-        val bubbleY = intPreferencesKey("bubble_y")
-        val bubbleSideLandscape = intPreferencesKey("bubble_side_landscape")
-        val bubbleYLandscape = intPreferencesKey("bubble_y_landscape")
+        val autoCorrect = booleanPreferencesKey("kb_autocorrect")
+        val autoCapitalize = booleanPreferencesKey("kb_autocap")
+        val doubleSpacePeriod = booleanPreferencesKey("kb_double_space_period")
+        val numberRow = booleanPreferencesKey("kb_number_row")
+        val haptics = booleanPreferencesKey("kb_haptics")
+        val sound = booleanPreferencesKey("kb_sound")
+        val livePreview = booleanPreferencesKey("live_preview")
+        val heightScale = floatPreferencesKey("kb_height_scale")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -87,18 +105,29 @@ class SettingsRepository @Inject constructor(
             selectedModelId = prefs[Keys.selectedModelId]
                 ?.takeIf { ModelCatalog.byId(it) != null }
                 ?: defaults.selectedModelId,
-            bubbleEnabled = prefs[Keys.bubbleEnabled] ?: defaults.bubbleEnabled,
-            bubbleOnlyWhenTyping = prefs[Keys.bubbleOnlyWhenTyping] ?: defaults.bubbleOnlyWhenTyping,
             reviewBeforeInsert = prefs[Keys.reviewBeforeInsert] ?: defaults.reviewBeforeInsert,
             autoStop = parseAutoStop(prefs[Keys.autoStop]),
             keepModelLoaded = prefs[Keys.keepModelLoaded] ?: defaults.keepModelLoaded,
             historyEnabled = prefs[Keys.historyEnabled] ?: defaults.historyEnabled,
             personalDictionary = parseDictionary(prefs[Keys.dictionary] ?: ""),
             onboardingCompleted = prefs[Keys.onboardingCompleted] ?: false,
+            keyboard = defaults.keyboard.let { d ->
+                KeyboardPrefs(
+                    autoCorrect = prefs[Keys.autoCorrect] ?: d.autoCorrect,
+                    autoCapitalize = prefs[Keys.autoCapitalize] ?: d.autoCapitalize,
+                    doubleSpacePeriod = prefs[Keys.doubleSpacePeriod] ?: d.doubleSpacePeriod,
+                    numberRow = prefs[Keys.numberRow] ?: d.numberRow,
+                    haptics = prefs[Keys.haptics] ?: d.haptics,
+                    sound = prefs[Keys.sound] ?: d.sound,
+                    livePreview = prefs[Keys.livePreview] ?: d.livePreview,
+                    heightScale = (prefs[Keys.heightScale] ?: d.heightScale)
+                        .coerceIn(KeyboardPrefs.MIN_HEIGHT_SCALE, KeyboardPrefs.MAX_HEIGHT_SCALE),
+                )
+            },
         )
     }
 
-    /** Latest settings for synchronous readers such as the overlay and audio callbacks. */
+    /** Latest settings for synchronous readers such as the keyboard and audio callbacks. */
     val current: StateFlow<WisperlowSettings> get() = _current.asStateFlow()
 
     private val _current = MutableStateFlow(WisperlowSettings())
@@ -120,37 +149,26 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    /** Saved bubble placement as (side, y): side 0 = left edge, 1 = right edge; y in screen pixels. */
-    fun bubblePosition(landscape: Boolean): Flow<Pair<Int, Int>?> = context.dataStore.data.map { prefs ->
-        // Portrait keeps the original keys so existing positions survive the upgrade.
-        val side = prefs[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] ?: return@map null
-        val y = prefs[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] ?: return@map null
-        side to y
-    }
-
     suspend fun setSelectedModel(id: String) = edit { it[Keys.selectedModelId] = id }
-    suspend fun setBubbleEnabled(enabled: Boolean) = edit { it[Keys.bubbleEnabled] = enabled }
-    suspend fun setBubbleOnlyWhenTyping(enabled: Boolean) = edit { it[Keys.bubbleOnlyWhenTyping] = enabled }
     suspend fun setReviewBeforeInsert(enabled: Boolean) = edit { it[Keys.reviewBeforeInsert] = enabled }
     suspend fun setAutoStop(value: AutoStop) = edit { it[Keys.autoStop] = value.name }
     suspend fun setKeepModelLoaded(enabled: Boolean) = edit { it[Keys.keepModelLoaded] = enabled }
     suspend fun setHistoryEnabled(enabled: Boolean) = edit { it[Keys.historyEnabled] = enabled }
     suspend fun setOnboardingCompleted(completed: Boolean) = edit { it[Keys.onboardingCompleted] = completed }
 
+    suspend fun setKeyboard(prefs: KeyboardPrefs) = edit {
+        it[Keys.autoCorrect] = prefs.autoCorrect
+        it[Keys.autoCapitalize] = prefs.autoCapitalize
+        it[Keys.doubleSpacePeriod] = prefs.doubleSpacePeriod
+        it[Keys.numberRow] = prefs.numberRow
+        it[Keys.haptics] = prefs.haptics
+        it[Keys.sound] = prefs.sound
+        it[Keys.livePreview] = prefs.livePreview
+        it[Keys.heightScale] = prefs.heightScale
+    }
+
     suspend fun setPersonalDictionary(dict: Map<String, String>) = edit {
         it[Keys.dictionary] = serializeDictionary(dict)
-    }
-
-    suspend fun setBubblePosition(landscape: Boolean, side: Int, y: Int) = edit {
-        it[if (landscape) Keys.bubbleSideLandscape else Keys.bubbleSide] = side
-        it[if (landscape) Keys.bubbleYLandscape else Keys.bubbleY] = y
-    }
-
-    suspend fun clearBubblePosition() = edit {
-        it.remove(Keys.bubbleSide)
-        it.remove(Keys.bubbleY)
-        it.remove(Keys.bubbleSideLandscape)
-        it.remove(Keys.bubbleYLandscape)
     }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

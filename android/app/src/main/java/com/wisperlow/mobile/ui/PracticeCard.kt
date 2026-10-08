@@ -35,7 +35,7 @@ import com.wisperlow.mobile.R
 import com.wisperlow.mobile.dictation.DictationError
 import com.wisperlow.mobile.dictation.DictationState
 
-/** In-app try-it area: the same engine as the bubble, without leaving Wisperlow. */
+/** In-app try-it area: the same engine as the keyboard, without leaving Wisperlow. */
 @Composable
 fun PracticeArea(
     practice: PracticeUi,
@@ -135,7 +135,7 @@ private fun MicButton(listening: Boolean, finishing: Boolean, level: () -> Float
                     MicGlyph.WORKING -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                     else -> Icon(
                         if (glyph == MicGlyph.STOP) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                        contentDescription = stringResource(if (glyph == MicGlyph.STOP) R.string.bubble_insert else R.string.try_start),
+                        contentDescription = stringResource(if (glyph == MicGlyph.STOP) R.string.try_finish else R.string.try_start),
                         modifier = Modifier.size(30.dp),
                     )
                 }
@@ -158,16 +158,13 @@ fun errorText(error: DictationError): Int = when (error) {
 /** Things only the activity can do: permission prompts and system screens. */
 class AppActions(
     val requestMicrophone: () -> Unit,
-    val openOverlaySettings: () -> Unit,
-    val openAccessibilitySettings: () -> Unit,
+    val openKeyboardSettings: () -> Unit,
+    val pickKeyboard: () -> Unit,
     val openAppInfo: () -> Unit,
-    val startBubble: () -> Unit,
-    val stopBubble: () -> Unit,
     val copyText: (String) -> Unit,
     val isMetered: () -> Boolean,
 )
 
 fun AppActions.withCopy(copy: (String) -> Unit) = AppActions(
-    requestMicrophone, openOverlaySettings, openAccessibilitySettings, openAppInfo,
-    startBubble, stopBubble, copy, isMetered,
+    requestMicrophone, openKeyboardSettings, pickKeyboard, openAppInfo, copy, isMetered,
 )
