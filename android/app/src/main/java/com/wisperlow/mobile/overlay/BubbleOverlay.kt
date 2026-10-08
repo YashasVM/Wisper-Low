@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -178,7 +177,7 @@ class BubbleOverlay(
         val width = windowWidthFor(state)
         val height = windowHeightFor(state)
         view.removeCallbacks(shrinkWindow)
-        if (state is BubbleUi.Idle && lp.width != WindowManager.LayoutParams.WRAP_CONTENT) {
+        if (state is BubbleUi.Idle && lp.width != dp(WINDOW_DP)) {
             // Let the pill finish collapsing inside the big window, then shrink it. The size
             // animation's finish callback normally does this sooner; this is the fallback.
             if (lp.flags != flags) {
@@ -200,21 +199,23 @@ class BubbleOverlay(
     private val shrinkWindow = Runnable {
         val view = bubbleView ?: return@Runnable
         val lp = params ?: return@Runnable
-        if (ui !is BubbleUi.Idle || lp.width == WindowManager.LayoutParams.WRAP_CONTENT) return@Runnable
-        lp.width = WindowManager.LayoutParams.WRAP_CONTENT
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+        if (ui !is BubbleUi.Idle || lp.width == dp(WINDOW_DP)) return@Runnable
+        lp.width = dp(WINDOW_DP)
+        lp.height = dp(WINDOW_DP)
         applyPlacement()
     }
 
     private fun windowWidthFor(state: BubbleUi): Int = when (state) {
-        is BubbleUi.Idle -> WindowManager.LayoutParams.WRAP_CONTENT
+        // Exact, never WRAP_CONTENT: a wrapping overlay window can measure far larger
+        // than the dot and silently swallow taps meant for the keyboard below it.
+        is BubbleUi.Idle -> dp(WINDOW_DP)
         is BubbleUi.Review -> dp(reviewWidthDp() + 8)
-        else -> dp(PILL_DP + 8)
+        else -> dp(PILL_DP + WINDOW_DP - DOT_DP)
     }
 
     private fun windowHeightFor(state: BubbleUi): Int = when (state) {
-        is BubbleUi.Idle, is BubbleUi.Review -> WindowManager.LayoutParams.WRAP_CONTENT
-        else -> dp(DOT_DP + 8)
+        is BubbleUi.Review -> WindowManager.LayoutParams.WRAP_CONTENT
+        else -> dp(WINDOW_DP)
     }
 
     fun setLevel(value: Float) {
@@ -488,8 +489,9 @@ class BubbleOverlay(
             animationSpec = if (animations) spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium) else snap(),
             label = "bubblePress",
         )
-        // The window is fixed-size while active; this box morphs inside it, anchored to the docked edge.
-        Box(Modifier.fillMaxSize(), contentAlignment = anchor) {
+        // The window has an exact width; this box morphs inside it, anchored to the docked edge.
+        // Height wraps the content so the review window (WRAP_CONTENT height) stays panel-sized.
+        Box(Modifier.fillMaxWidth(), contentAlignment = anchor) {
             Box(
                 modifier = Modifier
                     .padding(4.dp)
@@ -889,6 +891,8 @@ class BubbleOverlay(
         const val KEYBOARD_GAP_DP = 12
         const val DEFAULT_HEIGHT_FRACTION = 0.4f
         const val DOT_DP = 56
+        /** The dot plus the 4dp padding around it on every side. */
+        const val WINDOW_DP = DOT_DP + 8
         const val EDGE_MARGIN_DP = 6
         const val TOP_MARGIN_DP = 48
         const val BOTTOM_MARGIN_DP = 24
