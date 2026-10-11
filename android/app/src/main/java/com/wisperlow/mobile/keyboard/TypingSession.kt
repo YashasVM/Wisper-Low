@@ -263,6 +263,8 @@ class TypingSession(
         val a = Lexicon.key(typed)
         val b = Lexicon.key(intended)
         if (a.length < 2 || a == b || b.isEmpty() || a[0] != b[0]) return
+        // Adding or trimming an ending ("test" to "tests", "run" to "running") is editing, not fixing.
+        if (b.startsWith(a) || a.startsWith(b)) return
         // A slip ("teh" to "the") or a shortcut spelled out ("tmrw" to "tomorrow").
         val related = Lexicon.distance(a, b, FIX_DISTANCE) <= FIX_DISTANCE || isAbbreviation(a, b)
         if (related) lexicon()?.learnFix(typed, intended)

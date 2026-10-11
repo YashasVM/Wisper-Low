@@ -195,4 +195,20 @@ class TypingSessionTest {
         session.backspace()
         assertEquals(listOf(t), session.touches)
     }
+
+    @Test
+    fun `adding an ending to a word is not a fix to learn`() {
+        repeat(2) {
+            typeWord("hell")
+            session.space()
+            now += 2_000
+            session.backspace()
+            typeWord("o")
+            session.space()
+            now += 2_000
+        }
+        typeWord("hell")
+        session.space()
+        assertEquals("hello hello hell ", field.toString())
+    }
 }
