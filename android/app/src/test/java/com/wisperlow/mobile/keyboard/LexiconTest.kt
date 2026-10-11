@@ -209,4 +209,35 @@ class LexiconTest {
         copy.importLearned(l.exportLearned())
         assertEquals("wassup", copy.suggest("wsp").autoCorrect)
     }
+
+    @Test
+    fun `brands that are everyday words keep the typed spelling`() {
+        for (w in listOf("python", "discord", "twitch", "docker", "google")) assertNull(w, fix(w))
+        assertTrue(lexicon.suggest("python").words.contains("Python"))
+    }
+
+    @Test
+    fun `forgetting a word drops its next-word predictions too`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learn("private", null)
+        l.learn("secret", "private")
+        l.forget("private")
+        assertTrue(l.predict("private").isEmpty())
+        assertTrue(l.exportLearned().pairs.isEmpty())
+    }
+
+    @Test
+    fun `learned words, pairs and fixes survive the file`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learn("skrrt", null)
+        l.learn("skrrt", "the")
+        l.learnFix("wsp", "wassup")
+        val file = File.createTempFile("learned", ".tsv").apply { deleteOnExit() }
+        LearnedFile.write(file, l.exportLearned())
+        val copy = Lexicon(listOf("the" to 1000L))
+        copy.importLearned(LearnedFile.read(file)!!)
+        assertEquals("wassup", copy.suggest("wsp").autoCorrect)
+        assertEquals(listOf("skrrt"), copy.predict("the"))
+        assertTrue(copy.isLearned("skrrt"))
+    }
 }

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
+import android.os.SystemClock
 import android.text.InputType
 import android.util.Log
 import android.view.HapticFeedbackConstants
@@ -74,6 +75,8 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     private val field = ConnectionField()
     private val typing = TypingSession(field, { lexiconRepository.lexicon.value })
     private var suggestJob: Job? = null
+    /** When the keyboard last changed the text, to tell its own cursor updates from the user's. */
+    private var lastEditAt = 0L
     private var prefs = KeyboardPrefs()
     private var lastShiftTap = 0L
 
@@ -228,6 +231,10 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         if (streaming) return
         val word = typing.composing
+        // Our own edits report back within moments; a later move or a selection is the user's.
+        if (word.isEmpty() && (newSelStart != newSelEnd || SystemClock.uptimeMillis() - lastEditAt > OWN_EDIT_WINDOW_MS)) {
+            typing.forgetHistory()
+        }
         if (word.isNotEmpty()) {
             // Updates arrive late, so judge by the field as it is now: did the cursor leave the word?
             val moved = newSelStart != newSelEnd ||
@@ -308,6 +315,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     }
 
     private fun afterEdit() {
+        lastEditAt = SystemClock.uptimeMillis()
         updateShift()
         refreshSuggestions()
         lexiconRepository.scheduleSave()
@@ -730,6 +738,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         const val TAG = "WisperlowKeyboard"
         const val CONTEXT_CHARS = 64
         const val DOUBLE_TAP_MS = 350L
+        const val OWN_EDIT_WINDOW_MS = 300L
         const val CLIP_FRESH_MS = 3 * 60_000L
         const val MAX_CLIP = 2_000
         const val MAX_RECENT_EMOJI = 32

@@ -49,7 +49,7 @@ class LexiconRepository @Inject constructor(
                 Log.e(TAG, "Word list unavailable", t)
                 Lexicon(emptyList())
             }
-            runCatching { readLearned()?.let(lexicon::importLearned) }
+            runCatching { LearnedFile.read(file)?.let(lexicon::importLearned) }
                 .onFailure { Log.w(TAG, "Learned words unreadable; starting fresh", it) }
             Log.i(TAG, "Loaded ${lexicon.size} words in ${(System.nanoTime() - started) / 1_000_000} ms")
             _lexicon.value = lexicon
@@ -62,11 +62,23 @@ class LexiconRepository @Inject constructor(
         saveJob?.cancel()
         saveJob = scope.launch {
             delay(SAVE_DELAY_MS)
-            runCatching { write(lexicon.exportLearned()) }.onFailure { Log.w(TAG, "Saving learned words failed", it) }
+            runCatching { LearnedFile.write(file, lexicon.exportLearned()) }.onFailure { Log.w(TAG, "Saving learned words failed", it) }
         }
     }
 
-    private fun readLearned(): Lexicon.LearnedData? {
+    private companion object {
+        const val TAG = "LexiconRepository"
+        const val DICTIONARY = "dict/en.txt"
+        const val MODERN = "dict/en_modern.txt"
+        const val SAVE_DELAY_MS = 3_000L
+    }
+}
+
+/** The learned-words file: one tab-separated line per word (w), word pair (p) or taught fix (f). */
+internal object LearnedFile {
+    private const val MAX_SAVED_PAIRS = 30_000
+
+    fun read(file: File): Lexicon.LearnedData? {
         if (!file.isFile) return null
         val words = ArrayList<Pair<String, Int>>()
         val pairs = ArrayList<Triple<String, String, Int>>()
@@ -82,8 +94,8 @@ class LexiconRepository @Inject constructor(
         return Lexicon.LearnedData(words, pairs, fixes)
     }
 
-    private fun write(data: Lexicon.LearnedData) {
-        val target = file
+    /** Writes to a temporary file first, so a crash mid-save never loses what was learned. */
+    fun write(target: File, data: Lexicon.LearnedData) {
         target.parentFile?.mkdirs()
         val temp = File(target.parentFile, "${target.name}.tmp")
         temp.bufferedWriter().use { out ->
@@ -93,13 +105,5 @@ class LexiconRepository @Inject constructor(
             data.pairs.sortedByDescending { it.third }.take(MAX_SAVED_PAIRS).forEach { (a, b, c) -> out.write("p\t$a\t$b\t$c\n") }
         }
         if (!temp.renameTo(target)) temp.delete()
-    }
-
-    private companion object {
-        const val TAG = "LexiconRepository"
-        const val DICTIONARY = "dict/en.txt"
-        const val MODERN = "dict/en_modern.txt"
-        const val SAVE_DELAY_MS = 3_000L
-        const val MAX_SAVED_PAIRS = 30_000
     }
 }

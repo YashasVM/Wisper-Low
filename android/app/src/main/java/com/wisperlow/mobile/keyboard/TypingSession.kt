@@ -68,6 +68,14 @@ class TypingSession(
     fun reset() {
         if (word.isNotEmpty()) field.finishComposing()
         clearWord()
+        forgetHistory()
+    }
+
+    /**
+     * Forgets what was just typed and corrected, e.g. when the cursor moved elsewhere,
+     * so undo and fix learning never act on text the user did not just write.
+     */
+    fun forgetHistory() {
         undo = null
         last = null
         rewriting = null
@@ -150,12 +158,14 @@ class TypingSession(
     /** Deletes the word before the cursor (held backspace). */
     fun deleteWord() {
         undo = null
+        // Wiping the word gives up on rewriting it.
+        rewriting = null
         if (word.isNotEmpty()) {
             clearWord()
             field.setComposing("")
             return
         }
-        rewriting = null
+        last = null
         val before = field.before(MAX_WORD * 2)
         if (before.isEmpty()) {
             field.backspaceKey()
@@ -196,6 +206,8 @@ class TypingSession(
                 learn(suggestion, previous)
             } else {
                 val previous = previousWord()
+                rewriting = null
+                last = null
                 val before = field.before(1)
                 val lead = if (before.isNotEmpty() && !before[0].isWhitespace()) " " else ""
                 field.commit("$lead$suggestion ")
@@ -211,6 +223,9 @@ class TypingSession(
             endWord(autoCorrect = false, trailing = "")
             field.commit(text)
         }
+        // What follows came from elsewhere; it has no typing history to learn from.
+        last = null
+        rewriting = null
     }
 
     /** Ends the current word as typed, e.g. before Enter or dictation. */

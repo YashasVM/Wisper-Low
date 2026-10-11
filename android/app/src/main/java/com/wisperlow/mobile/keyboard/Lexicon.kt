@@ -258,6 +258,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
             userWords.remove(k)
             fixes.remove(k)
             fixes.values.removeAll { key(it.surface) == k }
+            bigrams.remove(k)
             bigrams.values.forEach { it.remove(k) }
         }
     }

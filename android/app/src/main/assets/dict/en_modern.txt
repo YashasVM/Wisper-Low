@@ -1,5 +1,5 @@
 # Words and spellings the subtitle list misses: texting slang, apps, and developer terms.
-# Each replaces any spelling of itself in en.txt, so "api" becomes "API". Counts are on en.txt's scale; words of three letters or fewer stay below "common" so they are kept but never picked as fixes for other short typos.
+# Each replaces any spelling of itself in en.txt, so "api" becomes "API"; brands that are also everyday words ("python", "discord") keep a lowercase line too. Counts are on en.txt's scale; words of three letters or fewer stay below "common" so they are kept but never picked as fixes for other short typos.
 lowkey	60000
 highkey	60000
 lmao	60000
@@ -127,9 +127,11 @@ Snapchat	25000
 WhatsApp	25000
 Spotify	25000
 Discord	25000
+discord	25000
 Netflix	25000
 Reddit	25000
 Twitch	25000
+twitch	25000
 iPhone	25000
 iPad	25000
 iPads	25000
@@ -140,7 +142,9 @@ PlayStation	25000
 Xbox	25000
 Venmo	25000
 Uber	25000
+uber	25000
 Google	25000
+google	25000
 Gmail	25000
 ChatGPT	25000
 prompt	25000
@@ -361,10 +365,14 @@ JavaScript	25000
 Kotlin	25000
 Golang	25000
 Python	25000
+python	25000
 Vite	25000
+vite	25000
 Webpack	25000
 Tailwind	25000
+tailwind	25000
 Docker	25000
+docker	25000
 Postgres	25000
 PostgreSQL	25000
 MySQL	25000
@@ -379,14 +387,18 @@ Cloudflare	25000
 AWS	9000
 GCP	9000
 Azure	25000
+azure	25000
 Neovim	25000
 VSCode	25000
 Xcode	25000
 Gradle	25000
 Tauri	25000
 Svelte	25000
+svelte	25000
 Deno	25000
+deno	25000
 Prisma	25000
+prisma	25000
 Zod	9000
 Zustand	25000
 Nginx	25000
@@ -396,6 +408,7 @@ Anthropic	25000
 OpenAI	25000
 Claude	25000
 Gemini	25000
+gemini	25000
 Ollama	25000
 HuggingFace	25000
 npm	9000

@@ -211,4 +211,42 @@ class TypingSessionTest {
         session.space()
         assertEquals("hello hello hell ", field.toString())
     }
+
+    @Test
+    fun `pasted text has no typing history to learn from`() {
+        typeWord("teh")
+        session.space()
+        session.insert("the ")
+        now += 2_000
+        session.backspace()
+        typeWord("n")
+        session.space()
+        assertEquals("the then ", field.toString())
+        assertEquals("the", lexicon.suggest("teh").autoCorrect)
+    }
+
+    @Test
+    fun `an abandoned rewrite teaches nothing`() {
+        typeWord("wsp")
+        session.space()
+        now += 2_000
+        session.backspace()
+        session.deleteWord()
+        session.insert("hello ")
+        typeWord("wassup")
+        session.space()
+        typeWord("wsp")
+        session.space()
+        assertEquals("hello wassup wsp ", field.toString())
+    }
+
+    @Test
+    fun `moving away forgets the undo`() {
+        typeWord("teh")
+        session.space()
+        session.forgetHistory()
+        assertEquals(null, session.revertible)
+        session.pick("teh")
+        assertEquals("the teh ", field.toString())
+    }
 }
