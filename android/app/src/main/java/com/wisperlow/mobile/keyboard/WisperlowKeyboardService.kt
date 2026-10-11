@@ -13,7 +13,9 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
@@ -26,6 +28,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.wisperlow.mobile.MainActivity
+import com.wisperlow.mobile.R
 import com.wisperlow.mobile.dictation.DictationEngine
 import com.wisperlow.mobile.dictation.DictationState
 import com.wisperlow.mobile.history.TranscriptRepository
@@ -259,8 +262,9 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             lastDictation = null
         }
 
-        override fun onText(text: String) {
-            typing.type(text)
+        override fun onText(text: String, at: Offset?) {
+            val touch = if (at != null && ui.value.page == Page.LETTERS) text.singleOrNull()?.let { Qwerty.touch(it, at.x, at.y) } else null
+            typing.type(text, touch)
             afterEdit()
         }
 
@@ -357,13 +361,17 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         val lexicon = lexiconRepository.lexicon.value ?: return
         val word = typing.composing
         val previous = typing.previousWord()
+        val touches = typing.touches
+        val corrects = typing.autoCorrectsHere()
+        val revert = typing.revertible
         suggestJob?.cancel()
         suggestJob = scope.launch {
             val result = withContext(Dispatchers.Default) {
-                if (word.isNotEmpty()) {
-                    lexicon.suggest(word, previous).let { if (options.autoCorrect) it else it.copy(autoCorrect = null) }
-                } else {
-                    Suggestions(lexicon.predict(previous))
+                when {
+                    word.isNotEmpty() -> lexicon.suggest(word, previous, touches = touches).let { if (corrects) it else it.copy(autoCorrect = null) }
+                    // Right after an autocorrection, offer what was typed so one tap puts it back.
+                    revert != null -> Suggestions(listOf(revert) + lexicon.predict(previous, max = 2), revert = revert)
+                    else -> Suggestions(lexicon.predict(previous))
                 }
             }
             ui.update { it.copy(suggestions = result, emojiHints = Emoji.forWord(word.ifEmpty { previous.orEmpty() })) }
@@ -556,6 +564,17 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         }
     }
 
+    /** Long-pressing a suggestion the keyboard learned from the user removes just that word. */
+    private fun forgetSuggestion(word: String) {
+        val lexicon = lexiconRepository.lexicon.value ?: return
+        if (!lexicon.isLearned(word)) return
+        inputView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        lexicon.forget(word)
+        lexiconRepository.scheduleSave()
+        Toast.makeText(this, getString(R.string.keyboard_forgot_word, word), Toast.LENGTH_SHORT).show()
+        refreshSuggestions()
+    }
+
     /** Takes back the last dictation if it is still right before the cursor. */
     private fun undoDictation() {
         val last = lastDictation
@@ -572,6 +591,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             typing.pick(word)
             afterEdit()
         },
+        onForgetSuggestion = ::forgetSuggestion,
         onEmoji = ::pickEmoji,
         onPaste = {
             val clip = ui.value.clip

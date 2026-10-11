@@ -83,7 +83,11 @@ enum class EnterAction { NEWLINE, GO, SEARCH, SEND, NEXT, PREVIOUS, DONE }
 /** What the key area reports; the keyboard service turns these into edits. */
 interface KeyListener {
     fun onDown(key: Key)
-    fun onText(text: String)
+    /**
+     * Text typed by a key. [at] is where a tapped key was pressed, relative to its centre
+     * as a fraction of its width and height; null when the key was not simply tapped.
+     */
+    fun onText(text: String, at: Offset?)
     fun onKey(key: Key)
     fun onBackspace(repeats: Int)
     fun onCursor(steps: Int)
@@ -146,12 +150,16 @@ fun KeyArea(
             t.job?.cancel()
             when (t.mode) {
                 Mode.TAP -> when (t.key.key.kind) {
-                    KeyKind.CHAR -> events.onText(t.key.key.text.let { if (upperNow) it.uppercase() else it })
+                    KeyKind.CHAR -> {
+                        val r = t.key.rect
+                        val at = Offset((t.start.x - r.center.x) / r.width, (t.start.y - r.center.y) / r.height)
+                        events.onText(t.key.key.text.let { if (upperNow) it.uppercase() else it }, at)
+                    }
                     KeyKind.SPACE, KeyKind.ENTER, KeyKind.PAGE, KeyKind.EMOJI -> events.onKey(t.key.key)
                     else -> Unit
                 }
-                Mode.PRIMARY -> t.key.key.longPress?.let(events::onText)
-                Mode.ALTERNATES -> alternates?.let { a -> a.options.getOrNull(a.selected)?.let(events::onText) }
+                Mode.PRIMARY -> t.key.key.longPress?.let { events.onText(it, null) }
+                Mode.ALTERNATES -> alternates?.let { a -> a.options.getOrNull(a.selected)?.let { events.onText(it, null) } }
                 else -> Unit
             }
             if (t.mode == Mode.ALTERNATES) alternates = null

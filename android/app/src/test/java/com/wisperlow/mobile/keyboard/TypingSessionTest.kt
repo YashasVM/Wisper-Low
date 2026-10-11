@@ -147,4 +147,52 @@ class TypingSessionTest {
         session.space()
         assertEquals(null, session.previousWord())
     }
+
+    @Test
+    fun `rewriting a word teaches the fix`() {
+        typeWord("wsp")
+        session.space()
+        now += 2_000
+        repeat(4) { session.backspace() }
+        assertEquals("", field.toString())
+        typeWord("wassup")
+        session.space()
+        typeWord("wsp")
+        session.space()
+        assertEquals("wassup wassup ", field.toString())
+    }
+
+    @Test
+    fun `the typed word in the strip undoes the correction`() {
+        typeWord("teh")
+        session.space()
+        assertEquals("teh", session.revertible)
+        session.pick("teh")
+        assertEquals("teh ", field.toString())
+        assertEquals(null, session.revertible)
+        typeWord("teh")
+        session.space()
+        assertEquals("teh teh ", field.toString())
+    }
+
+    @Test
+    fun `no autocorrect inside handles, tags and paths`() {
+        session.type("@")
+        typeWord("teh")
+        session.space()
+        session.type("#")
+        typeWord("teh")
+        session.space()
+        assertEquals("@teh #teh ", field.toString())
+    }
+
+    @Test
+    fun `remembers where each letter was pressed`() {
+        val t = Qwerty.touch('t', 0.1f, 0f)
+        session.type("t", t)
+        session.type("h")
+        assertEquals(listOf(t, null), session.touches)
+        session.backspace()
+        assertEquals(listOf(t), session.touches)
+    }
 }

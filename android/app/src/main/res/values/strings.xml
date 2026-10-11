@@ -210,6 +210,8 @@
     <string name="keyboard_tap_done">Done</string>
     <string name="keyboard_cancel">Cancel</string>
     <string name="keyboard_suggestion">Suggestion: %1$s</string>
+    <string name="keyboard_forget_word_action">Forget this word</string>
+    <string name="keyboard_forgot_word">Forgot “%1$s”</string>
     <string name="keyboard_tools">Tools</string>
     <string name="keyboard_tool_clipboard">Clipboard</string>
     <string name="keyboard_tool_emoji">Emoji</string>
@@ -244,9 +246,6 @@
     <string name="settings_typing_height">Keyboard height</string>
     <string name="settings_live_preview">Live preview while speaking</string>
     <string name="settings_live_preview_body">Show words as you say them. Uses a little more battery.</string>
-    <string name="settings_forget_words">Forget learned words</string>
-    <string name="settings_forget_words_body">Clears the words and phrases the keyboard learned from your typing.</string>
-    <string name="settings_forget_words_done">Learned words cleared</string>
     <string name="keyboard_step_title">Turn on the Wisperlow keyboard</string>
     <string name="keyboard_step_body">Wisperlow types through Android’s keyboard system, so it needs no special access to your screen.</string>
     <string name="keyboard_step_1">Tap <b>Open settings</b> below.</string>

@@ -18,7 +18,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -128,6 +130,8 @@ data class KeyboardUi(
 class KeyboardActions(
     val keys: KeyListener,
     val onSuggestion: (String) -> Unit,
+    /** Long press on a suggestion: forget it if the keyboard learned it from the user. */
+    val onForgetSuggestion: (String) -> Unit,
     val onEmoji: (String) -> Unit,
     val onPaste: () -> Unit,
     val onDismissClip: () -> Unit,
@@ -392,6 +396,7 @@ private fun ResizeOverlay() {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Suggestions(
     words: List<String>,
@@ -411,7 +416,12 @@ private fun Suggestions(
                     .weight(1f)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(role = Role.Button, onClickLabel = label) { actions.onSuggestion(word) },
+                    .combinedClickable(
+                        role = Role.Button,
+                        onClickLabel = label,
+                        onLongClickLabel = stringResource(R.string.keyboard_forget_word_action),
+                        onLongClick = { actions.onForgetSuggestion(word) },
+                    ) { actions.onSuggestion(word) },
                 contentAlignment = Alignment.Center,
             ) {
                 AnimatedContent(

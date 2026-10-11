@@ -7,7 +7,6 @@ import com.wisperlow.mobile.dictation.DictationError
 import com.wisperlow.mobile.dictation.DictationState
 import com.wisperlow.mobile.history.TranscriptEntry
 import com.wisperlow.mobile.history.TranscriptRepository
-import com.wisperlow.mobile.keyboard.LexiconRepository
 import com.wisperlow.mobile.settings.AutoStop
 import com.wisperlow.mobile.settings.KeyboardPrefs
 import com.wisperlow.mobile.settings.SettingsRepository
@@ -65,7 +64,6 @@ class MainViewModel @Inject constructor(
     private val transcriptRepository: TranscriptRepository,
     private val modelDownloader: ModelDownloader,
     private val engine: DictationEngine,
-    private val lexiconRepository: LexiconRepository,
 ) : ViewModel() {
 
     private val access = MutableStateFlow(SystemAccess())
@@ -159,8 +157,6 @@ class MainViewModel @Inject constructor(
     fun updateKeyboard(change: (KeyboardPrefs) -> KeyboardPrefs) = viewModelScope.launch {
         settingsRepository.setKeyboard(change(settingsRepository.current.value.keyboard))
     }
-
-    fun forgetLearnedWords() = lexiconRepository.forgetLearned()
 
     fun completeOnboarding() = viewModelScope.launch {
         settingsRepository.setOnboardingCompleted(true)

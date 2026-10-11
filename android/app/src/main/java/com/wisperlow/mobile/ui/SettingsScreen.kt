@@ -1,6 +1,5 @@
 package com.wisperlow.mobile.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -114,13 +112,6 @@ fun SettingsScreen(
                     onValueChange = { v -> viewModel.updateKeyboard { it.copy(heightScale = v) } },
                     valueRange = KeyboardPrefs.MIN_HEIGHT_SCALE..KeyboardPrefs.MAX_HEIGHT_SCALE,
                 )
-                HorizontalDivider()
-                val context = LocalContext.current
-                val cleared = stringResource(R.string.settings_forget_words_done)
-                LinkRow(stringResource(R.string.settings_forget_words), stringResource(R.string.settings_forget_words_body)) {
-                    viewModel.forgetLearnedWords()
-                    Toast.makeText(context, cleared, Toast.LENGTH_SHORT).show()
-                }
             }
         }
 

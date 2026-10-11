@@ -27,7 +27,8 @@ data class TypingOptions(
 /**
  * Turns key presses into edits the way a phone keyboard does: the word being typed
  * stays composing so it can be corrected; space and punctuation commit it, fixing
- * typos; backspace right after a fix puts back what was typed.
+ * typos; backspace right after a fix puts back what was typed. Going back into a
+ * word and rewriting it teaches the lexicon that fix.
  */
 class TypingSession(
     private val field: EditorField,
@@ -37,28 +38,49 @@ class TypingSession(
     var options = TypingOptions()
 
     private val word = StringBuilder()
+    /** Where each character of [word] was pressed, if known. */
+    private val presses = ArrayList<Touch?>()
     private var undo: Undo? = null
     private var lastSpaceAt = 0L
 
-    private class Undo(val typed: String, val replacement: String)
+    /** The last word committed: what was typed and what went into the field. */
+    private var last: Committed? = null
+
+    /** What was first typed for the word now being rewritten, after going back into it. */
+    private var rewriting: String? = null
+
+    private class Undo(val typed: String, val corrected: String, val trailing: String) {
+        val replacement get() = corrected + trailing
+    }
+
+    private class Committed(val typed: String, val out: String)
 
     /** The word being typed, still open for correction. */
     val composing: String get() = word.toString()
 
+    /** Touch positions for [composing], one per character. */
+    val touches: List<Touch?> get() = presses.toList()
+
+    /** The word as typed before the autocorrection just made; picking it puts it back. */
+    val revertible: String? get() = undo?.typed?.takeIf { word.isEmpty() }
+
     /** Called when the cursor moved or the field changed without us. */
     fun reset() {
         if (word.isNotEmpty()) field.finishComposing()
-        word.clear()
+        clearWord()
         undo = null
+        last = null
+        rewriting = null
     }
 
     /** Types a key's text: letters build the current word, anything else ends it. */
-    fun type(text: String) {
+    fun type(text: String, touch: Touch? = null) {
         if (text.isEmpty()) return
         val c = text.singleOrNull()
         if (c != null && options.suggestions && isWordChar(c, word.isNotEmpty())) {
             undo = null
             word.append(c)
+            presses.add(touch)
             field.setComposing(word.toString())
             return
         }
@@ -69,7 +91,7 @@ class TypingSession(
                 field.deleteBefore(1)
             }
             field.commit(text)
-            undo = corrected?.let { Undo(it.first, it.second + text) }
+            undo = corrected?.let { Undo(it.first, it.second, text) }
         }
     }
 
@@ -78,7 +100,7 @@ class TypingSession(
         if (word.isNotEmpty()) {
             field.batch {
                 val corrected = endWord(autoCorrect = true, trailing = " ")
-                undo = corrected?.let { Undo(it.first, it.second + " ") }
+                undo = corrected?.let { Undo(it.first, it.second, " ") }
             }
         } else {
             undo = null
@@ -106,14 +128,18 @@ class TypingSession(
             // Undo the autocorrection and keep what the user actually typed from now on.
             field.batch {
                 field.deleteBefore(u.replacement.length)
-                word.append(u.typed)
+                setWord(u.typed)
                 field.setComposing(u.typed)
             }
             lexicon()?.trust(u.typed)
+            // If they go on to change it themselves, that is the fix they wanted.
+            rewriting = u.typed
+            last = null
             return
         }
         if (word.isNotEmpty()) {
             word.setLength(word.length - 1)
+            presses.removeAt(presses.lastIndex)
             field.setComposing(word.toString())
             return
         }
@@ -125,10 +151,11 @@ class TypingSession(
     fun deleteWord() {
         undo = null
         if (word.isNotEmpty()) {
-            word.clear()
+            clearWord()
             field.setComposing("")
             return
         }
+        rewriting = null
         val before = field.before(MAX_WORD * 2)
         if (before.isEmpty()) {
             field.backspaceKey()
@@ -142,17 +169,30 @@ class TypingSession(
         field.deleteBefore((before.length - start).coerceAtLeast(1))
     }
 
-    /** Replaces the current word with a strip suggestion, or adds a predicted word. */
+    /** Replaces the current word with a strip suggestion, puts back an autocorrected word, or adds a predicted word. */
     fun pick(suggestion: String) {
+        val u = undo
         undo = null
+        if (u != null && word.isEmpty() && suggestion == u.typed && field.before(u.replacement.length) == u.replacement) {
+            field.batch {
+                field.deleteBefore(u.replacement.length)
+                field.commit(u.typed + u.trailing)
+            }
+            lexicon()?.trust(u.typed)
+            last = Committed(u.typed, u.typed)
+            return
+        }
         field.batch {
             if (word.isNotEmpty()) {
                 val typed = word.toString()
                 val previous = previousWord()
-                word.clear()
+                clearWord()
                 field.commit("$suggestion ")
                 // Picking exactly what was typed over the correction means "I meant that".
                 if (suggestion == typed) lexicon()?.trust(typed)
+                rewriting?.let { learnFix(it, suggestion) }
+                rewriting = null
+                last = Committed(typed, suggestion)
                 learn(suggestion, previous)
             } else {
                 val previous = previousWord()
@@ -194,12 +234,49 @@ class TypingSession(
         }
         val typed = word.toString()
         val previous = previousWord()
-        word.clear()
-        val fix = if (autoCorrect && options.autoCorrect) lexicon()?.suggest(typed, previous)?.autoCorrect else null
+        val touches = presses.toList()
+        val fix = if (autoCorrect && autoCorrectsHere()) lexicon()?.suggest(typed, previous, touches = touches)?.autoCorrect else null
+        clearWord()
         val out = fix ?: typed
         field.commit(out + trailing)
         learn(out, previous)
+        rewriting?.let { learnFix(it, out) }
+        rewriting = null
+        last = Committed(typed, out)
         return if (fix != null && fix != typed) typed to out else null
+    }
+
+    /**
+     * Whether the word being typed may be autocorrected here. Not straight after
+     * characters that make it part of a handle, tag, path or code ("@name", "#tag",
+     * "file.ts", "my_var").
+     */
+    fun autoCorrectsHere(): Boolean {
+        if (!options.autoCorrect) return false
+        val lead = field.before(word.length + 1).dropLast(word.length)
+        return lead.isEmpty() || lead[0] !in CODE_LEAD
+    }
+
+    /** The user went back into [typed] and made it [intended]: worth remembering if it looks like a fix. */
+    private fun learnFix(typed: String, intended: String) {
+        if (!options.learn) return
+        val a = Lexicon.key(typed)
+        val b = Lexicon.key(intended)
+        if (a.length < 2 || a == b || b.isEmpty() || a[0] != b[0]) return
+        // A slip ("teh" to "the") or a shortcut spelled out ("tmrw" to "tomorrow").
+        val related = Lexicon.distance(a, b, FIX_DISTANCE) <= FIX_DISTANCE || isAbbreviation(a, b)
+        if (related) lexicon()?.learnFix(typed, intended)
+    }
+
+    private fun setWord(text: String) {
+        clearWord()
+        word.append(text)
+        repeat(text.length) { presses.add(null) }
+    }
+
+    private fun clearWord() {
+        word.clear()
+        presses.clear()
     }
 
     /** After backspacing into a word, make it editable again so its suggestions come back. */
@@ -212,9 +289,12 @@ class TypingSession(
         while (start > 0 && isWordChar(before[start - 1], true)) start--
         val tail = before.substring(start)
         if (tail.isEmpty() || tail.length > MAX_WORD || tail.none { it.isLetter() }) return
+        val l = last
+        rewriting = if (l != null && l.out == tail) l.typed else null
+        last = null
         field.batch {
             field.deleteBefore(tail.length)
-            word.append(tail)
+            setWord(tail)
             field.setComposing(tail)
         }
     }
@@ -227,9 +307,19 @@ class TypingSession(
         private const val DOUBLE_SPACE_MS = 450L
         private const val MAX_WORD = 32
         private const val PREVIOUS_CONTEXT = 48
+        private const val FIX_DISTANCE = 2.5f
+        private const val CODE_LEAD = "@#/\\_.:~\$`<>=|"
         private const val CORRECTING_PUNCTUATION = ".,!?;:)\""
         private val HUGGING_PUNCTUATION = setOf(".", ",", "!", "?", ";", ":")
         private val LAST_WORD = Regex("([\\p{L}][\\p{L}'’]*)\\s*$")
+
+        /** "tmrw" in "tomorrow": every letter of [short], in order, starting the same way. */
+        fun isAbbreviation(short: String, long: String): Boolean {
+            if (short.length >= long.length) return false
+            var i = 0
+            for (c in long) if (i < short.length && c == short[i]) i++
+            return i == short.length
+        }
 
         fun isWordChar(c: Char, inWord: Boolean): Boolean =
             c.isLetterOrDigit() || (inWord && (c == '\'' || c == '’'))
