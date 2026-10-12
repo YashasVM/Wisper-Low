@@ -8,7 +8,9 @@ import org.junit.Test
 
 class LexiconTest {
     private val lexicon by lazy {
-        Lexicon(Lexicon.parse(File("src/main/assets/dict/en.txt").readLines().asSequence()))
+        val base = Lexicon.parse(File("src/main/assets/dict/en.txt").readLines().asSequence())
+        val modern = Lexicon.parse(File("src/main/assets/dict/en_modern.txt").readLines().asSequence())
+        Lexicon(Lexicon.merge(base, modern))
     }
 
     private fun fix(typed: String, previous: String? = null) = lexicon.suggest(typed, previous).autoCorrect
@@ -107,5 +109,135 @@ class LexiconTest {
     fun `completions take the middle slot while a word is unfinished`() {
         val words = lexicon.suggest("hap").words
         assertTrue(words.toString(), words[1] == "happy" || words[1] == "happen" || words[1] == "happened")
+    }
+
+    @Test
+    fun `leaves slang alone`() {
+        for (w in listOf("lowkey", "ngl", "lmao", "idc", "wyd", "rizz", "sus", "bruh", "tryna", "delulu", "fr", "istg", "bestie", "ok")) {
+            assertNull(w, fix(w))
+        }
+    }
+
+    @Test
+    fun `knows developer words and their spelling`() {
+        assertEquals("GitHub", fix("github"))
+        assertEquals("API", fix("api"))
+        assertEquals("TypeScript", fix("typescript"))
+        assertEquals("GitHub", fix("Github"))
+        assertEquals("refactor", fix("refacotr"))
+        assertNull(fix("repo"))
+        assertNull(fix("localhost"))
+        assertNull(fix("cursor"))
+    }
+
+    @Test
+    fun `stretched words and laughter are not typos`() {
+        for (w in listOf("sooo", "yesss", "noooo", "hahaha", "lmaooo", "omggg", "hiii")) assertNull(w, fix(w))
+        assertTrue(lexicon.suggest("sooo").words.contains("so"))
+    }
+
+    @Test
+    fun `capitals inside a word are deliberate`() {
+        assertNull(fix("useEffect"))
+        assertNull(fix("myVar"))
+    }
+
+    @Test
+    fun `where the key was touched breaks ties`() {
+        val l = Lexicon(listOf("ten" to 1_000_000L, "tan" to 1_000_000L))
+        assertNull(l.suggest("tsn").autoCorrect)
+        // "s" pressed on its upper-right edge, towards "e".
+        val nearE = listOf(null, Qwerty.touch('s', 0.35f, -0.45f), null)
+        assertEquals("ten", l.suggest("tsn", touches = nearE).autoCorrect)
+        // "s" pressed on its left edge, towards "a".
+        val nearA = listOf(null, Qwerty.touch('s', -0.45f, 0f), null)
+        assertEquals("tan", l.suggest("tsn", touches = nearA).autoCorrect)
+    }
+
+    @Test
+    fun `a touch far from a key makes it an unlikely slip`() {
+        val centre = Qwerty.touch('s', 0f, 0f)!!
+        val edge = Qwerty.touch('s', -0.45f, 0f)!!
+        assertTrue(Qwerty.slipCost(edge, 'a') < Qwerty.slipCost(centre, 'a'))
+        assertEquals(1f, Qwerty.slipCost(centre, 'p'))
+    }
+
+    @Test
+    fun `fixes the user taught are applied`() {
+        val l = Lexicon(listOf("the" to 1000L, "was" to 5000L))
+        l.learnFix("wsp", "wassup")
+        assertEquals("wassup", l.suggest("wsp").autoCorrect)
+        assertEquals("Wassup", l.suggest("Wsp").autoCorrect)
+        assertTrue(l.suggest("wass").words.contains("wassup"))
+    }
+
+    @Test
+    fun `a fix that turns one real word into another needs teaching twice`() {
+        val l = Lexicon(listOf("form" to 5000L, "from" to 50000L))
+        l.learnFix("form", "from")
+        assertNull(l.suggest("form").autoCorrect)
+        l.learnFix("form", "from")
+        assertEquals("from", l.suggest("form").autoCorrect)
+    }
+
+    @Test
+    fun `undoing a taught fix drops it`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learnFix("wsp", "wassup")
+        l.trust("wsp")
+        assertNull(l.suggest("wsp").autoCorrect)
+    }
+
+    @Test
+    fun `one learned word can be forgotten`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learn("skrrt", null)
+        l.learn("skrrt", null)
+        assertTrue(l.isLearned("skrrt"))
+        assertTrue(l.suggest("skr").words.contains("skrrt"))
+        l.forget("skrrt")
+        assertTrue(!l.isLearned("skrrt"))
+        assertTrue(!l.suggest("skr").words.contains("skrrt"))
+        assertTrue(!l.isLearned("the"))
+    }
+
+    @Test
+    fun `taught fixes survive saving`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learnFix("wsp", "wassup")
+        val copy = Lexicon(listOf("the" to 1000L))
+        copy.importLearned(l.exportLearned())
+        assertEquals("wassup", copy.suggest("wsp").autoCorrect)
+    }
+
+    @Test
+    fun `brands that are everyday words keep the typed spelling`() {
+        for (w in listOf("python", "discord", "twitch", "docker", "google")) assertNull(w, fix(w))
+        assertTrue(lexicon.suggest("python").words.contains("Python"))
+    }
+
+    @Test
+    fun `forgetting a word drops its next-word predictions too`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learn("private", null)
+        l.learn("secret", "private")
+        l.forget("private")
+        assertTrue(l.predict("private").isEmpty())
+        assertTrue(l.exportLearned().pairs.isEmpty())
+    }
+
+    @Test
+    fun `learned words, pairs and fixes survive the file`() {
+        val l = Lexicon(listOf("the" to 1000L))
+        l.learn("skrrt", null)
+        l.learn("skrrt", "the")
+        l.learnFix("wsp", "wassup")
+        val file = File.createTempFile("learned", ".tsv").apply { deleteOnExit() }
+        LearnedFile.write(file, l.exportLearned())
+        val copy = Lexicon(listOf("the" to 1000L))
+        copy.importLearned(LearnedFile.read(file)!!)
+        assertEquals("wassup", copy.suggest("wsp").autoCorrect)
+        assertEquals(listOf("skrrt"), copy.predict("the"))
+        assertTrue(copy.isLearned("skrrt"))
     }
 }

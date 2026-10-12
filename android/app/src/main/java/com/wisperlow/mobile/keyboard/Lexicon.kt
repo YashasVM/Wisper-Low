@@ -8,6 +8,8 @@ data class Suggestions(
     val words: List<String> = emptyList(),
     /** The word that space or punctuation will replace the typed word with, if any. */
     val autoCorrect: String? = null,
+    /** What the user typed before the last autocorrection; tapping it puts it back. */
+    val revert: String? = null,
 ) {
     companion object {
         val None = Suggestions()
@@ -17,7 +19,9 @@ data class Suggestions(
 /**
  * English word frequencies plus what this user has typed. Finds completions and
  * spelling fixes, weighing typos between neighbouring keys as cheaper than others,
- * and learns words and word pairs so its suggestions become personal.
+ * and learns words and word pairs so its suggestions become personal. Where each key
+ * was touched, when known, decides how likely a slip onto a neighbouring key is.
+ * Fixes the user makes by hand are remembered and applied next time.
  *
  * Thread-safe: queries may run on a worker while the keyboard learns on the main thread.
  */
@@ -39,7 +43,12 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     private val userWords = HashMap<String, UserWord>()
     private val bigrams = HashMap<String, HashMap<String, Int>>()
 
+    /** Typed key to the word the user rewrote it as, e.g. "wsp" to "wassup". */
+    private val fixes = HashMap<String, UserFix>()
+
     private class UserWord(var surface: String, var count: Int)
+
+    private class UserFix(var surface: String, var count: Int)
 
     init {
         val distinct = LinkedHashMap<String, Long>()
@@ -69,16 +78,26 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         return synchronized(userLock) { userWords[k]?.let { it.count >= USER_TRUSTED && it.surface.equals(word, true) } == true }
     }
 
-    fun suggest(typed: String, previous: String? = null, max: Int = 3): Suggestions {
+    /**
+     * Suggestions for [typed]. [touches], when given, holds where each typed character
+     * was pressed (null for characters typed without a known position).
+     */
+    fun suggest(typed: String, previous: String? = null, max: Int = 3, touches: List<Touch?>? = null): Suggestions {
         val k = key(typed)
         if (k.isEmpty() || typed.any { !it.isLetter() && !isApostrophe(it) }) return Suggestions(listOf(typed).filter { it.isNotEmpty() })
+        if (isExpressive(k, known = byKey.containsKey(k))) return expressive(typed, k, max)
         val prev = previous?.let(::key)?.takeIf { it.isNotEmpty() }
+        // Touch positions line up with the key, which has no apostrophes.
+        val kt = touches?.takeIf { it.size == typed.length }?.filterIndexed { i, _ -> !isApostrophe(typed[i]) }
         val candidates = HashMap<String, Candidate>()
         fun offer(word: String, score: Float, kind: Kind, distance: Float = 0f) {
             val existing = candidates[word.lowercase()]
             if (existing == null || existing.score < score) candidates[word.lowercase()] = Candidate(word, score, kind, distance)
         }
 
+        // A fix the user made by hand before beats anything the word list suggests.
+        val fix = synchronized(userLock) { fixes[k]?.let { it.surface to it.count } }
+        if (fix != null) offer(fix.first, USER_FIX_SCORE + ln(fix.second.toFloat() + 1f), Kind.FIX)
         // Same letters, maybe different apostrophes or capitals: "dont", "monday", "i".
         byKey[k]?.forEach { offer(words[it], scores[it] + context(prev, keys[it]), Kind.EXACT) }
         // Completions of what was typed so far.
@@ -108,7 +127,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
                     val c = w[0]
                     if (c != first && c != second && !Qwerty.adjacent(c, first)) continue
                     if (w == k) continue
-                    val d = distance(k, keys[i], maxDistance)
+                    val d = distance(k, keys[i], maxDistance, kt)
                     if (d <= maxDistance) offer(words[i], scores[i] + context(prev, keys[i]) - typoPenalty(d), Kind.CORRECTION, d)
                 }
             }
@@ -121,7 +140,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
                     uk == k -> offer(user.surface, bonus, Kind.EXACT)
                     uk.startsWith(k) -> offer(user.surface, bonus - COMPLETION_PENALTY, Kind.COMPLETION)
                     maxDistance > 0f && abs(uk.length - k.length) <= maxDistance -> {
-                        val d = distance(k, uk, maxDistance)
+                        val d = distance(k, uk, maxDistance, kt)
                         if (d <= maxDistance) offer(user.surface, bonus - typoPenalty(d), Kind.CORRECTION, d)
                     }
                 }
@@ -129,7 +148,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         }
 
         val ranked = candidates.values.sortedByDescending { it.score }
-        val auto = autoCorrection(typed, k, ranked)
+        val auto = if (isMixedCase(typed)) null else autoCorrection(typed, k, ranked)
         val others = ranked.map { matchCase(typed, it.word) }.filter { it != typed && it != auto }.distinct()
         // Slots read left to right; the middle one is what space will type, as on most keyboards.
         val slots = when {
@@ -140,6 +159,17 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         return Suggestions(slots.take(max), auto)
     }
 
+    /** "sooo", "yesss", "hahaha": stretched for feeling, never a typo to fix. */
+    private fun expressive(typed: String, k: String, max: Int): Suggestions {
+        val collapsed = collapseRuns(k)
+        // "sooo" could be "soo" or "so", "cooool" "cool" or "col": offer the more common.
+        val plain = listOf(collapsed, collapsed.filterIndexed { i, c -> i == 0 || c != collapsed[i - 1] })
+            .mapNotNull { byKey[it]?.first() }
+            .maxByOrNull { scores[it] }
+            ?.let { matchCase(typed, words[it]) }
+        return Suggestions(listOfNotNull(typed, plain).distinct().take(max), null)
+    }
+
     /** "the", "The" and "THE" are all the word "the"; "monday" is not "Monday" and "i" is not "I". */
     private fun isTypedWord(typed: String, k: String): Boolean =
         byKey[k]?.any { sameWord(words[it], typed) } == true
@@ -148,8 +178,12 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         byKey[k]?.any { sameWord(words[it], typed) && scores[it] > COMMON_SCORE } == true
 
     private fun sameWord(surface: String, typed: String): Boolean =
-        surface.equals(typed, ignoreCase = true) &&
-            (surface.none { it.isUpperCase() } || typed.first().isUpperCase() || surface == typed)
+        surface.equals(typed, ignoreCase = true) && when {
+            surface.none { it.isUpperCase() } -> true
+            // "GitHub" and "API" are only themselves when spelled so, or shouted.
+            surface.drop(1).any { it.isUpperCase() } -> surface == typed || typed.none { it.isLowerCase() }
+            else -> typed.first().isUpperCase() || surface == typed
+        }
 
     /** Likely next words after [previous], from what this user has typed before. */
     fun predict(previous: String?, max: Int = 3): List<String> {
@@ -157,6 +191,28 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         val next = synchronized(userLock) { bigrams[prev]?.entries?.sortedByDescending { it.value }?.take(max * 2)?.map { it.key } }
             ?: return emptyList()
         return next.mapNotNull(::surfaceFor).take(max)
+    }
+
+    /**
+     * The user rewrote [typed] as [intended] by hand. Remember it, so next time
+     * [typed] is fixed to [intended] straight away.
+     */
+    fun learnFix(typed: String, intended: String) {
+        val k = key(typed)
+        val ik = key(intended)
+        if (k.isEmpty() || ik.isEmpty() || k == ik) return
+        if (intended.any { !it.isLetter() && !isApostrophe(it) }) return
+        synchronized(userLock) {
+            val fix = fixes[k]
+            if (fix == null || !fix.surface.equals(intended, true)) {
+                fixes[k] = UserFix(intended, 1)
+            } else {
+                fix.surface = intended
+                fix.count++
+            }
+            if (fixes.size > MAX_FIXES) fixes.remove(fixes.keys.first())
+        }
+        trust(intended)
     }
 
     /** Counts a word the user committed, after [previous] if there was one. */
@@ -177,20 +233,33 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         }
     }
 
-    /** The user undid a correction: treat [word] as theirs from now on. */
+    /** The user undid a correction: treat [word] as theirs from now on, and drop any fix they made for it. */
     fun trust(word: String) {
         val k = key(word)
         if (k.isEmpty()) return
         synchronized(userLock) {
+            fixes.remove(k)
             val user = userWords.getOrPut(k) { UserWord(word, 0) }
             user.count = maxOf(user.count, USER_TRUSTED)
         }
     }
 
-    fun forgetLearned() {
+    /** True when [word] is something this keyboard picked up from the user rather than its word list. */
+    fun isLearned(word: String): Boolean {
+        val k = key(word)
+        return synchronized(userLock) { userWords.containsKey(k) || fixes.values.any { key(it.surface) == k } }
+    }
+
+    /** Forgets one learned word: no longer suggested, and no longer a target for fixes. */
+    fun forget(word: String) {
+        val k = key(word)
+        if (k.isEmpty()) return
         synchronized(userLock) {
-            userWords.clear()
-            bigrams.clear()
+            userWords.remove(k)
+            fixes.remove(k)
+            fixes.values.removeAll { key(it.surface) == k }
+            bigrams.remove(k)
+            bigrams.values.forEach { it.remove(k) }
         }
     }
 
@@ -199,6 +268,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         LearnedData(
             words = userWords.values.map { it.surface to it.count },
             pairs = bigrams.flatMap { (prev, next) -> next.map { (n, c) -> Triple(prev, n, c) } },
+            fixes = fixes.map { (typed, fix) -> Triple(typed, fix.surface, fix.count) },
         )
     }
 
@@ -209,6 +279,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
                 if (k.isNotEmpty()) userWords[k] = UserWord(word, count)
             }
             for ((prev, next, count) in data.pairs) bigrams.getOrPut(prev) { HashMap() }[next] = count
+            for ((typed, surface, count) in data.fixes) if (typed.isNotEmpty() && surface.isNotEmpty()) fixes[typed] = UserFix(surface, count)
         }
     }
 
@@ -224,6 +295,12 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     private fun autoCorrection(typed: String, k: String, ranked: List<Candidate>): String? {
         if (typed.length < 2 && !typed.equals("i", ignoreCase = true)) return null
         val typedIsWord = isTypedWord(typed, k)
+        // A fix the user taught: once is enough for a non-word, twice for a real word ("form" to "from").
+        val taught = ranked.firstOrNull { it.kind == Kind.FIX }
+        if (taught != null) {
+            val count = synchronized(userLock) { fixes[k]?.count } ?: 0
+            if (count >= 2 || !typedIsWord) return matchCase(typed, taught.word).takeIf { it != typed }
+        }
         val user = synchronized(userLock) { userWords[k] }
         if (user != null && user.count >= USER_TRUSTED) return null
         val exact = byKey[k]?.firstOrNull()
@@ -282,11 +359,15 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         return best
     }
 
-    private enum class Kind { EXACT, COMPLETION, CORRECTION }
+    private enum class Kind { EXACT, COMPLETION, CORRECTION, FIX }
 
     private class Candidate(val word: String, val score: Float, val kind: Kind, val distance: Float)
 
-    data class LearnedData(val words: List<Pair<String, Int>>, val pairs: List<Triple<String, String, Int>>)
+    data class LearnedData(
+        val words: List<Pair<String, Int>>,
+        val pairs: List<Triple<String, String, Int>>,
+        val fixes: List<Triple<String, String, Int>> = emptyList(),
+    )
 
     companion object {
         private const val COMPLETION_POOL = 8
@@ -308,9 +389,22 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         private const val USER_TRUSTED = 2
         private const val PAIR_BASE = 1.5f
         private const val MAX_BIGRAM_HEADS = 20_000
+        private const val MAX_FIXES = 2_000
+        private const val USER_FIX_SCORE = 30f
 
         /** Real words that look like a missing apostrophe but are often meant as typed. */
         private val AMBIGUOUS = setOf("its", "well", "were", "hell", "shell", "ill", "lets", "shed", "wed", "id", "hed", "whos", "cause")
+
+        /**
+         * The base word list with [extra] words laid over it. An extra word replaces every
+         * base spelling of itself, so "API" displaces "api" and typing "api" gives "API".
+         */
+        fun merge(base: List<Pair<String, Long>>, extra: List<Pair<String, Long>>): List<Pair<String, Long>> {
+            val replaced = extra.mapTo(HashSet()) { key(it.first) }
+            val baseCounts = base.toMap()
+            // Never make a word rarer than the base list already has it.
+            return extra.map { (w, c) -> w to maxOf(c, baseCounts[w] ?: 0L) } + base.filter { key(it.first) !in replaced }
+        }
 
         /** Reads "word<TAB>count" lines; lines starting with # are comments. */
         fun parse(lines: Sequence<String>): List<Pair<String, Long>> = lines
@@ -333,6 +427,26 @@ class Lexicon(entries: List<Pair<String, Long>>) {
             "tmrw", "bday", "xd", "fr", "istg", "ikr", "gm", "gn", "ttyl", "yk", "ig", "w", "l",
         )
 
+        private val LAUGHTER = Regex("(?:ha|ah|he|hi|lo|ja|xd)+h?|l+m+f*a+o+|lo+l+|ha+h*a*")
+
+        /**
+         * A letter held for effect ("sooo", "yesss") or laughter ("hahaha", "lmaooo").
+         * Laughter shapes only count when the word list does not [know][known] the word, so "halo" stays a word.
+         */
+        fun isExpressive(k: String, known: Boolean = false): Boolean {
+            for (i in 2 until k.length) if (k[i] == k[i - 1] && k[i] == k[i - 2]) return true
+            return !known && k.length >= 4 && LAUGHTER.matches(k)
+        }
+
+        /** Squeezes runs of three or more of a letter to two: "sooo" to "soo", "yesss" to "yess". */
+        private fun collapseRuns(k: String): String = buildString {
+            for (c in k) if (length < 2 || c != this[length - 1] || c != this[length - 2]) append(c)
+        }
+
+        /** "iPhone", "GitHub", "camelCase": capitals inside a word are deliberate. */
+        private fun isMixedCase(typed: String): Boolean =
+            typed.drop(1).any { it.isUpperCase() } && typed.any { it.isLowerCase() }
+
         private fun typoPenalty(d: Float): Float =
             if (d <= 1f) TYPO_WEIGHT * d else TYPO_WEIGHT + SECOND_TYPO_WEIGHT * (d - 1f)
 
@@ -347,9 +461,11 @@ class Lexicon(entries: List<Pair<String, Long>>) {
 
         /**
          * Damerau-Levenshtein distance where a slip onto a neighbouring key costs less
-         * than any other substitution. Stops early once [limit] is exceeded.
+         * than any other substitution. With [touches] (one per character of [a]), the cost
+         * follows how close each touch landed to the other key instead. Stops early once
+         * [limit] is exceeded.
          */
-        fun distance(a: String, b: String, limit: Float): Float {
+        fun distance(a: String, b: String, limit: Float, touches: List<Touch?>? = null): Float {
             if (abs(a.length - b.length) > limit) return Float.MAX_VALUE
             val cols = b.length + 1
             var prev2 = FloatArray(cols)
@@ -361,7 +477,13 @@ class Lexicon(entries: List<Pair<String, Long>>) {
                 for (j in 1..b.length) {
                     val ca = a[i - 1]
                     val cb = b[j - 1]
-                    val sub = if (ca == cb) 0f else if (Qwerty.adjacent(ca, cb)) NEAR_KEY_COST else 1f
+                    val touch = touches?.getOrNull(i - 1)
+                    val sub = when {
+                        ca == cb -> 0f
+                        touch != null -> Qwerty.slipCost(touch, cb)
+                        Qwerty.adjacent(ca, cb) -> NEAR_KEY_COST
+                        else -> 1f
+                    }
                     // Dropping or doubling a repeated letter ("helo", "untill") is the most common slip.
                     val drop = if (i > 1 && ca == a[i - 2]) DOUBLE_COST else 1f
                     val add = if (j > 1 && cb == b[j - 2]) DOUBLE_COST else 1f
@@ -382,20 +504,5 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         private const val NEAR_KEY_COST = 0.7f
         private const val SWAP_COST = 0.7f
         private const val DOUBLE_COST = 0.3f
-    }
-}
-
-/** Key positions on a QWERTY board, for judging which typos are likely. */
-internal object Qwerty {
-    private val rows = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
-    private val offsets = floatArrayOf(0f, 0.5f, 1.5f)
-    private val position = HashMap<Char, Pair<Float, Int>>().apply {
-        rows.forEachIndexed { r, row -> row.forEachIndexed { c, ch -> put(ch, (c + offsets[r]) to r) } }
-    }
-
-    fun adjacent(a: Char, b: Char): Boolean {
-        val pa = position[a] ?: return false
-        val pb = position[b] ?: return false
-        return abs(pa.second - pb.second) <= 1 && abs(pa.first - pb.first) <= 1.01f
     }
 }

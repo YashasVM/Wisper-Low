@@ -147,4 +147,106 @@ class TypingSessionTest {
         session.space()
         assertEquals(null, session.previousWord())
     }
+
+    @Test
+    fun `rewriting a word teaches the fix`() {
+        typeWord("wsp")
+        session.space()
+        now += 2_000
+        repeat(4) { session.backspace() }
+        assertEquals("", field.toString())
+        typeWord("wassup")
+        session.space()
+        typeWord("wsp")
+        session.space()
+        assertEquals("wassup wassup ", field.toString())
+    }
+
+    @Test
+    fun `the typed word in the strip undoes the correction`() {
+        typeWord("teh")
+        session.space()
+        assertEquals("teh", session.revertible)
+        session.pick("teh")
+        assertEquals("teh ", field.toString())
+        assertEquals(null, session.revertible)
+        typeWord("teh")
+        session.space()
+        assertEquals("teh teh ", field.toString())
+    }
+
+    @Test
+    fun `no autocorrect inside handles, tags and paths`() {
+        session.type("@")
+        typeWord("teh")
+        session.space()
+        session.type("#")
+        typeWord("teh")
+        session.space()
+        assertEquals("@teh #teh ", field.toString())
+    }
+
+    @Test
+    fun `remembers where each letter was pressed`() {
+        val t = Qwerty.touch('t', 0.1f, 0f)
+        session.type("t", t)
+        session.type("h")
+        assertEquals(listOf(t, null), session.touches)
+        session.backspace()
+        assertEquals(listOf(t), session.touches)
+    }
+
+    @Test
+    fun `adding an ending to a word is not a fix to learn`() {
+        repeat(2) {
+            typeWord("hell")
+            session.space()
+            now += 2_000
+            session.backspace()
+            typeWord("o")
+            session.space()
+            now += 2_000
+        }
+        typeWord("hell")
+        session.space()
+        assertEquals("hello hello hell ", field.toString())
+    }
+
+    @Test
+    fun `pasted text has no typing history to learn from`() {
+        typeWord("teh")
+        session.space()
+        session.insert("the ")
+        now += 2_000
+        session.backspace()
+        typeWord("n")
+        session.space()
+        assertEquals("the then ", field.toString())
+        assertEquals("the", lexicon.suggest("teh").autoCorrect)
+    }
+
+    @Test
+    fun `an abandoned rewrite teaches nothing`() {
+        typeWord("wsp")
+        session.space()
+        now += 2_000
+        session.backspace()
+        session.deleteWord()
+        session.insert("hello ")
+        typeWord("wassup")
+        session.space()
+        typeWord("wsp")
+        session.space()
+        assertEquals("hello wassup wsp ", field.toString())
+    }
+
+    @Test
+    fun `moving away forgets the undo`() {
+        typeWord("teh")
+        session.space()
+        session.forgetHistory()
+        assertEquals(null, session.revertible)
+        session.pick("teh")
+        assertEquals("the teh ", field.toString())
+    }
 }
