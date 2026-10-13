@@ -101,6 +101,28 @@ class TypingSessionTest {
     }
 
     @Test
+    fun `cursor movement resets double space timing`() {
+        now = 1000
+        typeWord("hello")
+        session.space()
+        now += 200
+        session.forgetHistory()
+        session.space()
+        assertEquals("hello  ", field.toString())
+    }
+
+    @Test
+    fun `finish word resets double space timing`() {
+        now = 1000
+        typeWord("hello")
+        session.space()
+        now += 200
+        session.finishWord()
+        session.space()
+        assertEquals("hello  ", field.toString())
+    }
+
+    @Test
     fun `picking a suggestion replaces the word and adds a space`() {
         typeWord("wor")
         session.pick("world")
