@@ -79,6 +79,8 @@ class TypingSession(
         undo = null
         last = null
         rewriting = null
+        // A space in another cursor position must not count as the first of a double-space period.
+        lastSpaceAt = 0L
     }
 
     /** Types a key's text: letters build the current word, anything else ends it. */
@@ -231,6 +233,8 @@ class TypingSession(
     /** Ends the current word as typed, e.g. before Enter or dictation. */
     fun finishWord() {
         undo = null
+        // Cursor navigation, Enter and dictation end the current double-space gesture.
+        lastSpaceAt = 0L
         if (word.isNotEmpty()) endWord(autoCorrect = false, trailing = "")
     }
 
