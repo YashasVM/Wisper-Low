@@ -123,6 +123,28 @@ class TypingSessionTest {
     }
 
     @Test
+    fun `suggestion space is not counted as a double space tap`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.pick("world")
+        now += 200
+        session.space()
+        assertEquals("hello world  ", field.toString())
+    }
+
+    @Test
+    fun `pasted space is not counted as a double space tap`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.insert("world ")
+        now += 200
+        session.space()
+        assertEquals("hello world  ", field.toString())
+    }
+
+    @Test
     fun `picking a suggestion replaces the word and adds a space`() {
         typeWord("wor")
         session.pick("world")
