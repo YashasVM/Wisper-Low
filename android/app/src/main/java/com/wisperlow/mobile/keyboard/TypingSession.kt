@@ -79,6 +79,8 @@ class TypingSession(
         undo = null
         last = null
         rewriting = null
+        // A space in another cursor position must not count as the first of a double-space period.
+        lastSpaceAt = 0L
     }
 
     /** Types a key's text: letters build the current word, anything else ends it. */
@@ -181,6 +183,8 @@ class TypingSession(
 
     /** Replaces the current word with a strip suggestion, puts back an autocorrected word, or adds a predicted word. */
     fun pick(suggestion: String) {
+        // Suggestions insert their own trailing space; only two explicit space taps form a period.
+        lastSpaceAt = 0L
         val u = undo
         undo = null
         if (u != null && word.isEmpty() && suggestion == u.typed && field.before(u.replacement.length) == u.replacement) {
@@ -218,6 +222,8 @@ class TypingSession(
 
     /** Inserts text that is not typed key by key (emoji, clipboard), ending the current word as typed. */
     fun insert(text: String) {
+        // Clipboard text may end in a space, but it is not the first tap of a double-space gesture.
+        lastSpaceAt = 0L
         undo = null
         field.batch {
             endWord(autoCorrect = false, trailing = "")
@@ -231,6 +237,8 @@ class TypingSession(
     /** Ends the current word as typed, e.g. before Enter or dictation. */
     fun finishWord() {
         undo = null
+        // Cursor navigation, Enter and dictation end the current double-space gesture.
+        lastSpaceAt = 0L
         if (word.isNotEmpty()) endWord(autoCorrect = false, trailing = "")
     }
 

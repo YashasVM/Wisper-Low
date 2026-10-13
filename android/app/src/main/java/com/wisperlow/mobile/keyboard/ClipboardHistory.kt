@@ -14,11 +14,11 @@ class ClipboardHistory(entries: List<ClipEntry> = emptyList()) {
         private set
 
     fun add(text: String, now: Long) {
-        val clean = text.trim()
-        if (clean.isEmpty() || clean.length > MAX_LENGTH) return
-        val existing = entries.firstOrNull { it.text == clean }
-        val rest = entries.filter { it.text != clean }
-        entries = listOf(ClipEntry(clean, now, existing?.pinned == true)) + rest
+        // Keep the exact copied text: leading spaces and trailing newlines matter when pasted.
+        if (text.isBlank() || text.length > MAX_LENGTH) return
+        val existing = entries.firstOrNull { it.text == text }
+        val rest = entries.filter { it.text != text }
+        entries = listOf(ClipEntry(text, now, existing?.pinned == true)) + rest
         prune(now)
     }
 
