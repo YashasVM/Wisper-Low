@@ -87,6 +87,22 @@ class RomanizationIndexTest {
     }
 
     @Test
+    fun `completion cutoff reflects distinct natives not raw scores`() {
+        // ab and abc both mean अ, so अ is one candidate with the better (abc) score. The
+        // duplicate offer used to fill the cutoff with अ twice and prune क, keeping the
+        // length-penalised ब instead.
+        val index = RomanizationIndex(
+            sequenceOf(
+                "ab\tअ\t100",
+                "abc\tअ\t100000",
+                "abxxxx\tब\t50",
+                "ad\tक\t20",
+            ),
+        )
+        assertEquals(listOf("अ", "क"), index.suggest("a", 2))
+    }
+
+    @Test
     fun `native output is deduplicated across completions`() {
         // naa completes both naanu and naan, which share the native ನಾನು.
         assertEquals(listOf("ನಾನು"), kannada.suggest("naa"))

@@ -228,8 +228,9 @@ class RomanizationIndex(rows: Sequence<String>) {
 
     /**
      * Completions below [node], best first. A max-heap over [nodeBest] walks the most
-     * promising subtree first and stops once no unvisited node can beat the cutoff, so the
-     * work is bounded by what is needed rather than by the size of the prefix range.
+     * promising subtree first and stops once no unvisited node can beat the cutoff. The
+     * cutoff is the [need]-th best *distinct* native, so a native seen at several keys
+     * (which arrives more than once) cannot inflate it and prune a better distinct rival.
      */
     private fun complete(
         node: Int,
@@ -240,30 +241,25 @@ class RomanizationIndex(rows: Sequence<String>) {
     ) {
         val need = max - out.size
         if (need <= 0) return
-        val chosen = HashMap<String, RomanizationSuggestion>()
+        val top = TopDistinct(need)
         val heap = BestHeap(nodeBest)
-        val floor = ScoreFloor(need)
         for (c in childStart[node] until childEnd[node]) heap.push(childIds[c])
         while (!heap.isEmpty) {
-            if (chosen.size >= need && nodeBest[heap.peek()] < floor.cutoff()) break
-            val top = heap.pop()
-            val extra = nodeDepth[top] - query.length
-            for (k in keyStart[top] until keyEnd[top]) {
+            // Any candidate below the frontier node scores at most its unpenalised best.
+            if (nodeBest[heap.peek()] < top.cutoff()) break
+            val popped = heap.pop()
+            val extra = nodeDepth[popped] - query.length
+            for (k in keyStart[popped] until keyEnd[popped]) {
                 for (i in nativeStart[k] until nativeStart[k + 1]) {
                     val native = nativeSurface[i]
                     if (native in seen) continue
                     val score = nativeScore[i] - COMPLETION_PENALTY * extra
-                    val existing = chosen[native]
-                    if (existing == null || score > existing.score) {
-                        chosen[native] =
-                            RomanizationSuggestion(native, keys[k], RomanizationMatch.COMPLETION, nativeCount[i], score)
-                        floor.offer(score)
-                    }
+                    top.offer(RomanizationSuggestion(native, keys[k], RomanizationMatch.COMPLETION, nativeCount[i], score))
                 }
             }
-            for (c in childStart[top] until childEnd[top]) heap.push(childIds[c])
+            for (c in childStart[popped] until childEnd[popped]) heap.push(childIds[c])
         }
-        for (s in ranked(chosen.values)) {
+        for (s in ranked(top.items)) {
             if (out.size >= max) break
             if (seen.add(s.native)) out += s
         }
@@ -468,40 +464,37 @@ private class BestHeap(private val best: FloatArray) {
     }
 }
 
-/** A min-heap of the top [capacity] scores; its root is the cutoff below which results cannot help. */
-private class ScoreFloor(private val capacity: Int) {
-    private val heap = FloatArray(capacity)
-    private var size = 0
+/**
+ * The best [capacity] distinct natives by score, keyed by native surface. A native seen at
+ * several keys is one entry whose score rises to its best; [cutoff] is that entry set's
+ * minimum, so the search prunes against the [capacity]-th best *distinct* candidate.
+ */
+private class TopDistinct(private val capacity: Int) {
+    private val held = ArrayList<RomanizationSuggestion>(minOf(capacity, 16))
 
-    fun cutoff(): Float = if (size >= capacity) heap[0] else Float.NEGATIVE_INFINITY
+    /** The score below which a new distinct native cannot enter; [Float.NEGATIVE_INFINITY] until full. */
+    fun cutoff(): Float = if (held.size >= capacity) held[minIndex()].score else Float.NEGATIVE_INFINITY
 
-    fun offer(score: Float) {
-        if (size < capacity) {
-            var i = size++
-            heap[i] = score
-            while (i > 0) {
-                val parent = (i - 1) ushr 1
-                if (heap[parent] <= heap[i]) break
-                val t = heap[parent]
-                heap[parent] = heap[i]
-                heap[i] = t
-                i = parent
-            }
-        } else if (score > heap[0]) {
-            heap[0] = score
-            var i = 0
-            while (true) {
-                val left = 2 * i + 1
-                if (left >= size) break
-                val right = left + 1
-                var small = left
-                if (right < size && heap[right] < heap[left]) small = right
-                if (heap[i] <= heap[small]) break
-                val t = heap[i]
-                heap[i] = heap[small]
-                heap[small] = t
-                i = small
-            }
+    /** Keeps [candidate] if it is a new distinct native or improves one already held. */
+    fun offer(candidate: RomanizationSuggestion) {
+        val existing = held.indexOfFirst { it.native == candidate.native }
+        if (existing >= 0) {
+            if (candidate.score > held[existing].score) held[existing] = candidate
+            return
         }
+        if (held.size < capacity) {
+            held += candidate
+            return
+        }
+        val weakest = minIndex()
+        if (candidate.score > held[weakest].score) held[weakest] = candidate
+    }
+
+    val items: List<RomanizationSuggestion> get() = held
+
+    private fun minIndex(): Int {
+        var weakest = 0
+        for (i in 1 until held.size) if (held[i].score < held[weakest].score) weakest = i
+        return weakest
     }
 }
