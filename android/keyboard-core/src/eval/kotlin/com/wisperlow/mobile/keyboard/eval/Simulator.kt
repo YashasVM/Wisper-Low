@@ -46,6 +46,11 @@ object Simulator {
      * Runs the sentence; [latencies], when given, collects every strip computation's
      * duration in nanoseconds. The strip is only consulted in strip-user mode: the
      * no-strip user is defined by ignoring it.
+     *
+     * [trace], when given, collects one [TokenTrace] per intended token, tagged with
+     * [preset]/[seed]/[sentence]. It is a diagnostic sink only: it adds no metric and
+     * changes no behaviour, because every observation it records is already taken to
+     * score the token.
      */
     fun run(
         engine: EngineUnderTest,
@@ -53,6 +58,10 @@ object Simulator {
         intended: List<Tok>,
         stripUser: Boolean,
         latencies: MutableList<Long>?,
+        trace: MutableList<TokenTrace>? = null,
+        preset: String = "",
+        seed: Long = 0L,
+        sentence: Int = -1,
     ): SentenceRun {
         require(planned.size == intended.size) { "plan and intended tokens must line up" }
         engine.reset()
@@ -94,10 +103,22 @@ object Simulator {
             // mislanding changes this, so the word is classified by the touch, not by the
             // plan's intent, and later only the engine's own commit is judged.
             val raw = StringBuilder()
+            val steps = if (trace != null) ArrayList<String>() else null
             var picked = false
             for (event in p.events) {
-                raw.append(rawChar(event))
+                val rawCh = rawChar(event)
+                raw.append(rawCh)
+                val beforeComposing = if (steps != null) engine.composing else ""
                 dispatch(engine, event)
+                if (steps != null) {
+                    val afterComposing = engine.composing
+                    val delta = if (afterComposing.startsWith(beforeComposing)) {
+                        afterComposing.substring(beforeComposing.length)
+                    } else {
+                        afterComposing
+                    }
+                    steps += if (delta.isEmpty()) rawCh.toString() else "$rawCh>$delta"
+                }
                 keystrokes++
                 if (stripUser && !picked && engine.composing.isNotEmpty()) {
                     val strip = engine.strip()
@@ -113,6 +134,8 @@ object Simulator {
                     }
                 }
             }
+            val composingBefore = engine.composing
+            val stripBefore = if (trace != null) engine.strip() else emptyList()
             if (!picked) {
                 // Punctuation and the word-ending space, exactly as the typist aims them.
                 for (event in p.punctEvents) {
@@ -139,6 +162,7 @@ object Simulator {
                     }
                 }
             }
+            val revertibleAfter = if (trace != null) engine.revertible else null
 
             // Exactly what this token added to the field, so extra or missing words from
             // earlier taps never shift this word's comparison.
@@ -146,10 +170,19 @@ object Simulator {
             val committed = addedWord(before, after)
             before = after
 
+            val clean = normKey(raw.toString()) == tok.key
             val correct = normKey(committed) == tok.key
+            val exact = normExact(committed) == normExact(tok.word)
+            trace?.add(
+                TokenTrace(
+                    preset, seed, sentence, tok.word, p.typed, raw.toString(),
+                    steps ?: emptyList(), composingBefore, stripBefore, revertibleAfter,
+                    committed, TokenTrace.classify(clean, correct, exact),
+                ),
+            )
             if (correct) intendedCorrect++
-            if (normExact(committed) == normExact(tok.word)) intendedExact++
-            if (normKey(raw.toString()) == tok.key) {
+            if (exact) intendedExact++
+            if (clean) {
                 cleanWords++
                 if (!correct) cleanFalseCorrections++
             } else {

@@ -147,6 +147,27 @@ class KeyboardEngineTest {
     }
 
     @Test
+    fun `a word the user merely learned never replaces a real word`() {
+        // Ambient typing fills the user lexicon; "you"/"day" then rival "your"/"dad" on the
+        // user-ordering scale. They may be suggested, but must not autocorrect a real word.
+        val e = engineOf(listOf("your" to 500L, "you" to 5000L, "dad" to 500L, "day" to 5000L))
+        repeat(3) { e.learn("you", null) }
+        repeat(3) { e.learn("day", null) }
+        e.learn("your", null) // typed before, as in the failing session
+        e.learn("dad", null)
+        assertNull(e.suggest("your").autoCorrect)
+        assertNull(e.suggest("dad").autoCorrect)
+    }
+
+    @Test
+    fun `a title-cased dictionary word keeps its spelling`() {
+        // The word list holds "ben"; the user tapped the capital of a person's name. That is
+        // the same dictionary word, so it must not be treated as an unknown literal to fix.
+        val e = engineOf(listOf("ben" to 500L, "been" to 500L, "be" to 5000L))
+        assertNull(e.suggest("Ben").autoCorrect)
+    }
+
+    @Test
     fun `ported predicts next words from what the user typed`() {
         val e = engineOf(listOf("good" to 10L, "morning" to 10L))
         e.learn("good", null)

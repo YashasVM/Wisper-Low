@@ -34,6 +34,12 @@ data class Candidate(
     val kind: CandidateKind,
     /** Insertions, omissions and transpositions assumed. */
     val edits: Int,
+    /**
+     * The word came from the user's learned lexicon, not the word-list model, so [score] is
+     * on the user-ordering scale rather than the decoder's calibrated log-probability scale.
+     * A fix the user explicitly taught is not marked here: it has its own gate.
+     */
+    val userWord: Boolean = false,
 )
 
 /** Turns typed letters, in context, into likely words. */

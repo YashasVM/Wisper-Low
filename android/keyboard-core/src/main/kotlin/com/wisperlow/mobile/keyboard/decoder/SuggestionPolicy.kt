@@ -2,6 +2,7 @@ package com.wisperlow.mobile.keyboard.decoder
 
 import com.wisperlow.mobile.keyboard.Lexicon
 import com.wisperlow.mobile.keyboard.Suggestions
+import com.wisperlow.mobile.keyboard.lm.Vocabulary
 
 /** How eagerly the typed word is replaced when it is committed. */
 enum class CorrectionStrength {
@@ -131,18 +132,34 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
     private fun mayReplace(typed: String, target: Shown, literal: Shown?, shown: List<Shown>, facts: TypedFacts): Boolean {
         if (facts.strength == CorrectionStrength.OFF || facts.userTrusted) return false
         if (isProtected(typed)) return false
-        val literalScore = literal?.candidate?.score ?: return false
-        val margin = target.candidate.score - literalScore
+        // Ambient learning scores words on the user-ordering scale, not the decoder's
+        // log-probability scale, so a merely learned word (a rival the user happens to have
+        // typed before) never replaces a real dictionary word. Only an explicit fix, which has
+        // its own gate, or the calibrated model may.
+        if (facts.literalKnown && target.candidate.userWord) return false
+        val baseLiteral = literal ?: return false
         val variant = target.candidate.kind == CandidateKind.EXACT && Lexicon.key(target.candidate.word) == Lexicon.key(typed)
         if (variant) {
             val key = Lexicon.key(typed)
             if (key in AMBIGUOUS) return false
         }
+        // A correction of a word the user typed is measured against that word's real probability.
+        // When its listed spelling differs only in case ("Ben" for "ben"), the raw spelling is not
+        // in the list and would be priced as unknown, letting any correction win. A case-only
+        // variant (an EXACT target) is a different, weaker call and keeps the raw literal price.
+        val literalCandidate = if (!variant && baseLiteral.candidate.wordId == Vocabulary.UNKNOWN) {
+            shown.firstOrNull {
+                it.candidate.kind == CandidateKind.EXACT && it.candidate.word.lowercase() == typed.lowercase()
+            }?.candidate ?: baseLiteral.candidate
+        } else {
+            baseLiteral.candidate
+        }
+        val margin = target.candidate.score - literalCandidate.score
         if (typed.length <= 2 && !variant && !shortWordPasses(typed, target, margin)) return false
         // A rare dictionary word may be a misspelling, but only a correction far more
         // probable than it in calibrated log-probability terms may replace it.
         val rare = !variant && facts.literalKnown && facts.literalLogOdds < params.rareLiteralLogOdds
-        if (rare && target.candidate.lmScore - (literal?.candidate?.lmScore ?: 0f) < params.rareLiteralRatio) return false
+        if (rare && target.candidate.lmScore - literalCandidate.lmScore < params.rareLiteralRatio) return false
         val required = when {
             variant -> params.variantMargin
             else -> requiredMargin(typed, facts.literalKnown && !rare, facts.strength)
