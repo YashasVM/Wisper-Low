@@ -22,6 +22,10 @@ class SuggestionPolicyTest {
     private fun comp(word: String, score: Float, wordId: Int = 103, lm: Float = score) =
         Candidate(wordId, word, score, 0f, lm, CandidateKind.COMPLETION, 1)
 
+    /** An ambiently learned word, priced on the user-ordering scale, not the decoder's. */
+    private fun learned(word: String, score: Float, kind: CandidateKind = CandidateKind.CORRECTION) =
+        Candidate(Vocabulary.UNKNOWN, word, score, 0f, 0f, kind, 0, userWord = true)
+
     private fun facts(
         known: Boolean,
         trusted: Boolean = false,
@@ -261,6 +265,43 @@ class SuggestionPolicyTest {
             "helo",
             listOf(lit("helo", -12f), fix("hello", -9f)),
             facts(known = true, logOdds = -11f),
+        )
+        assertNull(out.autoCorrect)
+    }
+
+    @Test
+    fun `a word the user merely learned never replaces a real dictionary word`() {
+        // "you" was learned earlier in the session, so the personal lexicon offers it at the
+        // top of the strip for "your". It is not a fix the user taught, and its score is on a
+        // different scale than the decoder's log-probabilities, so it must not replace "your".
+        val out = policy.decide(
+            "your",
+            listOf(lit("your", -5f), learned("you", 8f), fix("you", -6.7f)),
+            facts(known = true, logOdds = -1.8f),
+        )
+        assertNull(out.autoCorrect)
+        assertEquals("your", out.words[1])
+    }
+
+    @Test
+    fun `a learned word still corrects an unknown literal`() {
+        // A custom word the user typed before: an unknown literal may be replaced by it.
+        val out = policy.decide(
+            "wisperlw",
+            listOf(lit("wisperlw", -20f), learned("wisperlow", 8f)),
+            facts(known = false),
+        )
+        assertEquals("wisperlow", out.autoCorrect)
+    }
+
+    @Test
+    fun `a title-cased dictionary word is priced as the dictionary word`() {
+        // "Ben" is the user's capitalization of the dictionary word "ben". The raw spelling is
+        // unknown, but the word is not: a correction must beat the real word, not a -20 literal.
+        val out = policy.decide(
+            "Ben",
+            listOf(lit("Ben", -20f), exact("ben", -9.44f), fix("been", -7.33f)),
+            facts(known = true, logOdds = -6.2f),
         )
         assertNull(out.autoCorrect)
     }

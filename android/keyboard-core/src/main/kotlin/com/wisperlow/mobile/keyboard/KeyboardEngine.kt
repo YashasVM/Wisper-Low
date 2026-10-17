@@ -99,7 +99,7 @@ class KeyboardEngine(
         for ((rank, word) in personal.words.withIndex()) {
             if (word.equals(typed, ignoreCase = true)) continue
             if (!taughtAllowed && personal.autoCorrect != null && word.equals(personal.autoCorrect, ignoreCase = true)) continue
-            ranking += Candidate(Vocabulary.UNKNOWN, word, USER_BASE - rank, 0f, 0f, kindOf(key, word), 0)
+            ranking += Candidate(Vocabulary.UNKNOWN, word, USER_BASE - rank, 0f, 0f, kindOf(key, word), 0, userWord = true)
         }
         ranking += decoded
 

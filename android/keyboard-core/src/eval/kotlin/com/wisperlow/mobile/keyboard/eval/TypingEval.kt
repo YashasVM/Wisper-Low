@@ -12,7 +12,8 @@ import kotlin.math.round
  * Flags: --quick (normal and sloppy presets, at most 3 seeds), --engine=baseline|smart,
  * --model=FILE (a WLM1 n-gram for the smart engine), --seeds=N, --out=file.json (also
  * writes baseline.md beside it and prints deltas when the prior report's fingerprint
- * matches), --data=dir, --assets=dir, --limit=N.
+ * matches), --data=dir, --assets=dir, --limit=N, --trace=file.json (evaluation-only
+ * per-token raw -> composing -> committed diagnostics; changes no metric).
  */
 object TypingEval {
     data class Config(
@@ -24,6 +25,8 @@ object TypingEval {
         val assets: File,
         val limit: Int?,
         val model: File?,
+        /** Where to write the evaluation-only per-token diagnostic trace, when asked. */
+        val trace: File?,
     )
 
     data class PresetReport(
@@ -77,6 +80,7 @@ object TypingEval {
             runSpelling(cfg, pairs, spelling)
         }
 
+        val traces = ArrayList<TokenTrace>()
         val presetsOut = presets.map { preset ->
             val plain = PresetStats(stripUser = false)
             val strip = PresetStats(stripUser = true)
@@ -88,7 +92,13 @@ object TypingEval {
                     val intended = EvalData.tokens(sentence)
                     val plan = Typist(preset).plan(intended, misspellings, seed * 1_000L + i)
                     val base = intended.sumOf(::keystrokesFor)
-                    plain.add(Simulator.run(plainEngine, plan, intended, stripUser = false, latencies = null), base)
+                    plain.add(
+                        Simulator.run(
+                            plainEngine, plan, intended, stripUser = false, latencies = null,
+                            trace = traces, preset = preset.id, seed = seed * 1_000L + i, sentence = i,
+                        ),
+                        base,
+                    )
                     strip.add(Simulator.run(stripEngine, plan, intended, stripUser = true, latencies = latencies), base)
                 }
             }
@@ -110,6 +120,11 @@ object TypingEval {
                 latencyMeanUs = mean,
                 latencyP95Us = p95,
             )
+        }
+        // Diagnostic only: the per-token raw -> composing -> committed chain, when asked.
+        cfg.trace?.let { file ->
+            file.parentFile?.mkdirs()
+            file.writeText(Json.encode(traces.map { it.asJson() }))
         }
         return Report(
             engine = cfg.engine,
@@ -299,6 +314,7 @@ object TypingEval {
         var assets: File? = null
         var limit: Int? = null
         var model: File? = null
+        var trace: File? = null
         for (a in args) {
             when {
                 a == "--quick" -> quick = true
@@ -309,13 +325,14 @@ object TypingEval {
                 a.startsWith("--data=") -> data = File(a.substringAfter('='))
                 a.startsWith("--assets=") -> assets = File(a.substringAfter('='))
                 a.startsWith("--limit=") -> limit = a.substringAfter('=').toInt()
+                a.startsWith("--trace=") -> trace = File(a.substringAfter('='))
                 else -> throw IllegalArgumentException("unknown argument \"$a\"")
             }
         }
         val assetsDir = assets
             ?: System.getProperty("wisperlow.assets")?.let(::File)
             ?: File("../app/src/main/assets")
-        return Config(quick, engine, seeds, out, data, assetsDir, limit, model)
+        return Config(quick, engine, seeds, out, data, assetsDir, limit, model, trace)
     }
 }
 
