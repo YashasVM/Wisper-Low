@@ -33,8 +33,10 @@ import kotlin.math.abs
  *      ... trigram third ids               trigramCount x u16
  * ```
  *
- * Every value array is quantized to 8 bits against a 256-entry float codebook
- * (quantile-based, always containing 0 so missing backoffs round-trip exactly).
+ * Every value array is quantized to 8 bits against a 256-entry float codebook that is
+ * uniform over the observed log range (a bounded-error quantizer: every code's error is
+ * at most half a step). The book always contains 0 exactly, which the zero backoff
+ * weights rely on to round-trip without a spurious offset.
  * Bigram entries are sorted by (first, second); trigram entries by (first, second, third).
  * Invariant: every trigram's (w1, w2) exists as a bigram row - true for any count-based
  * estimator - so trigram groups are addressed by bigram row index.
@@ -121,17 +123,36 @@ object NgramModelWriter {
         out.write(buf.array(), 0, buf.position())
     }
 
-    /** A quantile-based 256-entry codebook over [values], always containing exactly 0. */
+    /**
+     * A bounded-error 256-entry codebook over [values].
+     *
+     * Log probabilities already live on a natural (nat) axis, so a uniform grid over the
+     * observed range gives every code at most half a step of error. The previous
+     * quantile book instead spread its entries evenly over the *count* of values: the
+     * dense long tail absorbed almost every code and the two top codes ended up ~8 nats
+     * apart, so common words decoded as 0 or as the tail value.
+     *
+     * Exactly 0 is always present, and is the top code because every stored value is
+     * <= 0 (probabilities are < 1 and backoff weights are <= 1). That makes a zero
+     * backoff round-trip exactly, which the missing-row rules depend on.
+     */
     private fun buildCodebook(values: FloatArray): FloatArray {
-        val sorted = (values.toList() + 0f).sorted()
-        val book = FloatArray(CODEBOOK_ENTRIES)
-        for (i in 0 until CODEBOOK_ENTRIES) {
-            val idx = (i.toLong() * (sorted.size - 1) / (CODEBOOK_ENTRIES - 1)).toInt()
-            book[i] = sorted[idx]
+        var lo = 0f
+        var hi = 0f
+        for (v in values) {
+            if (v < lo) lo = v
+            if (v > hi) hi = v
         }
-        if (sorted.first() <= 0f && 0f <= sorted.last()) {
-            val zeroIdx = book.indices.minBy { abs(book[it]) }
-            book[zeroIdx] = 0f
+        val book = FloatArray(CODEBOOK_ENTRIES)
+        if (hi <= lo) return book // every value is 0 (or the array is empty)
+        val step = (hi - lo) / (CODEBOOK_ENTRIES - 1)
+        for (i in book.indices) book[i] = lo + i * step
+        book[0] = lo
+        book[book.lastIndex] = hi
+        if (lo <= 0f && 0f <= hi) {
+            var zero = 0
+            while (zero < book.lastIndex && book[zero] < 0f) zero++
+            book[zero] = 0f
         }
         return book
     }
