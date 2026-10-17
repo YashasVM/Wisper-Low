@@ -63,6 +63,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var transcriptRepository: TranscriptRepository
     @Inject lateinit var lexiconRepository: LexiconRepository
+    @Inject lateinit var emojiRepository: EmojiRepository
 
     private val registry = LifecycleRegistry(this)
     private val savedState = SavedStateRegistryController.create(this)
@@ -80,6 +81,8 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     private var lastEditAt = 0L
     private var prefs = KeyboardPrefs()
     private var lastShiftTap = 0L
+    /** True in a field marked NO_PERSONALIZED_LEARNING: no resolver reading, no learning. */
+    private var privateField = false
 
     /** True while the engine session in progress was started from this keyboard, not the app's practice area. */
     private var ownsSession: Boolean
@@ -111,6 +114,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         savedState.performRestore(null)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lexiconRepository.load()
+        emojiRepository.load()
         clipHistory.prune(System.currentTimeMillis())
         ui.update { it.copy(recentEmoji = loadRecentEmoji(), clips = clipHistory.entries) }
         // As the active keyboard, Wisperlow may read the clipboard; keep a history for the panel.
@@ -326,12 +330,15 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     }
 
     /** Whether plain tapped letters may be read by the engine: an ordinary text field with suggestions and autocorrect on. */
-    private fun resolvable() = ui.value.field == FieldKind.TEXT && typing.options.suggestions && typing.options.autoCorrect
+    private fun resolvable() = ui.value.field == FieldKind.TEXT &&
+        typing.options.suggestions && typing.options.autoCorrect && !privateField
 
     /**
      * Lets the engine correct a tap that may have slipped onto a neighbouring key. Everything
      * chosen directly — capitals, digits from long presses, alternates, symbols — reaches here
-     * without a touch or fails the gate, so it types exactly as picked.
+     * without a touch or fails the gate, so it types exactly as picked. Private fields
+     * (NO_PERSONALIZED_LEARNING) are typed key by key: reading taps is learning, and the
+     * marker says not to.
      */
     private fun resolveTap(landed: Char, touch: Touch): Char {
         val engine = lexiconRepository.engine.value ?: return landed
@@ -401,17 +408,20 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         val touches = typing.touches
         val corrects = typing.autoCorrectsHere()
         val revert = typing.revertible
+        val hintWord = word.ifEmpty { previous.orEmpty() }
         suggestJob?.cancel()
         suggestJob = scope.launch {
-            val result = withContext(Dispatchers.Default) {
-                when {
+            // Words keep typing responsive; the emoji dictionary is parsed once and read here.
+            val (result, emojiHints) = withContext(Dispatchers.Default) {
+                val suggestions = when {
                     word.isNotEmpty() -> engine.suggest(word, previous, touches = touches).let { if (corrects) it else it.copy(autoCorrect = null) }
                     // Right after an autocorrection, offer what was typed so one tap puts it back.
                     revert != null -> Suggestions(listOf(revert) + engine.predict(previous, max = 2), revert = revert)
                     else -> Suggestions(engine.predict(previous))
                 }
+                suggestions to emojiRepository.hints(hintWord)
             }
-            ui.update { it.copy(suggestions = result, emojiHints = Emoji.forWord(word.ifEmpty { previous.orEmpty() })) }
+            ui.update { it.copy(suggestions = result, emojiHints = emojiHints) }
         }
     }
 
@@ -425,6 +435,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         // treat it as a hint and still help with typing; password fields stay off regardless.
         Log.d(TAG, "Field ${info?.packageName}: inputType=0x${Integer.toHexString(inputType)} kind=$kind")
         val private = (info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        privateField = private
         val names = variation == InputType.TYPE_TEXT_VARIATION_PERSON_NAME ||
             variation == InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS ||
             variation == InputType.TYPE_TEXT_VARIATION_FILTER
