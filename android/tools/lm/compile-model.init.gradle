@@ -1,0 +1,35 @@
+// Wires the Lm compiler CLI into :keyboard-core without editing shared build scripts: parallel
+// agents own those files, and every Gradle run here goes through scripts/gradle-locked.sh with
+// --init-script pointing at this file. It temporarily turns src/tools/kotlin into an extra
+// source directory of the module's normal main Kotlin source set and registers a `compileModel`
+// JavaExec task that runs the CLI. When the init script is absent (normal app/test/release
+// builds) the tools sources are invisible and nothing changes. No new dependencies.
+//
+// Callers normally go through tools/lm/build_model.sh, which passes CLI arguments one per line
+// via the compileModelArgs project property, so spaces and quoting in paths never touch a
+// shell. Manual equivalent:
+//
+//   cd android
+//   ORG_GRADLE_PROJECT_compileModelArgs=$'--counts\nDIR\n--out\nFILE\n--vocab\n60001' \
+//     scripts/gradle-locked.sh -I tools/lm/compile-model.init.gradle :keyboard-core:compileModel
+
+gradle.beforeProject { project ->
+    if (project.name != 'keyboard-core') return
+    project.plugins.withId('org.jetbrains.kotlin.jvm') {
+        project.kotlin.sourceSets.getByName('main').kotlin.srcDir(project.file('src/tools/kotlin'))
+        project.tasks.register('compileModel', JavaExec) { task ->
+            task.group = 'tools'
+            task.description = 'Count TSVs -> verified compact WLM1 model (tools/lm/README.compile-model.md)'
+            def runtime = project.sourceSets.getByName('main').runtimeClasspath
+            task.classpath = runtime
+            task.dependsOn(runtime)
+            task.mainClass.set(
+                project.providers.gradleProperty('compileModelMainClass')
+                    .orElse('com.wisperlow.mobile.keyboard.tools.ModelCompilerKt'))
+            // Moderate heap: the machine is memory-tight and other agents work in parallel.
+            task.jvmArgs('-Xmx768m', '-Dfile.encoding=UTF-8')
+            def raw = project.providers.gradleProperty('compileModelArgs').getOrElse('')
+            task.args = raw.readLines().findAll { it.trim() }
+        }
+    }
+}
