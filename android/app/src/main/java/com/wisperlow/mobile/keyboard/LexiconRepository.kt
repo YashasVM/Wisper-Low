@@ -11,6 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,10 +43,12 @@ internal interface LearnedStore {
  * assets. Learned words stay in the app's private storage and are never sent anywhere, and each
  * language keeps its own learned file so one mode's words never leak into another.
  *
- * Everything that decides *what* to load and *when* to publish happens under [lock], which is
- * never held while assets are parsed or the disk is touched. Builds run on one IO scope, and
- * writes are keyed by language and coalesced, so a rapid switch saves each mode's learning
- * exactly once and a load that the user has already moved past can never be published.
+ * [language] and [engine] are the only state, and [engine] is always the engine for [language]
+ * or null while a switch loads it. Every change to them, and the decision that leads to it,
+ * happens together under [lock], which is never held while assets are parsed or the disk is
+ * touched. Builds run on one IO scope, and writes are keyed by language and coalesced, so a
+ * rapid switch saves each mode's learning exactly once and a load the user has already moved
+ * past can never be published.
  */
 @Singleton
 class LexiconRepository internal constructor(
@@ -62,19 +65,14 @@ class LexiconRepository internal constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
-    /** The engine answering keystrokes, and the language it belongs to. */
-    private class Publication(val language: KeyboardLanguage, val engine: WordEngine)
-
-    /** Guards every field below; never held across asset parsing or disk IO. */
+    /** Guards every field below and the state flows themselves; never held for parsing or IO. */
     private val lock = Any()
-    private var selected = KeyboardLanguage.ENGLISH
 
     /** Rises on every selection, so an older load can tell it has been superseded. */
     private var generation = 0
 
     /** The language of the build currently requested or in flight, so duplicates are not launched. */
     private var opening: KeyboardLanguage? = null
-    private var publication: Publication? = null
 
     /** The last write scheduled per language, so an open can wait for it before reading. */
     private val writes = HashMap<KeyboardLanguage, Deferred<Unit>>()
@@ -82,21 +80,23 @@ class LexiconRepository internal constructor(
     /** Serializes disk access, so no two writes, or a read and a write, overlap. */
     private val io = Mutex()
 
-    private val _engine = MutableStateFlow<WordEngine?>(null)
-    /** The engine for the selected language, or null until it has loaded. */
-    val engine: StateFlow<WordEngine?> = _engine.asStateFlow()
-
+    /**
+     * The selected language and the engine answering it, in that order. Both are written only
+     * under [lock], together, so an engine is never left published for a language just left.
+     */
     private val _language = MutableStateFlow(KeyboardLanguage.ENGLISH)
-    /** The language the keyboard should type in; [engine] follows a moment later. */
     val language: StateFlow<KeyboardLanguage> = _language.asStateFlow()
+
+    private val _engine = MutableStateFlow<WordEngine?>(null)
+    val engine: StateFlow<WordEngine?> = _engine.asStateFlow()
 
     /** Starts loading the selected language if needed; safe to call on every keyboard show. */
     fun load() {
         val language: KeyboardLanguage
         val generation: Int
         synchronized(lock) {
-            language = selected
-            if (publication?.language == language) return
+            language = _language.value
+            if (_engine.value != null) return
             if (opening == language) return
             opening = language
             generation = ++this.generation
@@ -105,34 +105,38 @@ class LexiconRepository internal constructor(
     }
 
     /**
-     * Switches modes. The new selection and the invalidation of the old engine happen together,
-     * so a load already in flight for the previous language can never publish afterwards. The
-     * outgoing engine's learning is queued independently of that load, so a rapid switch never
-     * drops what the user taught.
+     * Switches modes. The new selection, the retirement of the old engine, and the flow writes
+     * are one transition under [lock], so a load in flight for the previous language can never
+     * publish afterwards and two selectors can never reorder. The outgoing engine's learning is
+     * queued independently of that load, so a rapid switch never drops what the user taught.
      */
     fun selectLanguage(language: KeyboardLanguage) {
-        val outgoing: Publication?
+        val outgoingLanguage: KeyboardLanguage
+        val outgoingEngine: WordEngine?
         val generation: Int
         synchronized(lock) {
-            if (selected == language) return
-            selected = language
+            if (_language.value == language) return
+            outgoingLanguage = _language.value
+            outgoingEngine = _engine.value
+            _language.value = language
+            _engine.value = null
             generation = ++this.generation
             opening = language
-            outgoing = publication
-            publication = null
         }
-        _language.value = language
-        _engine.value = null
-        outgoing?.let { write(it, delayMs = 0L) }
+        outgoingEngine?.let { write(outgoingLanguage, it, delayMs = 0L) }
         scope.launch { open(language, generation) }
     }
 
     /** Saves learned words a moment after the last change, so typing never waits on disk. */
     fun scheduleSave() {
-        val current: Publication
-        // Capture the language and its engine as one unit: a switch cannot split them apart.
-        synchronized(lock) { current = publication ?: return }
-        write(current, delayMs = SAVE_DELAY_MS)
+        val language: KeyboardLanguage
+        val engine: WordEngine
+        // Read the language and its engine as one unit: a switch cannot split them apart.
+        synchronized(lock) {
+            engine = _engine.value ?: return
+            language = _language.value
+        }
+        write(language, engine, SAVE_DELAY_MS)
     }
 
     /** Builds [language], imports its learning, and publishes only if it is still the selection. */
@@ -142,7 +146,10 @@ class LexiconRepository internal constructor(
         awaitWrites(language)
         val engine = runCatching { loader.load(language) }.getOrNull()
         if (engine == null) {
-            finishOpen(language)
+            // Only the request that still owns [opening] may retire it. An older build that
+            // fails after an A-B-A switch leaves the marker for the newer build of this same
+            // language, so a retry is not launched on top of it.
+            synchronized(lock) { if (this.generation == generation) opening = null }
             return
         }
         awaitWrites(language)
@@ -152,23 +159,18 @@ class LexiconRepository internal constructor(
                 .getOrNull()
         }
         learned?.let(engine::importLearned)
+        // The staleness check and the publication are one transition: the engine and the
+        // selection move together, so nothing can publish an engine the user has already left.
         val published = synchronized(lock) {
-            if (this.generation != generation) return@synchronized false
-            publication = Publication(language, engine)
-            opening = null
-            true
+            if (this.generation != generation) {
+                false
+            } else {
+                opening = null
+                _engine.value = engine
+                true
+            }
         }
-        if (published) {
-            _engine.value = engine
-            Log.i(TAG, "Loaded ${language.code} in ${(System.nanoTime() - started) / 1_000_000} ms")
-        } else {
-            finishOpen(language)
-        }
-    }
-
-    /** Clears a stale [opening] marker so a later [load] can retry, but never the live one. */
-    private fun finishOpen(language: KeyboardLanguage) {
-        synchronized(lock) { if (opening == language && publication?.language != language) opening = null }
+        if (published) Log.i(TAG, "Loaded ${language.code} in ${(System.nanoTime() - started) / 1_000_000} ms")
     }
 
     /** Waits for the latest scheduled write for [language], including one queued while waiting. */
@@ -180,11 +182,14 @@ class LexiconRepository internal constructor(
         }
     }
 
-    /** Schedules a write, coalescing it with any earlier one for the same language. */
-    private fun write(publication: Publication, delayMs: Long) {
-        val language = publication.language
-        val engine = publication.engine
-        val job = scope.async {
+    /**
+     * Schedules a write of [engine]'s learning for [language], coalescing it with any earlier
+     * pending one. The job is registered while holding [lock] (before it starts) so a concurrent
+     * open always sees it, and the replaced job is cancelled only after its replacement is in
+     * place; the engine is exported when the write runs, so the newest words are what land.
+     */
+    private fun write(language: KeyboardLanguage, engine: WordEngine, delayMs: Long) {
+        val job = scope.async(start = CoroutineStart.LAZY) {
             if (delayMs > 0) delay(delayMs)
             io.withLock {
                 runCatching { store.write(language, engine.exportLearned()) }
@@ -192,10 +197,13 @@ class LexiconRepository internal constructor(
                 Unit
             }
         }
-        synchronized(lock) {
-            writes[language]?.cancel()
+        val previous = synchronized(lock) {
+            val old = writes[language]
             writes[language] = job
+            old
         }
+        job.start()
+        previous?.cancel()
     }
 
     private companion object {

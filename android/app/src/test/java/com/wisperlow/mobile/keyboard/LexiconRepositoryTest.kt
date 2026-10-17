@@ -1,7 +1,12 @@
 package com.wisperlow.mobile.keyboard
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -158,5 +163,73 @@ class LexiconRepositoryTest {
         advanceUntilIdle()
         assertEquals(KeyboardLanguage.HINDI, repository.language.value)
         assertTrue(repository.engine.value is Lexicon)
+    }
+
+    @Test
+    fun `a failed load from an old switch does not clear the newer one`() = runTest {
+        val firstGate = CompletableDeferred<Unit>()
+        val secondGate = CompletableDeferred<Unit>()
+        var hindiLoads = 0
+        val loader = EngineLoader { language ->
+            if (language == KeyboardLanguage.HINDI) {
+                when (++hindiLoads) {
+                    // The superseded build fails; the newer build of the same language succeeds.
+                    1 -> { firstGate.await(); null }
+                    else -> { secondGate.await(); Lexicon(listOf("hi" to 1L)) }
+                }
+            } else {
+                null
+            }
+        }
+        val repository = repository(testScheduler, loader)
+
+        repository.selectLanguage(KeyboardLanguage.HINDI)     // build 1
+        advanceUntilIdle()
+        repository.selectLanguage(KeyboardLanguage.KANNADA)
+        repository.selectLanguage(KeyboardLanguage.HINDI)     // build 2, same language, newer
+        advanceUntilIdle()
+        assertEquals(2, hindiLoads)
+
+        // Build 1 now fails. It must not retire build 2's in-flight marker for this language.
+        firstGate.complete(Unit)
+        advanceUntilIdle()
+        assertNull(repository.engine.value)
+
+        // So a retry finds the marker and does not launch a third build.
+        repository.load()
+        advanceUntilIdle()
+        assertEquals(2, hindiLoads)
+
+        secondGate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(KeyboardLanguage.HINDI, repository.language.value)
+        assertEquals(1, (repository.engine.value as Lexicon).size)
+        assertEquals(2, hindiLoads)
+    }
+
+    @Test
+    fun `a listener switching on the emitted engine is not left holding it`() = runTest {
+        val engines = KeyboardLanguage.entries.associateWith { Lexicon(emptyList()) }
+        val repository = repository(testScheduler, { engines[it] })
+        // Runs inline on the publishing thread, so the switch reenters the transition that is
+        // publishing the engine: the guarded state must still end consistent.
+        val listener = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).launch {
+            repository.engine.collect { engine ->
+                if (engine === engines.getValue(KeyboardLanguage.HINDI) &&
+                    repository.language.value == KeyboardLanguage.HINDI
+                ) {
+                    repository.selectLanguage(KeyboardLanguage.KANNADA)
+                }
+            }
+        }
+
+        repository.load()
+        advanceUntilIdle()
+        repository.selectLanguage(KeyboardLanguage.HINDI)
+        advanceUntilIdle()
+
+        assertEquals(KeyboardLanguage.KANNADA, repository.language.value)
+        assertSame(engines.getValue(KeyboardLanguage.KANNADA), repository.engine.value)
+        listener.cancel()
     }
 }
