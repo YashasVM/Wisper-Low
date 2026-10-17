@@ -1,7 +1,5 @@
 package com.wisperlow.mobile.keyboard
 
-import com.wisperlow.mobile.keyboard.indic.IndicWordEngine
-import com.wisperlow.mobile.keyboard.indic.RomanizationIndex
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -45,19 +43,15 @@ private class UnicodeField(initial: String = "") : EditorField {
 }
 
 /**
- * The typing session over a romanized Indic engine: native words commit, undo, reopen and
- * delete as one word, with the dependent vowels and virama kept part of that word. Distinct
- * UTF-16 units only count for editor deletes, never for how the word is split.
+ * Explicitly taught Unicode replacements exercise native words committing, undoing, reopening
+ * and deleting as one word. This is editor coverage, independent of the Latin regional modes.
+ * Dependent vowels and virama stay part of their word; editor deletes count UTF-16 units.
  */
 class UnicodeTypingSessionTest {
-    private val lexicon = IndicWordEngine(
-        RomanizationIndex(
-            sequenceOf(
-                "namaste\tनमस्ते\t120",
-                "accha\tअच्छा\t200",
-            ),
-        ),
-    )
+    private val lexicon = Lexicon(emptyList()).apply {
+        learnFix("namaste", "नमस्ते")
+        learnFix("accha", "अच्छा")
+    }
     private var now = 0L
     private val field = UnicodeField()
     private val session = TypingSession(field, { lexicon }, { now })

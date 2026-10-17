@@ -232,4 +232,62 @@ class LexiconRepositoryTest {
         assertSame(engines.getValue(KeyboardLanguage.KANNADA), repository.engine.value)
         listener.cancel()
     }
+
+    @Test
+    fun `a listener switching on emitted language keeps learning and engine in the selected mode`() = runTest {
+        val engines = KeyboardLanguage.entries.associateWith { Lexicon(emptyList()) }
+        val store = RecordingStore()
+        val repository = repository(testScheduler, { engines[it] }, store)
+        repository.load()
+        advanceUntilIdle()
+        repository.engine.value!!.learn("privateword", null)
+        val listener = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).launch {
+            repository.language.collect { language ->
+                if (language == KeyboardLanguage.HINDI) {
+                    repository.load()
+                    repository.scheduleSave()
+                    repository.selectLanguage(KeyboardLanguage.KANNADA)
+                }
+            }
+        }
+
+        repository.selectLanguage(KeyboardLanguage.HINDI)
+        advanceUntilIdle()
+
+        assertEquals(KeyboardLanguage.KANNADA, repository.language.value)
+        assertSame(engines.getValue(KeyboardLanguage.KANNADA), repository.engine.value)
+        assertTrue(store.savedWord(KeyboardLanguage.ENGLISH, "privateword"))
+        assertTrue(store.written(KeyboardLanguage.HINDI).none { data -> data.words.any { it.first == "privateword" } })
+        listener.cancel()
+    }
+
+    @Test
+    fun `a retiring engine listener can switch back and reload outgoing learning`() = runTest {
+        val store = RecordingStore()
+        val repository = repository(testScheduler, { Lexicon(emptyList()) }, store)
+        repository.load()
+        advanceUntilIdle()
+        repository.engine.value!!.learn("privateword", null)
+        var armed = false
+        val listener = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).launch {
+            repository.engine.collect { engine ->
+                if (armed && engine == null) {
+                    armed = false
+                    repository.load()
+                    repository.scheduleSave()
+                    repository.selectLanguage(KeyboardLanguage.ENGLISH)
+                }
+            }
+        }
+        armed = true
+
+        repository.selectLanguage(KeyboardLanguage.HINDI)
+        advanceUntilIdle()
+
+        assertEquals(KeyboardLanguage.ENGLISH, repository.language.value)
+        assertTrue(repository.engine.value!!.isLearned("privateword"))
+        assertTrue(store.savedWord(KeyboardLanguage.ENGLISH, "privateword"))
+        assertTrue(store.written(KeyboardLanguage.HINDI).isEmpty())
+        listener.cancel()
+    }
 }

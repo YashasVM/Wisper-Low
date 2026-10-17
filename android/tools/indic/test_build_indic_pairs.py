@@ -568,8 +568,7 @@ class CombinedCliTests(unittest.TestCase):
 class RealAssetAcceptanceTests(unittest.TestCase):
     """The committed assets keep the attested Dakshina train pairs."""
 
-    ASSETS = os.path.join(HERE, "..", "..", "app", "src", "main",
-                          "assets", "indic")
+    ASSETS = os.path.join(HERE, "reference")
 
     def _load(self, name):
         path = os.path.join(self.ASSETS, name)

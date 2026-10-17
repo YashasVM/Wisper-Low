@@ -1,15 +1,22 @@
 # Wisperlow typing engine: map and conventions
 
-Goal: typing that feels like Gboard or the iPhone keyboard, plus Hindi and Kannada.
+Goal: typing that feels like Gboard or the iPhone keyboard, with Hindi and Kannada
+words typed and kept in English letters.
 Research notes live in `docs/keyboard/research/`.
 
 ## Where things live
 
 - `android/keyboard-core/` is a pure Kotlin/JVM module with no Android dependencies, package
   `com.wisperlow.mobile.keyboard`. It holds the engine and its tests and builds in seconds.
-  - `Lexicon.kt` and `TypingSession.kt` are today's engine: a unigram list with heuristic
-    autocorrect, and the composing/commit/undo state machine. They stay working until the new
-    engine replaces them.
+  - `KeyboardEngine.kt` is the English engine. It combines a word decoder, spatial tap
+    scoring, next-character prediction and a conservative correction policy. The app uses
+    `en.txt` and `en_modern.txt`; experimental trained WLM1 models remain outside the app.
+  - `Lexicon.kt` supplies ranked word suggestions and personal words, pairs and taught fixes.
+    `TypingSession.kt` owns composing, commit, correction undo and editor behavior.
+  - `indic/LatinRegionalEngine.kt` keeps Hindi/Kannada output in Latin letters and mixes
+    regional and English suggestions. It preserves attested spellings; untaught automatic
+    changes require touch evidence. Unknown phonetic spellings remain typeable.
+    Corpus predictions and personal learning have separate storage.
   - `KeyboardLayout.kt` and `KeyboardGeometry.kt` hold the key layouts and pixel placement.
     `BoardUnits` and `letterCenters()` convert placement to key units.
   - `lm/`: `Vocabulary` (word ids, surfaces, keys), the `LanguageModel` interface,
@@ -18,7 +25,11 @@ Research notes live in `docs/keyboard/research/`.
   - `decoder/`: `WordIndex` (letter tree over word keys), with `SimpleWordIndex` as the
     reference, plus `TypedKey`, `Candidate`, `TypingDecoder` and `NextCharModel`.
 - `android/app/` is the Android IME: Compose UI (`keyboard/KeyArea.kt`, `KeyboardPanel.kt`)
-  and the service (`keyboard/WisperlowKeyboardService.kt`).
+  and the service (`keyboard/WisperlowKeyboardService.kt`). `LexiconRepository.kt` publishes
+  the selected language and its engine together and stores learning in separate files.
+- `android/tools/indic/README.latin.md` documents the reproducible Latin dictionary builder,
+  source licenses, training splits and data limitations. Native-script conversion tables
+  remain offline reference material under `android/tools/indic/reference/`.
 
 ## Conventions
 

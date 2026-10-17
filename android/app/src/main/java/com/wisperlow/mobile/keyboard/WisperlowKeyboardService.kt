@@ -333,7 +333,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     /** Whether plain tapped letters may be read by the engine: an ordinary text field with suggestions and autocorrect on. */
     private fun resolvable() = ui.value.field == FieldKind.TEXT &&
         typing.options.suggestions && typing.options.autoCorrect && !privateField &&
-        // Only the English engine reads taps; the romanized modes type exactly what is pressed.
+        // Regional Latin modes keep the landed letters while English also predicts key hits.
         lexiconRepository.language.value == KeyboardLanguage.ENGLISH
 
     /**

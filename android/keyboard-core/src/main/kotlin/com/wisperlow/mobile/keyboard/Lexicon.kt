@@ -116,6 +116,9 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
         return synchronized(userLock) { userWords[k]?.let { it.count >= USER_TRUSTED && it.surface.equals(word, true) } == true }
     }
 
+    /** The explicit replacement taught for [typed], without a snapshot of unrelated learning. */
+    fun learnedFixFor(typed: String): String? = synchronized(userLock) { fixes[key(typed)]?.surface }
+
     /**
      * Suggestions for [typed]. [touches], when given, holds where each typed character
      * was pressed (null for characters typed without a known position).
@@ -246,7 +249,7 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
                 fixes[k] = UserFix(intended, 1)
             } else {
                 fix.surface = intended
-                fix.count++
+                fix.count = incrementCount(fix.count)
             }
             if (fixes.size > MAX_FIXES) fixes.remove(fixes.keys.first())
         }
@@ -260,13 +263,13 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
         synchronized(userLock) {
             if (!isTypedWord(word, k)) {
                 val user = userWords.getOrPut(k) { UserWord(word, 0) }
-                user.count++
+                user.count = incrementCount(user.count)
                 // Keep the user's spelling of names and brands ("iPhone", "Ngozi") once they use it.
                 if (word.any { it.isUpperCase() }) user.surface = word
             }
             val prev = previous?.let(::key)?.takeIf { it.isNotEmpty() } ?: return
             val next = bigrams.getOrPut(prev) { HashMap() }
-            next[k] = (next[k] ?: 0) + 1
+            next[k] = incrementCount(next[k] ?: 0)
             if (bigrams.size > MAX_BIGRAM_HEADS) bigrams.remove(bigrams.keys.first())
         }
     }
@@ -408,6 +411,8 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
     )
 
     companion object {
+        private fun incrementCount(count: Int): Int = if (count == Int.MAX_VALUE) count else count + 1
+
         private const val COMPLETION_POOL = 8
         private const val COMPLETION_PENALTY = 1.2f
         private const val TYPO_WEIGHT = 3.2f

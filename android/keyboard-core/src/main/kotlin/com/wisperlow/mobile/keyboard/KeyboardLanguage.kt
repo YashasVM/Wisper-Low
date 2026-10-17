@@ -1,9 +1,9 @@
 package com.wisperlow.mobile.keyboard
 
 /**
- * The language the keyboard types in. The two Indic modes are *romanized*: the board stays
- * QWERTY and the user types Latin, while suggestions and committed words come out in the
- * native script. No InScript or other native-script layout is implemented.
+ * The language the keyboard types in. Hindi and Kannada words stay in Latin letters, on
+ * the ordinary QWERTY board. These modes suggest regional spellings and mixed English text;
+ * they do not convert words to a native script.
  *
  * [code] is what gets persisted, so stored values stay stable even if the enum is reordered.
  */
@@ -13,7 +13,7 @@ enum class KeyboardLanguage(val code: String) {
     KANNADA("kn"),
     ;
 
-    /** True for a romanized mode whose suggestions are native script reached through Latin typing. */
+    /** True for a regional language mode that keeps its words in Latin letters. */
     val isIndic: Boolean get() = this != ENGLISH
 
     companion object {

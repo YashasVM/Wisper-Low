@@ -7,10 +7,12 @@ Scope
 This notice covers the romanization word-pair assets built from open data by
 `android/tools/indic/build_indic_pairs.py`:
 
-- `android/app/src/main/assets/indic/hi.tsv`  (Hindi, Devanagari)
-- `android/app/src/main/assets/indic/kn.tsv`  (Kannada, Kannada script)
+- `android/tools/indic/reference/hi.tsv`  (Hindi, Devanagari)
+- `android/tools/indic/reference/kn.tsv`  (Kannada, Kannada script)
 
-No proprietary data was used in these assets.
+These are offline research references. They are excluded from the Android APK;
+the app's Hindi and Kannada modes output Latin text. No proprietary data was used
+in these references.
 
 License of the assets
 ---------------------
@@ -148,7 +150,7 @@ raw-corpus text is retained; only word-level pairs are kept.
 Generation
 ----------
 
-Generation command (values used for the committed files):
+Historical generation command (before these files moved out of app assets):
 
     python3 -I android/tools/indic/build_indic_pairs.py \
         --hi-zip hin.zip \

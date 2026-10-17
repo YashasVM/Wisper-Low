@@ -2,8 +2,7 @@ package com.wisperlow.mobile.keyboard
 
 import android.content.Context
 import android.util.Log
-import com.wisperlow.mobile.keyboard.indic.IndicWordEngine
-import com.wisperlow.mobile.keyboard.indic.RomanizationIndex
+import com.wisperlow.mobile.keyboard.indic.LatinRegionalEngine
 import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -39,16 +38,15 @@ internal interface LearnedStore {
 
 /**
  * Loads the selected input language into a [WordEngine] and keeps what the keyboard learns on
- * disk. English reads the word lists; the romanized Hindi and Kannada modes read their pair
- * assets. Learned words stay in the app's private storage and are never sent anywhere, and each
- * language keeps its own learned file so one mode's words never leak into another.
+ * disk. English reads its word lists; Hindi and Kannada read regional Latin word and bigram
+ * tables alongside English words for code mixing. Learned words stay in the app's private
+ * storage and are never sent anywhere. Each language keeps its own learned file.
  *
- * [language] and [engine] are the only state, and [engine] is always the engine for [language]
- * or null while a switch loads it. Every change to them, and the decision that leads to it,
- * happens together under [lock], which is never held while assets are parsed or the disk is
- * touched. Builds run on one IO scope, and writes are keyed by language and coalesced, so a
- * rapid switch saves each mode's learning exactly once and a load the user has already moved
- * past can never be published.
+ * An immutable selection under [lock] owns the language and engine. The public flows project
+ * that selection: retiring the engine precedes announcing a new language, and a synchronous
+ * listener can start another transition without an older emission overwriting it. Parsing and
+ * disk IO happen outside [lock]. Pending writes are registered before any transition is emitted,
+ * so a rapid switch back waits for the outgoing learning before restoring it.
  */
 @Singleton
 class LexiconRepository internal constructor(
@@ -60,13 +58,16 @@ class LexiconRepository internal constructor(
     constructor(@ApplicationContext context: Context) : this(
         Dispatchers.IO,
         AssetEngineLoader(context),
-        FileLearnedStore(context),
+        FileLearnedStore(context.filesDir),
     )
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /** Guards every field below and the state flows themselves; never held for parsing or IO. */
     private val lock = Any()
+
+    private data class Selection(val language: KeyboardLanguage, val engine: WordEngine?)
+    private var selection = Selection(KeyboardLanguage.ENGLISH, null)
 
     /** Rises on every selection, so an older load can tell it has been superseded. */
     private var generation = 0
@@ -81,8 +82,8 @@ class LexiconRepository internal constructor(
     private val io = Mutex()
 
     /**
-     * The selected language and the engine answering it, in that order. Both are written only
-     * under [lock], together, so an engine is never left published for a language just left.
+     * Observable projections of [selection]. Mutators read the authoritative selection rather
+     * than these separate flows, because a flow listener may synchronously reenter a transition.
      */
     private val _language = MutableStateFlow(KeyboardLanguage.ENGLISH)
     val language: StateFlow<KeyboardLanguage> = _language.asStateFlow()
@@ -95,8 +96,8 @@ class LexiconRepository internal constructor(
         val language: KeyboardLanguage
         val generation: Int
         synchronized(lock) {
-            language = _language.value
-            if (_engine.value != null) return
+            language = selection.language
+            if (selection.engine != null) return
             if (opening == language) return
             opening = language
             generation = ++this.generation
@@ -111,36 +112,36 @@ class LexiconRepository internal constructor(
      * queued independently of that load, so a rapid switch never drops what the user taught.
      */
     fun selectLanguage(language: KeyboardLanguage) {
-        val outgoingLanguage: KeyboardLanguage
-        val outgoingEngine: WordEngine?
         val generation: Int
+        val pending: PendingWrite?
         synchronized(lock) {
-            if (_language.value == language) return
-            outgoingLanguage = _language.value
-            outgoingEngine = _engine.value
-            _language.value = language
-            _engine.value = null
+            if (selection.language == language) return
+            val outgoing = selection
+            selection = Selection(language, null)
             generation = ++this.generation
             opening = language
+            pending = outgoing.engine?.let { queueWriteLocked(outgoing.language, it, delayMs = 0L) }
+            _engine.value = null
+            // The null-engine listener may already have selected another language.
+            if (this.generation == generation) _language.value = language
         }
-        outgoingEngine?.let { write(outgoingLanguage, it, delayMs = 0L) }
+        pending?.start()
         scope.launch { open(language, generation) }
     }
 
     /** Saves learned words a moment after the last change, so typing never waits on disk. */
     fun scheduleSave() {
-        val language: KeyboardLanguage
-        val engine: WordEngine
-        // Read the language and its engine as one unit: a switch cannot split them apart.
-        synchronized(lock) {
-            engine = _engine.value ?: return
-            language = _language.value
+        val pending = synchronized(lock) {
+            val current = selection
+            val engine = current.engine ?: return
+            queueWriteLocked(current.language, engine, SAVE_DELAY_MS)
         }
-        write(language, engine, SAVE_DELAY_MS)
+        pending.start()
     }
 
     /** Builds [language], imports its learning, and publishes only if it is still the selection. */
     private suspend fun open(language: KeyboardLanguage, generation: Int) {
+        if (synchronized(lock) { this.generation != generation }) return
         val started = System.nanoTime()
         // A write already queued for this language must land first, so the read sees it.
         awaitWrites(language)
@@ -166,6 +167,7 @@ class LexiconRepository internal constructor(
                 false
             } else {
                 opening = null
+                selection = Selection(language, engine)
                 _engine.value = engine
                 true
             }
@@ -188,7 +190,15 @@ class LexiconRepository internal constructor(
      * open always sees it, and the replaced job is cancelled only after its replacement is in
      * place; the engine is exported when the write runs, so the newest words are what land.
      */
-    private fun write(language: KeyboardLanguage, engine: WordEngine, delayMs: Long) {
+    private class PendingWrite(private val next: Deferred<Unit>, private val previous: Deferred<Unit>?) {
+        fun start() {
+            next.start()
+            previous?.cancel()
+        }
+    }
+
+    /** Called under [lock]; registering a lazy job does not perform disk IO or emit state. */
+    private fun queueWriteLocked(language: KeyboardLanguage, engine: WordEngine, delayMs: Long): PendingWrite {
         val job = scope.async(start = CoroutineStart.LAZY) {
             if (delayMs > 0) delay(delayMs)
             io.withLock {
@@ -197,13 +207,8 @@ class LexiconRepository internal constructor(
                 Unit
             }
         }
-        val previous = synchronized(lock) {
-            val old = writes[language]
-            writes[language] = job
-            old
-        }
-        job.start()
-        previous?.cancel()
+        val previous = writes.put(language, job)
+        return PendingWrite(job, previous)
     }
 
     private companion object {
@@ -211,43 +216,70 @@ class LexiconRepository internal constructor(
     }
 }
 
-/** The real loader: reads the word lists for English and the romanization pairs for the rest. */
-private class AssetEngineLoader(private val context: Context) : EngineLoader {
+/** Loads English and regional Latin dictionaries without converting text into another script. */
+internal class AssetEngineLoader(private val readAsset: (String) -> List<String>) : EngineLoader {
+    constructor(context: Context) : this({ name ->
+        context.assets.open(name).bufferedReader().use { it.readLines() }
+    })
+
     override suspend fun load(language: KeyboardLanguage): WordEngine? = try {
         when (language) {
-            KeyboardLanguage.ENGLISH -> {
-                val base = readList(DICTIONARY) { Log.e(TAG, "Word list unavailable", it) }
-                // Subtitles miss how people text and code today; the modern list fills that in.
-                val modern = readList(MODERN) { Log.w(TAG, "Modern word list unavailable; using the base list", it) }
-                val entries = if (modern.isEmpty()) base else Lexicon.merge(base, modern)
-                KeyboardEngine.fromWordList(entries, keyCenters())
-            }
-            KeyboardLanguage.HINDI -> IndicWordEngine(readIndex(HINDI))
-            KeyboardLanguage.KANNADA -> IndicWordEngine(readIndex(KANNADA))
+            KeyboardLanguage.ENGLISH -> KeyboardEngine.fromWordList(readEnglish(), keyCenters())
+            KeyboardLanguage.HINDI -> readRegional(HINDI, HINDI_BIGRAMS)
+            KeyboardLanguage.KANNADA -> readRegional(KANNADA, KANNADA_BIGRAMS)
         }
     } catch (t: Throwable) {
         Log.e(TAG, "Building the ${language.code} engine failed", t)
-        // A missing Indian asset leaves an engine over an empty index, so Latin is kept as
-        // typed rather than silently falling back to English corrections.
-        if (language.isIndic) IndicWordEngine(RomanizationIndex(emptySequence())) else null
+        if (language.isIndic) LatinRegionalEngine(emptyList(), emptyList()) else null
     }
 
-    /** Reads "roman<TAB>native<TAB>count" rows; the index consumes them while the file is open. */
-    private fun readIndex(asset: String): RomanizationIndex = try {
-        context.assets.open(asset).bufferedReader().useLines { lines -> RomanizationIndex(lines) }
-    } catch (t: Throwable) {
-        Log.w(TAG, "$asset unavailable; native suggestions are off for now", t)
-        RomanizationIndex(emptySequence())
+    private fun readEnglish(): List<Pair<String, Long>> {
+        val base = readList(DICTIONARY) { Log.e(TAG, "Word list unavailable", it) }
+        val modern = readList(MODERN) { Log.w(TAG, "Modern word list unavailable; using the base list", it) }
+        return if (modern.isEmpty()) base else Lexicon.merge(base, modern)
     }
 
-    /** Reads a word list from assets, logging and continuing when the file is missing. */
+    private fun readRegional(wordsAsset: String, bigramsAsset: String): WordEngine {
+        val regional = try {
+            readAsset(wordsAsset).mapNotNull { line ->
+                if (line.startsWith('#')) return@mapNotNull null
+                val columns = line.split('\t')
+                if (columns.size != 2 || !isLatinWord(columns[0])) return@mapNotNull null
+                val count = columns[1].toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+                columns[0] to count
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "$wordsAsset unavailable; preserving typed text", t)
+            emptyList()
+        }
+        if (regional.isEmpty()) return LatinRegionalEngine(emptyList(), emptyList())
+        val nextWords = try {
+            readAsset(bigramsAsset).mapNotNull { line ->
+                if (line.startsWith('#')) return@mapNotNull null
+                val columns = line.split('\t')
+                if (columns.size != 3) return@mapNotNull null
+                val count = columns[2].toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+                if (!isLatinWord(columns[0]) || !isLatinWord(columns[1])) return@mapNotNull null
+                Triple(columns[0], columns[1], count)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "$bigramsAsset unavailable; regional next-word suggestions are off", t)
+            emptyList()
+        }
+        return LatinRegionalEngine(regional, readEnglish(), nextWords)
+    }
+
+    /** Reads an asset word list, logging and continuing when the file is missing. */
     private fun readList(name: String, onFailure: (Throwable) -> Unit): List<Pair<String, Long>> =
         try {
-            context.assets.open(name).bufferedReader().useLines { Lexicon.parse(it) }
+            Lexicon.parse(readAsset(name).asSequence())
         } catch (t: Throwable) {
             onFailure(t)
             emptyList()
         }
+
+    private fun isLatinWord(word: String): Boolean =
+        word.isNotEmpty() && word.any { it in 'a'..'z' } && word.all { it in 'a'..'z' || it == '\'' }
 
     /**
      * Canonical QWERTY key centres, in key units: q at (0.5, 0.5), a at (1.0, 1.5),
@@ -264,8 +296,10 @@ private class AssetEngineLoader(private val context: Context) : EngineLoader {
     private companion object {
         const val DICTIONARY = "dict/en.txt"
         const val MODERN = "dict/en_modern.txt"
-        const val HINDI = "indic/hi.tsv"
-        const val KANNADA = "indic/kn.tsv"
+        const val HINDI = "dict/hi_latn.tsv"
+        const val KANNADA = "dict/kn_latn.tsv"
+        const val HINDI_BIGRAMS = "dict/hi_latn_bigrams.tsv"
+        const val KANNADA_BIGRAMS = "dict/kn_latn_bigrams.tsv"
 
         /** Arbitrary dimensions for laying out the canonical board; only their ratio matters. */
         const val BOARD_WIDTH = 1080f
@@ -275,17 +309,17 @@ private class AssetEngineLoader(private val context: Context) : EngineLoader {
 }
 
 /** The real store: one learned file per language, under the app's private storage. */
-private class FileLearnedStore(private val context: Context) : LearnedStore {
+internal class FileLearnedStore(private val filesDir: File) : LearnedStore {
     override fun read(language: KeyboardLanguage): Lexicon.LearnedData? = LearnedFile.read(fileFor(language))
 
     override fun write(language: KeyboardLanguage, data: Lexicon.LearnedData) = LearnedFile.write(fileFor(language), data)
 
     private fun fileFor(language: KeyboardLanguage) = File(
-        context.filesDir,
+        filesDir,
         when (language) {
             KeyboardLanguage.ENGLISH -> "keyboard/learned.tsv"
-            KeyboardLanguage.HINDI -> "keyboard/learned_hi.tsv"
-            KeyboardLanguage.KANNADA -> "keyboard/learned_kn.tsv"
+            KeyboardLanguage.HINDI -> "keyboard/learned_hi_latn.tsv"
+            KeyboardLanguage.KANNADA -> "keyboard/learned_kn_latn.tsv"
         },
     )
 }

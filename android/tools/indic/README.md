@@ -5,6 +5,9 @@ for the Wisperlow transliteration research line
 (`docs/keyboard/research/transliteration.md`). Pure Python 3 standard
 library; no dependencies and no build step.
 
+These native-script tables are offline reference data in `reference/`. The app's
+Hindi and Kannada modes keep text in English letters and use separate Latin dictionaries.
+
 ## Usage
 
 ```
@@ -43,7 +46,7 @@ python3 -I android/tools/indic/build_indic_pairs.py \
     --kn-zip /path/to/kan.zip \
     --hi-dakshina /path/to/dakshina/hi/lexicons/hi.translit.sampled.train.tsv \
     --kn-dakshina /path/to/dakshina/kn/lexicons/kn.translit.sampled.train.tsv \
-    --out-dir android/app/src/main/assets/indic \
+    --out-dir android/tools/indic/reference \
     --max-pairs 100000 --max-bytes 6000000 --split train
 ```
 
@@ -108,9 +111,10 @@ under **CC BY-SA 4.0**.
 Because the combined file incorporates Dakshina (CC BY-SA 4.0), the asset as a
 whole is **CC BY-SA 4.0** with attribution to both datasets and a modification
 note; the Aksharantar-derived rows are still credited under their CC0 source.
-Attribution/provenance ships in
-`android/app/src/main/assets/licenses/indic-romanization.txt` and in each TSV
-header. The surrounding Wisperlow application stays MIT-licensed and is not
+Attribution/provenance is kept in
+`android/tools/indic/reference/indic-romanization.txt` and in each TSV
+header. The generated headers retain their historical app-asset paths;
+the current offline locations are listed above. The surrounding Wisperlow application stays MIT-licensed and is not
 relicensed by this data asset.
 
 Acceptance filters (unit-tested): lowercase Latin roman keys only; native
