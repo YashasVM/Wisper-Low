@@ -348,5 +348,261 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(pairs, {("na", "ನಮ"): 1})
 
 
+def dak_row(native, roman, count=1):
+    # count is str-formatted so malformed fixtures ("x", "-2") can be built too.
+    return "%s\t%s\t%s" % (native, roman, count)
+
+
+def make_dakshina(path, rows):
+    """Write a Dakshina word-lexicon TSV: native<TAB>roman<TAB>attestations."""
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(rows) + ("\n" if rows else ""))
+
+
+class DakshinaPathTests(unittest.TestCase):
+    """TRAIN-only discipline for the Dakshina file, at CLI and library level."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="bip-dak-path-")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir)
+
+    def test_accepts_train_lexicon_names(self):
+        for name in ("hi.translit.sampled.train.tsv", "kn_train.tsv",
+                     "hi.train.tsv"):
+            path = os.path.join(self.dir, name)
+            make_dakshina(path, [dak_row("नम", "nam")])
+            self.assertEqual(bp.validate_dakshina_path(path), path)
+
+    def test_rejects_dev_and_test_filenames(self):
+        for name in ("hi.translit.sampled.dev.tsv", "hi.translit.sampled.test.tsv",
+                     "hi_dev.tsv", "hi_test.tsv"):
+            path = os.path.join(self.dir, name)
+            make_dakshina(path, [dak_row("नम", "nam")])
+            self.assertRaises(SystemExit, bp.validate_dakshina_path, path)
+
+    def test_rejects_full_sentence_romanized_tree(self):
+        rom = os.path.join(self.dir, "romanized")
+        os.makedirs(rom)
+        path = os.path.join(rom, "hi.translit.sampled.train.tsv")
+        make_dakshina(path, [dak_row("नम", "nam")])
+        self.assertRaises(SystemExit, bp.validate_dakshina_path, path)
+
+    def test_rejects_missing_file_and_non_train_name(self):
+        self.assertRaises(SystemExit, bp.validate_dakshina_path,
+                          os.path.join(self.dir, "hi.translit.sampled.train.tsv"))
+        path = os.path.join(self.dir, "hi.lexicon.tsv")
+        make_dakshina(path, [dak_row("नम", "nam")])
+        self.assertRaises(SystemExit, bp.validate_dakshina_path, path)
+
+
+class DakshinaParseTests(unittest.TestCase):
+    """Parsing, dedup, positive counts, NFC and malformed-row rejection."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="bip-dak-parse-")
+        self.path = os.path.join(self.dir, "hi.translit.sampled.train.tsv")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir)
+
+    def build(self, rows):
+        make_dakshina(self.path, rows)
+        return bp.build_dakshina_pairs(self.path, "hi")
+
+    def test_counts_preserved_and_duplicates_summed(self):
+        pairs, stats = self.build([
+            dak_row("नम", "nam", 3),
+            dak_row("नम", "nam", 2),      # same exact pair -> 5
+            dak_row("नम", "namah", 4),    # variant spelling, separate pair
+            dak_row("कल", "kal", 1),
+        ])
+        self.assertEqual(pairs[("nam", "नम")], 5)
+        self.assertEqual(pairs[("namah", "नम")], 4)
+        self.assertEqual(pairs[("kal", "कल")], 1)
+        self.assertEqual(stats["accepted_rows"], 4)
+        self.assertTrue(all(c > 0 for c in pairs.values()))
+
+    def test_nfc_normalisation_of_both_sides(self):
+        nfd = unicodedata.normalize("NFD", "बऩाल")
+        pairs, _ = self.build([dak_row(nfd, "banaal", 2)])
+        self.assertIn(("banaal", unicodedata.normalize("NFC", nfd)), pairs)
+        for native in {k[1] for k in pairs}:
+            self.assertEqual(unicodedata.normalize("NFC", native), native)
+
+    def test_malformed_and_invalid_rows_counted(self):
+        pairs, stats = self.build([
+            dak_row("नम", "nam", 1),        # ok
+            "नम\tnam",                      # 2 columns
+            "नम\tnam\t1\textra",            # 4 columns
+            dak_row("कमल", "kamal", 0),     # zero count
+            dak_row("कमल", "kamal", -2),    # negative count
+            dak_row("कमल", "kamal", "x"),   # non-integer count
+            dak_row("काला", "k@la", 1),     # junk roman
+            dak_row("काला", "kāla", 1),     # non-ascii roman
+            dak_row("हelo", "helo", 1),     # mixed script
+        ])
+        reasons = stats["reject_reasons"]
+        self.assertEqual(reasons["bad_columns"], 2)
+        self.assertEqual(reasons["bad_count"], 3)
+        self.assertEqual(reasons["url_email_junk"], 1)
+        self.assertEqual(reasons["non_latin_roman"], 1)
+        self.assertEqual(reasons["mixed_script"], 1)
+        self.assertEqual(pairs, {("nam", "नम"): 1})
+
+    def test_zwj_zwnj_stripped_from_native(self):
+        pairs, _ = self.build([dak_row("क\u200dम", "kam", 2)])
+        self.assertIn(("kam", "कम"), pairs)
+        self.assertNotIn(("kam", "क\u200dम"), pairs)
+
+
+class SourcePriorityTests(unittest.TestCase):
+    """Dakshina coverage is guaranteed ahead of the mined fill; dedup is clean."""
+
+    def test_all_dakshina_pairs_emitted_before_mined(self):
+        dak = {("a", "अ"): 1, ("i", "इ"): 5, ("u", "उ"): 2}
+        mined = {("ka", "क"): 900, ("kha", "ख"): 800, ("ga", "ग"): 700}
+        merged = bp.merge_pairs(dak, mined)
+        body, n_pairs, _, _ = bp.render_body(merged, 5, 100000, priority=dak)
+        lines = body.splitlines()
+        self.assertEqual(n_pairs, 5)
+        # The three Dakshina natives occupy the top rows (ranked by count).
+        self.assertEqual([l.split("\t")[1] for l in lines[:3]], ["इ", "उ", "अ"])
+        # Only the highest-ranked mined pair fits in the remaining budget.
+        self.assertIn("ka\tक\t900", lines)
+
+    def test_dakshina_only_when_cap_exhausted(self):
+        dak = {("a", "अ"): 1, ("i", "इ"): 1}
+        mined = {("ka", "क"): 900}
+        merged = bp.merge_pairs(dak, mined)
+        body, _, _, _ = bp.render_body(merged, 2, 100000, priority=dak)
+        self.assertNotIn("क", body)
+        self.assertIn("अ", body)
+        self.assertIn("इ", body)
+
+    def test_identical_pair_is_deduped_with_dakshina_count(self):
+        dak = {("a", "अ"): 7}
+        mined = {("a", "अ"): 999, ("b", "ब"): 3}
+        merged = bp.merge_pairs(dak, mined)
+        self.assertEqual(merged[("a", "अ")], 7)  # not summed across sources
+        body, n_pairs, _, _ = bp.render_body(merged, 100, 100000, priority=dak)
+        self.assertEqual(n_pairs, 2)
+        self.assertEqual(body.count("a\tअ"), 1)
+        self.assertIn("a\tअ\t7", body)
+        self.assertIn("b\tब\t3", body)
+
+    def test_priority_romans_precede_mined_for_same_native(self):
+        dak = {("namaste", "नमस्ते"): 1}
+        mined = {("namaste", "नमस्ते"): 500, ("namasthe", "नमस्ते"): 900}
+        merged = bp.merge_pairs(dak, mined)
+        body, _, _, _ = bp.render_body(merged, 100, 100000, priority=dak)
+        lines = body.splitlines()
+        self.assertEqual(lines[0], "namaste\tनमस्ते\t1")
+        self.assertEqual(lines[1], "namasthe\tनमस्ते\t900")
+
+    def test_single_source_render_is_unchanged(self):
+        # priority=None must reproduce the frequency ranking of the old builder.
+        pairs = {("naj", "नम"): 1, ("nov", "नव"): 3}
+        body, *_ = bp.render_body(pairs, 100, 100000)
+        self.assertLess(body.index("नव\t"), body.index("नम\t"))
+
+
+class CombinedCliTests(unittest.TestCase):
+    """End-to-end merge of Aksharantar + Dakshina with deterministic output."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="bip-comb-")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir)
+
+    def _inputs(self):
+        zip_path = os.path.join(self.dir, "aksharantar-hin.zip")
+        make_zip(zip_path, {TRAIN: [row("कल", "kal"), row("कल", "kal"),
+                                    row("कमल", "kamal")]})
+        dak = os.path.join(self.dir, "hi.translit.sampled.train.tsv")
+        make_dakshina(dak, [dak_row("है", "hai", 6),
+                            dak_row("नमस्ते", "namaste", 5),
+                            dak_row("कल", "kal", 3)])
+        return zip_path, dak
+
+    def test_cli_merges_sources_deterministically(self):
+        zip_path, dak = self._inputs()
+        base = [sys.executable, "-I", MODULE_PATH, "--hi-zip", zip_path,
+                "--hi-dakshina", dak, "--max-pairs", "1000",
+                "--split", "train", "--out-dir"]
+        outs = []
+        for i, outdir in enumerate(("o1", "o2")):
+            out = os.path.join(self.dir, outdir)
+            subprocess.run(base + [out], check=True, capture_output=True)
+            outs.append(open(os.path.join(out, "hi.tsv"), "rb").read())
+        self.assertEqual(outs[0], outs[1])
+
+        text = outs[0].decode("utf-8")
+        header = "\n".join(l for l in text.splitlines() if l.startswith("#"))
+        self.assertIn("CC BY-SA 4.0", header)
+        self.assertIn("CC0 1.0", header)  # Aksharantar rows credit preserved
+        self.assertIn("Roark et al. 2020", header)
+        self.assertIn("hi.translit.sampled.train.tsv", header)
+        data = [l for l in text.splitlines() if l and not l.startswith("#")]
+        self.assertTrue(all(len(l.split("\t")) == 3 for l in data))
+        self.assertIn("hai\tहै\t6", data)
+        self.assertIn("namaste\tनमस्ते\t5", data)
+        # The shared kal pair is deduped: exactly one row, Dakshina count wins.
+        self.assertEqual([l for l in data if l.split("\t")[:2] == ["kal", "कल"]],
+                         ["kal\tकल\t3"])
+
+    def test_cli_rejects_dev_dakshina_filename(self):
+        zip_path, _ = self._inputs()
+        dev = os.path.join(self.dir, "hi.translit.sampled.dev.tsv")
+        make_dakshina(dev, [dak_row("नम", "nam")])
+        out = os.path.join(self.dir, "o-dev")
+        result = subprocess.run(
+            [sys.executable, "-I", MODULE_PATH, "--hi-dakshina", dev,
+             "--out-dir", out], capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(os.path.exists(os.path.join(out, "hi.tsv")))
+
+
+class RealAssetAcceptanceTests(unittest.TestCase):
+    """The committed assets keep the attested Dakshina train pairs."""
+
+    ASSETS = os.path.join(HERE, "..", "..", "app", "src", "main",
+                          "assets", "indic")
+
+    def _load(self, name):
+        path = os.path.join(self.ASSETS, name)
+        if not os.path.exists(path):  # pragma: no cover - assets are committed
+            self.skipTest("asset not present: %s" % path)
+        pairs = {}
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if not line or line.startswith("#"):
+                    continue
+                roman, native, count = line.rstrip("\n").split("\t")
+                pairs[(roman, native)] = int(count)
+        return pairs
+
+    def test_hindi_function_words_present_and_nfc(self):
+        pairs = self._load("hi.tsv")
+        for roman, native in (("hai", "है"), ("mein", "में"),
+                              ("ka", "का"), ("namaste", "नमस्ते")):
+            self.assertIn((roman, native), pairs, "%s -> %s missing" % (roman, native))
+            self.assertGreater(pairs[(roman, native)], 0)
+            self.assertEqual(unicodedata.normalize("NFC", native), native)
+            self.assertTrue(bp.valid_native_script(native, HI_BLOCK))
+
+    def test_kannada_everyday_words_present_and_nfc(self):
+        pairs = self._load("kn.tsv")
+        for roman, native in (("idu", "ಇದು"), ("mattu", "ಮತ್ತು"),
+                              ("namaskara", "ನಮಸ್ಕಾರ"),
+                              ("namaskaara", "ನಮಸ್ಕಾರ")):
+            self.assertIn((roman, native), pairs, "%s -> %s missing" % (roman, native))
+            self.assertGreater(pairs[(roman, native)], 0)
+            self.assertEqual(unicodedata.normalize("NFC", native), native)
+            self.assertTrue(bp.valid_native_script(native, KN_BLOCK))
+
+
 if __name__ == "__main__":
     unittest.main()

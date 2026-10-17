@@ -1,5 +1,5 @@
 Legal notice for Wisperlow romanization assets
-==============================================
+===============================================
 
 Scope
 -----
@@ -15,17 +15,36 @@ No proprietary data was used in these assets.
 License of the assets
 ---------------------
 
-The assets are licensed CC0 1.0 (public domain dedication), because every
-input row is from a subset of the source dataset that its publisher placed
-under CC0 1.0. The full CC0 1.0 legal text is below. Provenance (source
-page, train-member filename, decompressed member sha256, split, generation
-command) is embedded in each TSV's `#`-comment header.
+The two files above are a modified/adapted work that combines word pairs from
+two openly licensed datasets: the Dakshina dataset (CC BY-SA 4.0) and the
+Aksharantar dataset (mined rows under CC0 1.0). Because the combined work
+incorporates CC BY-SA 4.0 material, it is distributed as a whole under
 
-Source data
------------
+    CC BY-SA 4.0
+    https://creativecommons.org/licenses/by-sa/4.0/
 
-Source: Aksharantar train split (train members only; the dev/test members
-of the dataset were never read, so neither file contains evaluation data).
+Full legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+The Aksharantar-derived rows within the asset remain available from their
+source under CC0 1.0, independently of the combined license:
+
+    CC0 1.0 (public domain dedication)
+    https://creativecommons.org/publicdomain/zero/1.0/
+
+The CC BY-SA 4.0 share-alike obligation attaches only to these data assets (and
+to any modified versions or adaptations of them), not to the surrounding
+Wisperlow application, which is licensed separately under the MIT License
+(`LICENSE` at the repository root). Shipping these assets alongside the MIT
+application does not relicense the application.
+
+Provenance (source page, file/member name, decompressed sha256, split,
+generation command) is embedded in each TSV's `#`-comment header.
+
+Source data [1] — Aksharantar (CC0)
+-----------------------------------
+
+Source: Aksharantar train split (train members only; the dev/test members of
+the dataset were never read, so neither file contains evaluation data).
 
 Dataset page: https://indicnlp.ai4bharat.org/aksharantar/
 Project/repository (code and models, MIT):
@@ -43,28 +62,88 @@ License declaration of the source (quoted from the paper's introduction):
 Footnote 3 (CC BY): https://creativecommons.org/licenses/by/4.0/
 Footnote 4 (CC0):   https://creativecommons.org/publicdomain/zero/1.0/
 
-Row-level license filter used when building the assets: only rows whose
-`source` field is one of the mined CC0 subsets — Wikidata, Samanantar,
+Row-level license filter used when building the assets: only Aksharantar rows
+whose `source` field is one of the mined CC0 subsets — Wikidata, Samanantar,
 IndicCorp — were accepted. Rows with `source = Dakshina` (imported
 third-party data under CC BY-SA 4.0), `source = AK-Freq` and other manually
 created rows (CC BY 4.0, and also evaluation-benchmark rows), and
 `source = Existing` (a compilation of prior transliteration corpora whose
-per-row licenses cannot be verified) were all excluded. Consequently no
-CC-BY, CC BY-SA, or unverifiable-license content is shipped inside these
-files, and share-alike obligations from Dakshina do not attach to them.
+per-row licenses cannot be verified) were all excluded.
 
-Attribution
------------
+Source data [2] — Dakshina v1.0 (CC BY-SA 4.0)
+----------------------------------------------
 
-CC0 imposes no attribution requirement, but crediting the source is fair and
-requested by the project:
+Source: the Dakshina v1.0 *word-lexicon train split only*:
 
-    Wisperlow romanization assets are derived from the Aksharantar
-    transliteration dataset (AI4Bharat), whose mined data is released
-    under CC0. https://indicnlp.ai4bharat.org/aksharantar/
+- `hi/lexicons/hi.translit.sampled.train.tsv` (44,204 pair rows)
+- `kn/lexicons/kn.translit.sampled.train.tsv` (50,624 pair rows)
 
-If you redistribute the assets, keeping this notice and the TSV provenance
-headers attached is the simplest way to satisfy both goals.
+Only the word-lexicon `*.train.tsv` files are used. The dev and test lexicons
+are refused at the builder's CLI and are never opened, so no evaluation data
+enters the asset. The full-sentence `romanized/` tree (which holds
+validation-derived sentences and their romanizations) is likewise never read.
+
+Dataset page: https://github.com/google-research-datasets/dakshina
+Archive: https://storage.googleapis.com/dakshina/dakshina_dataset_v1.0.tar
+Paper: Roark, Wolf-Sonkin, Kirov, Mielke, Johny, Demirşahin, and Hall,
+"Processing South Asian Languages Written in the Latin Script: the Dakshina
+Dataset", LREC 2020, pp. 2413-2423,
+https://www.aclweb.org/anthology/2020.lrec-1.294
+
+License declaration of the source (quoted from the dataset README):
+
+  "The dataset is licensed under CC BY-SA 4.0."
+
+License URI: https://creativecommons.org/licenses/by-sa/4.0/
+
+The Dakshina lexicon layout is `native<TAB>romanization<TAB>attestations`. The
+lexicons are partitioned by native-script word, so a word in the train lexicon
+never appears in the dev or test lexicons. There are 25,000 native word types
+in the Hindi and Kannada training lexicons.
+
+Attribution (CC BY-SA 4.0 §3(a))
+--------------------------------
+
+The asset is a modified combination of the two sources above. In line with the
+attribution and "indicate modifications" requirements of CC BY-SA 4.0:
+
+    The Hindi and Kannada romanization word-pair assets shipped by Wisperlow
+    are derived from and adapt:
+      (a) the Dakshina dataset (Roark et al. 2020,
+          https://github.com/google-research-datasets/dakshina), licensed
+          CC BY-SA 4.0; and
+      (b) the Aksharantar dataset (AI4Bharat IndicXlit,
+          https://indicnlp.ai4bharat.org/aksharantar/), whose mined data is
+          released under CC0 1.0.
+    The combined asset is distributed under CC BY-SA 4.0.
+
+Modifications
+-------------
+
+Starting from the sources' `(romanization, native word, count)` rows, the
+builder applies the following modifications. No sentence, context or
+raw-corpus text is retained; only word-level pairs are kept.
+
+- Aksharantar: only the train split is read; only rows from the CC0 mined
+  sources (Wikidata, Samanantar, IndicCorp) are kept; exact `(roman, native)`
+  pairs are aggregated by counting their rows.
+- Dakshina: only the train word-lexicon split is read; the `(native, roman,
+  attestations)` triples are lower-cased on the roman side, NFC-normalized on
+  both sides, and stripped of ZWJ/ZWNJ.
+- Both sources: strings are lower-cased to the ASCII `a-z` key alphabet on the
+  roman side and restricted to letters and combining marks of the target
+  script on the native side; URL/email/domain junk, control characters,
+  digits, punctuation, mixed-script words, over-long fields and malformed
+  rows are dropped.
+- Selection: all valid Dakshina train-lexicon pairs are placed first (capped
+  at 8 romanizations per native word), then Aksharantar mined pairs fill the
+  remaining budget, up to 100,000 pairs and 6,000,000 bytes per language.
+- Counts: the per-pair `count` column holds the positive attestation count of
+  that exact pair within its source. Counts from the two sources come from
+  different collection methods and are never summed or compared; on an
+  identical pair (not observed in the shipped files) the Dakshina count is
+  kept. Unmodified source files used as input are identified by sha256 in each
+  TSV header.
 
 Generation
 ----------
@@ -74,15 +153,19 @@ Generation command (values used for the committed files):
     python3 -I android/tools/indic/build_indic_pairs.py \
         --hi-zip hin.zip \
         --kn-zip kan.zip \
+        --hi-dakshina hi.translit.sampled.train.tsv \
+        --kn-dakshina kn.translit.sampled.train.tsv \
         --out-dir android/app/src/main/assets/indic \
         --max-pairs 100000 --max-bytes 6000000 --split train
 
 The zips are the Aksharantar per-language archives (aksharantar-hin.zip,
-aksharantar-kan.zip) from the dataset page. The builder is deterministic:
+aksharantar-kan.zip) from the Aksharantar dataset page; the Dakshina TSVs are
+the word-lexicon train files from
+`dakshina_dataset_v1.0.tar` (`<lang>/lexicons/`). The builder is deterministic:
 the same inputs and flags produce byte-identical TSVs.
 
-CC0 1.0 legal text
-------------------
+CC0 1.0 legal text (applies to the Aksharantar-derived rows)
+------------------------------------------------------------
 
 Creative Commons Legal Code
 
