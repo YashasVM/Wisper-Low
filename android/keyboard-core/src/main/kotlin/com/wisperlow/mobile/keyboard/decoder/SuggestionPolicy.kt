@@ -43,6 +43,14 @@ data class PolicyParams(
     /** Literal is a real word, MODEST then AGGRESSIVE: much harder to replace. */
     val knownLiteralMargin: Float = 7.0f,
     val knownLiteralAggressiveMargin: Float = 5.0f,
+    /** Same-normalized surface restoration (apostrophe/case) only needs this much lead. */
+    val variantMargin: Float = 3.5f,
+    /** ln unigram score below which a dictionary literal counts as rare for typo correction. */
+    val rareLiteralScore: Float = 7.0f,
+    /** ln ratio a rare literal's correction must exceed. */
+    val rareLiteralRatio: Float = 3.9f,
+    /** ln unigram score at/above which a literal keeps the middle slot over completions. */
+    val commonLiteralScore: Float = 9.5f,
     /** Three letters leave little evidence, so correcting them takes extra margin. */
     val shortWordExtraMargin: Float = 1.0f,
 )
@@ -71,8 +79,12 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
             .asSequence()
             .filter {
                 it.candidate.kind != CandidateKind.LITERAL &&
-                    !it.word.equals(typed, ignoreCase = true) &&
-                    !(auto != null && it.word.equals(auto, ignoreCase = true))
+                    !(auto != null && it.word.equals(auto, ignoreCase = true)) &&
+                    run {
+                        val same = it.word.equals(typed, ignoreCase = true)
+                        val caseVariantAllowed = typed.all { c -> !c.isLetter() || c.isLowerCase() } && it.word.any { c -> c.isUpperCase() }
+                        !(same && !caseVariantAllowed)
+                    }
             }
             .sortedByDescending { it.candidate.score }
             .distinctBy { it.word.lowercase() }
@@ -84,7 +96,7 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
             facts.literalKnown -> listOfNotNull(others.getOrNull(0), typed, others.getOrNull(1))
             else -> listOf(typed) + others.take(2)
         }
-        return Suggestions(words.take(slots), autoCorrect = auto)
+        return Suggestions(words.take(slots.coerceAtLeast(0)), autoCorrect = auto)
     }
 
     /** The reading that is exactly what was typed: a LITERAL candidate, or an EXACT one spelled so. */
@@ -106,8 +118,17 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
         if (facts.strength == CorrectionStrength.OFF || facts.userTrusted) return false
         if (isProtected(typed)) return false
         val margin = target.candidate.score - (literal?.candidate?.score ?: return false)
-        if (typed.length <= 2 && !shortWordPasses(typed, target, margin)) return false
-        if (margin <= requiredMargin(typed, facts)) return false
+        val variant = target.candidate.kind == CandidateKind.EXACT && Lexicon.key(target.candidate.word) == Lexicon.key(typed)
+        if (variant) {
+            val key = Lexicon.key(typed)
+            if (key in AMBIGUOUS) return false
+        }
+        if (typed.length <= 2 && !variant && !shortWordPasses(typed, target, margin)) return false
+        val required = when {
+            variant -> params.variantMargin
+            else -> requiredMargin(typed, facts)
+        }
+        if (margin <= required) return false
         if (rivalNear(target, shown, typed)) return false
         if (shown.any { it.candidate.kind == CandidateKind.COMPLETION && it.candidate.score > target.candidate.score + params.completionBlockMargin }) {
             return false
@@ -153,4 +174,8 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
         }
         return false
     }
+    companion object {
+        private val AMBIGUOUS = setOf("its", "well", "were", "hell", "shell", "ill", "lets", "shed", "wed", "id", "hed", "whos", "cause")
+    }
+
 }

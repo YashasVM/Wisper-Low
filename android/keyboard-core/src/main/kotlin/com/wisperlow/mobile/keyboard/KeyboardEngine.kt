@@ -20,41 +20,8 @@ import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import com.wisperlow.mobile.keyboard.spatial.SpatialModel
 import com.wisperlow.mobile.keyboard.spatial.SpatialParams
 
-/**
- * What [TypingSession] and the keyboard ask a word source for: suggestions, predictions
- * and the words this user has taught. The old [Lexicon] and the new [KeyboardEngine] both
- * offer exactly these, so the app can switch engines without touching the surrounding code.
- */
-interface WordEngine {
-    /** Suggestions for [typed]; [touches] holds where each character was pressed, when known. */
-    fun suggest(typed: String, previous: String? = null, max: Int = 3, touches: List<Touch?>? = null): Suggestions
-
-    /** Likely next words after [previous]. */
-    fun predict(previous: String?, max: Int = 3): List<String>
-
-    /** True when [word] is in the word list or the user has made it theirs. */
-    fun isKnown(word: String): Boolean
-
-    /** Counts a word the user committed, after [previous] if there was one. */
-    fun learn(word: String, previous: String?)
-
-    /** The user rewrote [typed] as [intended] by hand; remember it as a fix. */
-    fun learnFix(typed: String, intended: String)
-
-    /** The user undid a correction: treat [word] as theirs from now on. */
-    fun trust(word: String)
-
-    /** True when [word] came from the user rather than the word list. */
-    fun isLearned(word: String): Boolean
-
-    /** Forgets one learned word and anything learned about it. */
-    fun forget(word: String)
-
-    /** Learned words, word pairs and fixes, for saving. */
-    fun exportLearned(): Lexicon.LearnedData
-
-    fun importLearned(data: Lexicon.LearnedData)
-}
+/** Type alias so the shared [WordEngine] interface can name [Lexicon.LearnedData]. */
+typealias LearnedData = Lexicon.LearnedData
 
 /**
  * The new typing engine: a noisy-channel decoder over the word list, wrapped in the same
@@ -85,6 +52,7 @@ class KeyboardEngine(
     private val sentenceStart = vocabulary.id(Vocabulary.SENTENCE_START)
 
     override fun suggest(typed: String, previous: String?, max: Int, touches: List<Touch?>?): Suggestions {
+        if (max <= 0) return Suggestions.None
         if (typed.isEmpty()) return Suggestions.None
         val key = Vocabulary.keyOf(typed)
         if (key.isEmpty() || typed.any { !it.isLetter() && !Lexicon.isApostrophe(it) }) {
@@ -102,25 +70,44 @@ class KeyboardEngine(
         val personal = user.suggest(typed, previous, max, touches)
         val ranking = ArrayList<Candidate>(decoded.size + personal.words.size + 1)
         // A fix the user taught by hand before beats anything the word list suggests.
-        personal.autoCorrect?.let {
-            ranking += Candidate(Vocabulary.UNKNOWN, it, TAUGHT_FIX_SCORE, 0f, 0f, CandidateKind.CORRECTION, 1)
+        // Real dictionary words need two lessons before a taught fix applies.
+        val taughtCount = user.exportLearned().fixes.firstOrNull { Lexicon.key(it.first) == key }?.third ?: 0
+        val taughtAllowed = taughtCount >= 2 || vocabulary.idsForKey(key).isEmpty()
+        if (taughtAllowed) {
+            personal.autoCorrect?.let {
+                ranking += Candidate(Vocabulary.UNKNOWN, it, TAUGHT_FIX_SCORE, 0f, 0f, CandidateKind.CORRECTION, 1)
+            }
         }
         for ((rank, word) in personal.words.withIndex()) {
             if (word.equals(typed, ignoreCase = true)) continue
+            if (!taughtAllowed && personal.autoCorrect != null && word.equals(personal.autoCorrect, ignoreCase = true)) continue
             ranking += Candidate(Vocabulary.UNKNOWN, word, USER_BASE - rank, 0f, 0f, kindOf(key, word), 0)
         }
         ranking += decoded
 
-        val facts = TypedFacts(literalKnown = vocabulary.idsForKey(key).isNotEmpty(), userTrusted = user.isKnown(typed))
-        val decided = policy.decide(typed, ranking, facts, max)
+        val literalIds = vocabulary.idsForKey(key)
+        val literalScore = if (literalIds.isNotEmpty()) model.unigramLogProb(literalIds.first()) else Float.NEGATIVE_INFINITY
+        // Rare dictionary literals (misspellings like "helo") are treated as unknown so the
+        // common correction can replace them; common words keep their protection.
+        val literalKnown = literalIds.isNotEmpty() && literalScore > 7.0f
+        val facts = TypedFacts(literalKnown = literalKnown, userTrusted = user.isKnown(typed))
+        val decided = policy.decide(typed, ranking, facts, max.coerceAtLeast(0))
         return if (key in SLANG) decided.copy(autoCorrect = null) else decided
     }
 
-    override fun predict(previous: String?, max: Int): List<String> = model
-        .predict(contextOf(previous), max)
-        .map { vocabulary.surface(it.id) }
-        .filter { it != Vocabulary.SENTENCE_START }
-        .take(max)
+    override fun predict(previous: String?, max: Int): List<String> {
+        if (max <= 0) return emptyList()
+        val learned = user.predict(previous, max)
+        if (learned.isNotEmpty()) return learned.take(max)
+        // A learned word that has been forgotten must not leave model-only predictions behind.
+        if (previous != null && vocabulary.id(previous) == Vocabulary.UNKNOWN && !user.isKnown(previous)) {
+            return emptyList()
+        }
+        return model.predict(contextOf(previous), max)
+            .map { vocabulary.surface(it.id) }
+            .filter { it != Vocabulary.SENTENCE_START }
+            .take(max)
+    }
 
     override fun isKnown(word: String): Boolean {
         val key = Vocabulary.keyOf(word)
@@ -129,18 +116,23 @@ class KeyboardEngine(
         return vocabulary.idsForKey(key).any { vocabulary.surface(it).equals(word, ignoreCase = true) }
     }
 
+    @Synchronized
     override fun learn(word: String, previous: String?) = user.learn(word, previous)
 
+    @Synchronized
     override fun learnFix(typed: String, intended: String) = user.learnFix(typed, intended)
 
+    @Synchronized
     override fun trust(word: String) = user.trust(word)
 
     override fun isLearned(word: String): Boolean = user.isLearned(word)
 
+    @Synchronized
     override fun forget(word: String) = user.forget(word)
 
     override fun exportLearned(): Lexicon.LearnedData = user.exportLearned()
 
+    @Synchronized
     override fun importLearned(data: Lexicon.LearnedData) = user.importLearned(data)
 
     /** The letter a tap types, corrected by touch position and what the model expects next. */
@@ -203,6 +195,7 @@ class KeyboardEngine(
             "ur", "gonna", "wanna", "gotta", "ok", "okay", "ya", "yea", "yep", "nope", "haha", "hahaha", "hmm", "ugh", "wtf",
             "ty", "np", "rn", "irl", "fyi", "asap", "af", "bc", "cuz", "tho", "dm", "dms", "lmk", "hbu", "wyd", "jk", "nvm",
             "tmrw", "bday", "xd", "fr", "istg", "ikr", "gm", "gn", "ttyl", "yk", "ig", "w", "l",
+            "lowkey", "idc", "rizz", "sus", "bruh", "tryna", "delulu", "bestie",
         )
 
         /**
