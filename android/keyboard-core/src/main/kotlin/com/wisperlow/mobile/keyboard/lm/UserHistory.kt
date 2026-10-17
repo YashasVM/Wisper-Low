@@ -1,6 +1,7 @@
 package com.wisperlow.mobile.keyboard.lm
 
 import java.io.File
+import java.text.Normalizer
 import kotlin.math.pow
 
 /**
@@ -36,15 +37,20 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
 
     /** Counts one committed word, after [previous] if there was one. */
     fun learn(word: String, previous: String?) {
-        val key = normalize(word) ?: return
+        val cleaned = nfc(word)
+        val key = normalize(cleaned) ?: return
         val prevKey = previous?.let(::normalize)
         synchronized(lock) {
             decay()
             val created = key !in words
-            val entry = words.getOrPut(key) { Word(key, word, 0.0, nextSeq++) }
+            val entry = words.getOrPut(key) { Word(key, cleaned, 0.0, nextSeq++) }
             if (created) revision++
             // Keep the user's spelling of names and brands ("iPhone", "Ngozi") once they use it.
-            if (word.any { it.isUpperCase() }) entry.surface = word
+            if (cleaned.any { it.isUpperCase() } && entry.surface != cleaned) {
+                entry.surface = cleaned
+                // The spelling is part of what a vocabulary holds, so caches must rebuild.
+                revision++
+            }
             entry.count += 1.0
             wordTotal += 1.0
             if (prevKey != null) {
@@ -60,7 +66,7 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
 
     /** Forgets one word: no longer counted, and no longer part of any pair. */
     fun forget(word: String) {
-        val key = Vocabulary.keyOf(word)
+        val key = keyOf(word)
         synchronized(lock) {
             decay()
             if (removeWord(key)) countsRevision++
@@ -73,19 +79,19 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
     /** The user's decayed count for [word]. */
     fun count(word: String): Double = synchronized(lock) {
         decay()
-        words[Vocabulary.keyOf(word)]?.count ?: 0.0
+        words[keyOf(word)]?.count ?: 0.0
     }
 
     /** The user's decayed count for the pair [previous] then [word]. */
     fun pairCount(previous: String, word: String): Double = synchronized(lock) {
         decay()
-        pairs[Vocabulary.keyOf(previous)]?.links?.get(Vocabulary.keyOf(word))?.count ?: 0.0
+        pairs[keyOf(previous)]?.links?.get(keyOf(word))?.count ?: 0.0
     }
 
     /** The user's decayed bigram evidence after [previous]: the denominator of P(next | previous). */
     fun evidenceAfter(previous: String): Double = synchronized(lock) {
         decay()
-        pairs[Vocabulary.keyOf(previous)]?.total ?: 0.0
+        pairs[keyOf(previous)]?.total ?: 0.0
     }
 
     /** All the user's decayed word evidence: the denominator of their unigram estimate. */
@@ -98,7 +104,7 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
     fun topAfter(previous: String, max: Int): List<Pair<String, Double>> {
         synchronized(lock) {
             decay()
-            val head = pairs[Vocabulary.keyOf(previous)]
+            val head = pairs[keyOf(previous)]
             if (head != null) {
                 return head.links.entries.sortedByDescending { it.value.count }.take(max).mapNotNull { (key, link) ->
                     words[key]?.let { it.surface to link.count }
@@ -147,15 +153,16 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
                 parts.size == 2 && parts[0] == "t" -> stored = parts[1].toLongOrNull() ?: -1L
                 parts.size == 3 && parts[0] == "w" -> {
                     val count = parts[2].toDoubleOrNull() ?: return@forEachLine
-                    val key = Vocabulary.keyOf(parts[1])
+                    val surface = nfc(parts[1])
+                    val key = Vocabulary.keyOf(surface)
                     if (key.isEmpty() || count <= 0.0) return@forEachLine
                     val existing = loadedWords[key]
-                    if (existing == null) loadedWords[key] = Word(key, parts[1], count, seq++)
+                    if (existing == null) loadedWords[key] = Word(key, surface, count, seq++)
                     else if (count > existing.count) existing.count = count
                 }
                 parts.size == 4 && parts[0] == "p" -> {
                     val count = parts[3].toDoubleOrNull() ?: return@forEachLine
-                    if (count > 0.0) rawLinks += Triple(Vocabulary.keyOf(parts[1]), Vocabulary.keyOf(parts[2]), count)
+                    if (count > 0.0) rawLinks += Triple(keyOf(parts[1]), keyOf(parts[2]), count)
                 }
             }
         }
@@ -186,12 +193,40 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
 
     /**
      * The word's key when it is something this history should remember, and null for
-     * anything else. Same rule as the old Lexicon: a word of letters and apostrophes,
-     * never the sentence mark. Keeps junk, URLs and emoji out of the vocabulary.
+     * anything else. Letters and combining marks, so languages written with marks
+     * (Hindi, Kannada) learn like Latin words do; the old apostrophe rule stays. A word
+     * must open with a letter, which keeps leading-mark junk, URLs, digits, control
+     * characters and emoji out.
      */
     private fun normalize(word: String): String? {
-        if (word.isEmpty() || word.any { !it.isLetter() && it != '\'' && it != '’' }) return null
-        return Vocabulary.keyOf(word).takeIf { it.isNotEmpty() }
+        val cleaned = nfc(word)
+        var letters = 0
+        var i = 0
+        while (i < cleaned.length) {
+            val cp = cleaned.codePointAt(i)
+            i += Character.charCount(cp)
+            when {
+                Character.isLetter(cp) -> letters++
+                isMark(cp) -> if (letters == 0) return null
+                cp == '\''.code || cp == '’'.code -> {}
+                else -> return null
+            }
+        }
+        if (letters == 0) return null
+        return Vocabulary.keyOf(cleaned).takeIf { it.isNotEmpty() }
+    }
+
+    /** The lookup key for any word: NFC first, so composed and decomposed spellings match. */
+    private fun keyOf(word: String): String = Vocabulary.keyOf(nfc(word))
+
+    private fun nfc(word: String): String =
+        if (Normalizer.isNormalized(word, Normalizer.Form.NFC)) word else Normalizer.normalize(word, Normalizer.Form.NFC)
+
+    private fun isMark(cp: Int): Boolean {
+        val type = Character.getType(cp).toInt()
+        return type == Character.NON_SPACING_MARK.toInt() ||
+            type == Character.COMBINING_SPACING_MARK.toInt() ||
+            type == Character.ENCLOSING_MARK.toInt()
     }
 
     /** Halves every count once per [HALF_LIFE] since the last update; runs under the lock. */
@@ -210,24 +245,34 @@ class UserHistory(private val clock: () -> Long = System::currentTimeMillis) {
         lastUpdate += halvings * HALF_LIFE_MS
     }
 
-    /** Drops a word and every pair it takes part in; true when anything changed. */
+    /**
+     * Drops a word and every pair it takes part in, learned as an output or only ever
+     * recorded as a context; true when anything changed.
+     */
     private fun removeWord(key: String): Boolean {
-        val word = words.remove(key) ?: return false
-        revision++
-        wordTotal -= word.count
+        val word = words.remove(key)
+        var removed = word != null
+        if (word != null) {
+            revision++
+            wordTotal -= word.count
+        }
         val head = pairs.remove(key)
-        if (head != null) linkCount -= head.links.size
+        if (head != null) {
+            linkCount -= head.links.size
+            removed = true
+        }
         val empty = ArrayList<String>()
         for ((prevKey, other) in pairs) {
             val link = other.links.remove(key)
             if (link != null) {
                 other.total -= link.count
                 linkCount--
+                removed = true
             }
             if (other.links.isEmpty()) empty += prevKey
         }
         empty.forEach { pairs.remove(it) }
-        return true
+        return removed
     }
 
     /** Keeps the tables bounded, evicting the weakest entries down to a low-water mark. */

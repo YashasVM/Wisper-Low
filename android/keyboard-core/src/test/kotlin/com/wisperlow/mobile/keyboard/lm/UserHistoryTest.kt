@@ -1,7 +1,9 @@
 package com.wisperlow.mobile.keyboard.lm
 
 import java.io.File
+import java.text.Normalizer
 import kotlin.math.exp
+import kotlin.math.ln
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -155,6 +157,75 @@ class UserHistoryTest {
         assertNotSame(built, rebuilt)
         assertEquals(1, rebuilt.id("zorp"))
         assertEquals("hello", rebuilt.surface(0))
+    }
+
+    @Test
+    fun `forgetting a context word drops the pairs recorded after it`() {
+        // "hello" was never learned as an output, only recorded as a context.
+        history.learn("world", "hello")
+        history.learn("world", "hello")
+        assertEquals(2.0, history.pairCount("hello", "world"), 0.0)
+        history.forget("hello")
+        assertEquals(0.0, history.pairCount("hello", "world"), 0.0)
+        assertEquals(0.0, history.evidenceAfter("hello"), 0.0)
+        assertEquals(2.0, history.count("world"), 0.0)
+    }
+
+    @Test
+    fun `a new spelling of a learned word reaches the vocabulary`() {
+        val base = UnigramModel(Vocabulary(listOf("hello")), longArrayOf(10))
+        val model = InterpolatedModel(base, history)
+        history.learn("iphone", null)
+        assertEquals(1, model.vocabulary.id("iphone"))
+        history.learn("iPhone", null)
+        val vocab = model.vocabulary
+        assertEquals("iPhone", vocab.surface(1))
+        assertEquals(1, vocab.id("iPhone"))
+        val next = model.predict(intArrayOf(0), 5).map { vocab.surface(it.id) }
+        assertTrue(next.toString(), "iPhone" in next)
+    }
+
+    @Test
+    fun `learns Hindi and Kannada and keeps them through a save`() {
+        history.learn("नमस्ते", null)
+        history.learn("नमस्ते", null)
+        assertTrue(history.isTrusted("नमस्ते"))
+        history.learn("ನಮಸ್ಕಾರ", "नमस्ते")
+        assertEquals(1.0, history.pairCount("नमस्ते", "ನಮಸ್ಕಾರ"), 0.0)
+        val file = tempFile()
+        history.write(file)
+        val loaded = UserHistory { now }
+        loaded.read(file)
+        assertTrue(loaded.isTrusted("नमस्ते"))
+        assertEquals(1.0, loaded.count("ನಮಸ್ಕಾರ"), 0.0)
+        assertEquals(1.0, loaded.pairCount("नमस्ते", "ನಮಸ್ಕಾರ"), 0.0)
+        assertEquals(history.words(), loaded.words())
+    }
+
+    @Test
+    fun `composes Unicode forms but rejects junk`() {
+        // "क़" typed with a separate nukta mark learns, and the composed spelling finds it.
+        history.learn(Normalizer.normalize("क़", Normalizer.Form.NFD), null)
+        assertEquals(1.0, history.count("क़"), 0.0)
+        for (junk in listOf("ेश", "https://example.com/path", "ok" + Char(0) + "no", "👍", "🙏🏽", "123", "")) {
+            history.learn(junk, null)
+        }
+        assertEquals(1.0, history.totalCount(), 0.0)
+        assertEquals(setOf("क़"), history.words().keys)
+    }
+
+    @Test
+    fun `a recorded pair weighs even when its context was never learned`() {
+        val base = UnigramModel(Vocabulary(listOf("hello", "world")), longArrayOf(5, 4))
+        val model = InterpolatedModel(base, history)
+        history.learn("world", "hello")
+        history.learn("world", "hello")
+        assertEquals(0.0, history.count("hello"), 0.0)
+        // Two pairs: lambda = 2 / (2 + 8) and P_user(world | hello) = 1.
+        val expected = ln(0.8 * 4.0 / 9.0 + 0.2)
+        assertEquals(expected, model.logProb(1, intArrayOf(0)).toDouble(), 1e-4)
+        // The user's habit promotes "world" over the base's more frequent "hello".
+        assertEquals(listOf(1, 0), model.predict(intArrayOf(0), 5).map { it.id })
     }
 
     private fun sumOver(model: LanguageModel, context: IntArray): Double =

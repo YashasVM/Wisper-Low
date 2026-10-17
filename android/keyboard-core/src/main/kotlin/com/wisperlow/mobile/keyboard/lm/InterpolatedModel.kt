@@ -59,7 +59,9 @@ class InterpolatedModel(private val base: LanguageModel, private val user: UserH
     /** How much the user's evidence for this context outweighs the base: n / (n + 8). */
     private fun lambdaFor(vocab: Vocabulary, context: IntArray): Float {
         val previous = lastSurface(vocab, context) ?: return 0f
-        val n = user.count(previous)
+        // Pairs recorded after a word weigh as evidence for the context even when the word
+        // was itself never learned as an output of this history.
+        val n = maxOf(user.count(previous), user.evidenceAfter(previous))
         return (n / (n + EVIDENCE_HALF)).toFloat()
     }
 
