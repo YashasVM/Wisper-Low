@@ -1,5 +1,7 @@
 package com.wisperlow.mobile.keyboard.eval
 
+import com.wisperlow.mobile.keyboard.KeyKind
+
 /**
  * Executes one planned sentence against an engine, in one of two user modes. Both
  * modes count keystrokes the same way (one per tap, typed popup character or pick);
@@ -8,10 +10,21 @@ package com.wisperlow.mobile.keyboard.eval
  * revert slot right after a wrong autocorrection. Predictions (the strip before a
  * word starts) are measured for metric (c) but never picked, so strip-completion
  * savings and next-word quality stay separate numbers.
+ *
+ * Scoring is per intended token, not by parsing the finished field position by
+ * position. A tap that misses to a neighbouring key can change how many words reach
+ * the field, and positional comparison silently shifts every word after that; here
+ * each token records exactly what it added to the field when it was committed. A
+ * word that never reaches the field counts as a failure, and the raw literal the
+ * user typed is recovered with a dictionary-free control (see [rawLiteral]).
  */
 object Simulator {
 
-    /** One sentence's outcome. Word outcomes line up with the intended token list. */
+    /**
+     * One sentence's outcome. Word outcomes line up with the intended token list:
+     * [cleanWords] + [noisyWords] == [intendedWords], and [cleanFalseCorrections]
+     * counts only words the user typed correctly that the engine changed anyway.
+     */
     class SentenceRun(
         val keystrokes: Int,
         val picks: Int,
@@ -22,6 +35,8 @@ object Simulator {
         val cleanFalseCorrections: Int,
         val noisyWords: Int,
         val noisyRecovered: Int,
+        val touchMissWords: Int,
+        val planWrongWords: Int,
         val predictionsSeen: Int,
         val predictionTop1: Int,
         val predictionTop3: Int,
@@ -33,12 +48,13 @@ object Simulator {
      * no-strip user is defined by ignoring it.
      */
     fun run(
-        engine: BaselineEngine,
+        engine: EngineUnderTest,
         planned: List<PlannedToken>,
         intended: List<Tok>,
         stripUser: Boolean,
         latencies: MutableList<Long>?,
     ): SentenceRun {
+        require(planned.size == intended.size) { "plan and intended tokens must line up" }
         engine.reset()
         var keystrokes = 0
         var picks = 0
@@ -49,10 +65,14 @@ object Simulator {
         var cleanFalseCorrections = 0
         var noisyWords = 0
         var noisyRecovered = 0
+        var touchMissWords = 0
+        var planWrongWords = 0
         var predictionsSeen = 0
         var predictionTop1 = 0
         var predictionTop3 = 0
 
+        // The field text before each token; the diff after it names this token's word.
+        var before = engine.text()
         planned.forEachIndexed { i, p ->
             val tok = intended[i]
             if (!tok.hasWord) return@forEachIndexed
@@ -70,12 +90,14 @@ object Simulator {
                 }
             }
 
+            // The dictionary-free literal the user's events actually produce. A Gaussian
+            // mislanding changes this, so the word is classified by the touch, not by the
+            // plan's intent, and later only the engine's own commit is judged.
+            val raw = StringBuilder()
             var picked = false
             for (event in p.events) {
-                when (event) {
-                    is KeyEvent.Tap -> engine.tap(event.x, event.y)
-                    is KeyEvent.Typed -> engine.type(event.text)
-                }
+                raw.append(rawChar(event))
+                dispatch(engine, event)
                 keystrokes++
                 if (stripUser && !picked && engine.composing.isNotEmpty()) {
                     val strip = engine.strip()
@@ -94,10 +116,7 @@ object Simulator {
             if (!picked) {
                 // Punctuation and the word-ending space, exactly as the typist aims them.
                 for (event in p.punctEvents) {
-                    when (event) {
-                        is KeyEvent.Tap -> engine.tap(event.x, event.y)
-                        is KeyEvent.Typed -> engine.type(event.text)
-                    }
+                    dispatch(engine, event)
                     keystrokes++
                 }
             }
@@ -120,28 +139,62 @@ object Simulator {
                     }
                 }
             }
-        }
 
-        // Score the finished field against the intended tokens, position by position.
-        val out = engine.text().trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        planned.forEachIndexed { i, p ->
-            val tok = intended[i]
-            if (!tok.hasWord) return@forEachIndexed
-            val committed = out.getOrNull(i) ?: return@forEachIndexed
-            if (normKey(committed) == normKey(tok.word)) intendedCorrect++
+            // Exactly what this token added to the field, so extra or missing words from
+            // earlier taps never shift this word's comparison.
+            val after = engine.text()
+            val committed = addedWord(before, after)
+            before = after
+
+            val correct = normKey(committed) == tok.key
+            if (correct) intendedCorrect++
             if (normExact(committed) == normExact(tok.word)) intendedExact++
-            if (!p.noisy) {
+            if (normKey(raw.toString()) == tok.key) {
                 cleanWords++
-                if (normKey(committed) != normKey(tok.word)) cleanFalseCorrections++
+                if (!correct) cleanFalseCorrections++
             } else {
                 noisyWords++
-                if (normKey(committed) == normKey(tok.word)) noisyRecovered++
+                if (correct) noisyRecovered++
+                if (normKey(raw.toString()) != normKey(p.typed)) touchMissWords++
+                if (p.noisy) planWrongWords++
             }
         }
         return SentenceRun(
             keystrokes, picks, intendedWords, intendedCorrect, intendedExact,
             cleanWords, cleanFalseCorrections, noisyWords, noisyRecovered,
+            touchMissWords, planWrongWords,
             predictionsSeen, predictionTop1, predictionTop3,
         )
+    }
+
+    private fun dispatch(engine: EngineUnderTest, event: KeyEvent) {
+        when (event) {
+            is KeyEvent.Tap -> engine.tap(event.x, event.y)
+            is KeyEvent.Typed -> engine.type(event.text)
+        }
+    }
+
+    /**
+     * The literal one planned event puts into the word, with no dictionary involved:
+     * precise text as typed, and a tap as the character of the key the board's own hit
+     * test gives it. This is the clean typed-input control probe — it is how a wrong
+     * key press is seen as a wrong key press instead of as a false autocorrection.
+     */
+    fun rawChar(event: KeyEvent): String = when (event) {
+        is KeyEvent.Typed -> event.text
+        is KeyEvent.Tap -> EvalBoard.hit(event.x, event.y)?.takeIf { it.kind == KeyKind.CHAR }?.text ?: ""
+    }
+
+    /**
+     * The word [after] added over [before]: normally the field only grows, so the delta
+     * is the word this token typed. Punctuation and a trailing space are trimmed the way
+     * [normKey] trims the intended word. An empty result means the token never reached
+     * the field (an omission) and is scored as a failure by the caller.
+     */
+    private fun addedWord(before: String, after: String): String {
+        val delta = if (after.startsWith(before)) after.substring(before.length) else after
+        val trimmed = delta.trimEnd()
+        if (trimmed.isEmpty()) return ""
+        return trimmed.split(Regex("\\s+")).last()
     }
 }

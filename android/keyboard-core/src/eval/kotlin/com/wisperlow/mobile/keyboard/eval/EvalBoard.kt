@@ -1,11 +1,15 @@
 package com.wisperlow.mobile.keyboard.eval
 
 import com.wisperlow.mobile.keyboard.FieldKind
+import com.wisperlow.mobile.keyboard.Key
 import com.wisperlow.mobile.keyboard.KeyKind
 import com.wisperlow.mobile.keyboard.KeyboardGeometry
 import com.wisperlow.mobile.keyboard.KeyboardLayout
 import com.wisperlow.mobile.keyboard.Page
 import com.wisperlow.mobile.keyboard.PlacedKey
+import com.wisperlow.mobile.keyboard.spatial.KeyCenter
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * The phone board the simulator types on: the 411 dp phone at 2.625 px/dp, with the
@@ -33,4 +37,26 @@ object EvalBoard {
         .associateBy { it.key.text[0].lowercaseChar() }
 
     val space: PlacedKey = placed.first { it.key.kind == KeyKind.SPACE }
+
+    /**
+     * Canonical letter-key centres in key units, the grid the [KeyboardEngine]'s spatial
+     * model is built over. This is the same conversion [KeyboardGeometry.letterCenters]
+     * does for the real board, so the eval engine sees the coordinates the IME feeds it.
+     */
+    val letterCenters: List<KeyCenter> = KeyboardGeometry.letterCenters(placed, units)
+
+    /** Letter-key centres by lowercase character, for the resolver's "landed" argument. */
+    val centerByChar: Map<Char, KeyCenter> = letterCenters.associateBy { it.char }
+
+    /**
+     * KeyArea's hit test, unchanged: the row the tap fell in, the key under it, else the
+     * nearest centre in that row. Shared by every adapter and by the simulator's raw
+     * typed-input control probe, so all three resolve a tap exactly the way the app does.
+     */
+    fun hit(x: Float, y: Float): Key? {
+        if (placed.isEmpty()) return null
+        val row = (y / rowHeight).toInt().coerceIn(0, rows.lastIndex)
+        val inRow = placed.filter { (it.top / rowHeight).roundToInt() == row }
+        return (inRow.firstOrNull { x >= it.left && x < it.right } ?: inRow.minByOrNull { abs(it.centerX - x) })?.key
+    }
 }
