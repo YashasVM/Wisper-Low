@@ -180,10 +180,17 @@ class NgramModel private constructor(
     companion object {
         private const val CODEBOOK_BYTES = 256 * 4
 
+        /** Word ids are stored as u16, so the writer caps the vocabulary at this size. */
+        private const val MAX_VOCABULARY = 0xFFFF
+
         /**
          * Loads a model from [buffer], which must be positioned at the start of the
          * format. The buffer's byte order is set to little-endian; all reads are
          * absolute from the entry position, so the position may move afterwards.
+         *
+         * A truncated or corrupt file fails here with [IllegalArgumentException] rather
+         * than a later [java.nio.BufferUnderflowException] or an offset computed from a
+         * wrapped count, so callers get one clear failure mode for bad bytes.
          */
         fun load(buffer: ByteBuffer): NgramModel {
             val buf = buffer.order(ByteOrder.LITTLE_ENDIAN)
@@ -196,13 +203,34 @@ class NgramModel private constructor(
             val v = buf.int
             val b = buf.int
             val t = buf.int
-            require(v >= 0 && b >= 0 && t >= 0) { "negative counts in header" }
+            if (v < 0 || b < 0 || t < 0) throw IllegalArgumentException("negative counts in header: $v/$b/$t")
+            if (v > MAX_VOCABULARY) {
+                throw IllegalArgumentException("WLM1 vocabulary $v exceeds the u16 id limit $MAX_VOCABULARY")
+            }
+            // Each word needs at least its u16 length prefix; check before allocating.
+            if (v > buf.remaining() / 2) {
+                throw IllegalArgumentException("truncated WLM1 model: $v words cannot fit in ${buf.remaining()} bytes")
+            }
             val surfaces = ArrayList<String>(v)
             repeat(v) {
+                if (buf.remaining() < 2) throw IllegalArgumentException("truncated WLM1 vocabulary at word $it")
                 val len = buf.short.toInt() and 0xFFFF
+                if (buf.remaining() < len) {
+                    throw IllegalArgumentException("truncated WLM1 vocabulary: word $it needs $len bytes, has ${buf.remaining()}")
+                }
                 val bytes = ByteArray(len)
                 buf.get(bytes)
                 surfaces.add(String(bytes, Charsets.UTF_8))
+            }
+            // The fixed-size sections after the vocabulary must all be present. Long math
+            // throughout (no `b + 1` in Int) so a corrupt header cannot wrap a count and
+            // hide a truncation.
+            val needed = 5L * CODEBOOK_BYTES +
+                2L * v + 2L * b + t + 4L * v + 4L + 2L * b + 4L * b + 4L + 2L * t
+            if (buf.remaining().toLong() < needed) {
+                throw IllegalArgumentException(
+                    "truncated WLM1 model: needs $needed bytes after the vocabulary, has ${buf.remaining()}",
+                )
             }
             return NgramModel(Vocabulary(surfaces), buf, base, v, b, t, buf.position() - base)
         }
