@@ -33,8 +33,12 @@ exits non-zero when anything is wrong rather than shipping an unverifiable model
 /** Fixed seed: identical counts and flags give an identical file, sample, SHA-256 and report. */
 private const val SAMPLE_SEED = 20261017L
 
-/** A quantized model drifting past this many nats on the sample counts as unverifiable. */
-private const val FAIL_MAX_QUANTIZATION_NATS = 1.0f
+/**
+ * Gate bound on the sample's max |delta logprob|: the audited en-chat-v1 artifact measures
+ * 0.0527 nats, so 0.1 allows the measured quantization error while rejecting larger drift.
+ * A model over the bound is not published.
+ */
+private const val FAIL_MAX_QUANTIZATION_NATS = 0.1f
 
 /** Contexts whose top-5 prediction lists are compared against the reference model. */
 private const val DISPLAY_CONTEXTS = 12
@@ -68,7 +72,8 @@ private data class Verification(
     val meanAbsErrorNats: Float,
     val top5ExactAgreements: Int,
     val predictContexts: Int,
-    val unigramMassError: Double,
+    val referenceUnigramMass: Double,
+    val loadedUnigramMass: Double,
     val predictionLines: List<String>,
 )
 
@@ -112,20 +117,32 @@ private fun run(argv: Array<String>, started: Long) {
     checkTables(tables, options)
     val afterEstimate = System.nanoTime()
 
-    progress("writing ${options.outFile} atomically")
-    writeAtomically(options.outFile, tables)
+    // The candidate bytes are written but NOT published until verification and the gate
+    // pass, so a failed compile never overwrites the previous model and a crash never
+    // leaves a half-written output.
+    progress("writing candidate for ${options.outFile}")
+    val candidate = writeCandidate(options.outFile, tables)
     val afterWrite = System.nanoTime()
-
-    progress("verifying the written file against the reference tables")
-    val verification = verify(options.outFile, tables)
-    val afterVerify = System.nanoTime()
-
-    printReport(options, counts, tables, verification, started, afterRead, afterEstimate, afterWrite, afterVerify)
-    if (verification.maxAbsErrorNats > FAIL_MAX_QUANTIZATION_NATS) {
-        throw CompilerException(
-            "quantization error ${f(verification.maxAbsErrorNats.toDouble())} nats exceeds the failure threshold " +
-                "$FAIL_MAX_QUANTIZATION_NATS; do not ship this model",
+    try {
+        progress("verifying the candidate against the reference tables")
+        val verification = verify(candidate, tables)
+        if (verification.maxAbsErrorNats > FAIL_MAX_QUANTIZATION_NATS) {
+            throw CompilerException(
+                "quantization error ${f(verification.maxAbsErrorNats.toDouble())} nats exceeds the failure threshold " +
+                    "$FAIL_MAX_QUANTIZATION_NATS; candidate discarded, any previous --out is left untouched",
+            )
+        }
+        // The SHA is taken from the candidate bytes before the rename; publish renames
+        // without rewriting, so verified bytes are the published bytes.
+        val sha256Hex = sha256(candidate)
+        publish(options.outFile, candidate)
+        val afterVerify = System.nanoTime()
+        printReport(
+            options, counts, tables, verification, started, afterRead, afterEstimate,
+            afterWrite, afterVerify, sha256Hex,
         )
+    } finally {
+        if (candidate.exists()) candidate.delete()
     }
 }
 
@@ -206,11 +223,11 @@ private fun checkTables(tables: NgramTables, options: Options) {
 }
 
 /**
- * Writes to a temporary file in the target's directory, forces it to disk and renames in
- * one step, so a previous model survives until the new bytes are fully on disk and a
- * crash leaves no half-written output: the file at --out is always whole.
+ * Writes an unpublished candidate next to [out] and forces it to disk; the caller verifies
+ * against these exact bytes and publishes only on success, so --out never holds a model
+ * that was not, byte for byte, the one that passed verification.
  */
-private fun writeAtomically(out: File, tables: NgramTables) {
+private fun writeCandidate(out: File, tables: NgramTables): File {
     val parent = out.parentFile ?: throw CompilerException("--out has no parent directory to write into")
     parent.mkdirs()
     val tmp = File(parent, "${out.name}.tmp-${ProcessHandle.current().pid()}")
@@ -220,13 +237,19 @@ private fun writeAtomically(out: File, tables: NgramTables) {
             NgramModelWriter.write(tables, fos)
             fos.fd.sync()
         }
-        try {
-            Files.move(tmp.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        } catch (e: AtomicMoveNotSupportedException) {
-            Files.move(tmp.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        }
-    } finally {
-        if (tmp.exists()) tmp.delete()
+        return tmp
+    } catch (e: Throwable) {
+        tmp.delete()
+        throw e
+    }
+}
+
+/** Renames the verified candidate onto [out] atomically; candidate and output match bytes. */
+private fun publish(out: File, candidate: File) {
+    try {
+        Files.move(candidate.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    } catch (e: AtomicMoveNotSupportedException) {
+        Files.move(candidate.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 }
 
@@ -235,14 +258,14 @@ private fun evenRows(count: Int, take: Int): List<Int> =
     if (count > 0) (0 until take).map { it * (count - 1) / (take - 1).coerceAtLeast(1) }.distinct() else emptyList()
 
 /**
- * Verifies the written binary: header, id-to-surface mapping, unigram normalization, and
- * a deterministic sample of log probabilities against [TablesModel] over listed and
- * backed-off uni/bi/trigram contexts, with [Vocabulary.UNKNOWN] ids included (they must
- * never crash a lookup). Mirrors what the runtime does: it loads from the file like a
- * device would.
+ * Verifies the candidate binary: header, id-to-surface mapping, unigram normalization of
+ * both the reference tables and the loaded artifact, and a deterministic sample of log
+ * probabilities against [TablesModel] over listed and backed-off uni/bi/trigram
+ * contexts, with [Vocabulary.UNKNOWN] ids included (they must never crash a lookup).
+ * Mirrors what the runtime does: it loads from the file like a device would.
  */
-private fun verify(out: File, tables: NgramTables): Verification {
-    val model = NgramModel.read(out) // throws on bad magic, version or truncation
+private fun verify(candidate: File, tables: NgramTables): Verification {
+    val model = NgramModel.read(candidate) // throws on bad magic, version or truncation
     val ref = TablesModel(tables)
 
     // The id-to-surface mapping must be identical or every other check is meaningless.
@@ -260,13 +283,19 @@ private fun verify(out: File, tables: NgramTables): Verification {
     val sentenceStart = model.vocabulary.id(Vocabulary.SENTENCE_START)
     if (sentenceStart < 0) throw CompilerException("sentence-start token missing from the loaded model")
 
-    // Normalization sanity: the unigram base is the model's full marginal, so its mass
-    // over the whole vocabulary must sum to 1. float32 estimates drift a little.
-    var uniMass = 0.0
-    for (p in tables.unigramLogProb) uniMass += exp(p.toDouble())
-    val uniMassError = uniMass - 1.0
-    if (abs(uniMassError) > 0.02) {
-        throw CompilerException("unigram distribution sums to ${f(uniMass)}, not ~1.0")
+    // Normalization sanity: the unigram base is the model's full marginal over the whole
+    // vocabulary. Both masses are measured and reported with explicit labels, because
+    // they differ by construction: the reference sums to ~1.0 (float32 estimate drift),
+    // the loaded artifact's mass additionally carries quantization (measured ~0.9987 on
+    // the en-chat-v1 audit).
+    var referenceMass = 0.0
+    for (p in tables.unigramLogProb) referenceMass += exp(p.toDouble())
+    var loadedMass = 0.0
+    for (id in 0 until size) loadedMass += exp(model.unigramLogProb(id).toDouble())
+    if (abs(referenceMass - 1.0) > 0.02 || abs(loadedMass - 1.0) > 0.02) {
+        throw CompilerException(
+            "unigram mass off: reference ${f(referenceMass)}, loaded ${f(loadedMass)}, expected ~1.0",
+        )
     }
 
     val rng = Random(SAMPLE_SEED)
@@ -326,7 +355,8 @@ private fun verify(out: File, tables: NgramTables): Verification {
         meanAbsErrorNats = (errorSum / pairs).toFloat(),
         top5ExactAgreements = agreements,
         predictContexts = predictContexts,
-        unigramMassError = uniMassError,
+        referenceUnigramMass = referenceMass,
+        loadedUnigramMass = loadedMass,
         predictionLines = predictionLines,
     )
 }
@@ -408,12 +438,13 @@ private fun printReport(
     afterEstimate: Long,
     afterWrite: Long,
     afterVerify: Long,
+    sha256Hex: String,
 ) {
     fun span(from: Long, to: Long) = secs(to - from)
     println("== compile-model report ==")
     println("counts:      ${options.countsDir}")
     println("output:      ${options.outFile} (${options.outFile.length()} bytes)")
-    println("sha256:      ${sha256(options.outFile)}")
+    println("sha256:      $sha256Hex (verified bytes are the published bytes)")
     println("vocab cap:   ${options.maxVocabulary}, floors: unigram ${options.minUnigram}, bigram ${options.minBigram}, trigram ${options.minTrigram}")
     println("timings:     read ${span(started, afterRead)}, estimate ${span(afterRead, afterEstimate)}, " +
         "write ${span(afterEstimate, afterWrite)}, verify ${span(afterWrite, afterVerify)}, " +
@@ -425,7 +456,8 @@ private fun printReport(
         "quantization: max |delta logprob| ${f(verification.maxAbsErrorNats.toDouble())} nats, " +
             "mean ${f(verification.meanAbsErrorNats.toDouble())} nats (fail threshold $FAIL_MAX_QUANTIZATION_NATS nats)",
     )
-    println("unigram mass: sums to ${f(1.0 + verification.unigramMassError)} (abs err ${f(abs(verification.unigramMassError))})")
+    println("unigram mass reference: ${f(verification.referenceUnigramMass)} (estimate, expected ~1.0)")
+    println("unigram mass loaded:    ${f(verification.loadedUnigramMass)} (published artifact, includes quantization)")
     println(
         "predict top-5 exact agreement: ${verification.top5ExactAgreements}/${verification.predictContexts} contexts " +
             "(near-ties may reorder; informational)",
