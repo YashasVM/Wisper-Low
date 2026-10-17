@@ -61,6 +61,19 @@ class ToolTestCase(unittest.TestCase):
         return {r[0]: r[1] for r in read_tsv(os.path.join(out, name))}
 
 
+class KnTrainingTest(ToolTestCase):
+    def test_defaults_preserve_singletons_and_doubletons(self):
+        args = cn.parse_args(["--out", "unused", "input.txt"])
+        self.assertEqual((args.min1, args.min2, args.min3), (2, 1, 1))
+        _, out, stats = self.run_tool(["a b c", "a b d", "a b d"],
+                                      extra=["--min2", str(args.min2), "--min3", str(args.min3)])
+        rows = read_tsv(os.path.join(out, "trigrams.tsv"))
+        self.assertIn(("a", "b", "c", "1"), rows)
+        self.assertIn(("a", "b", "d", "2"), rows)
+        self.assertEqual(stats["pruning"], {"min1": 1, "min2": 1, "min3": 1, "vocab": None})
+        self.assertEqual(len(stats["inputs"]), 1)
+
+
 class TokenisationTest(ToolTestCase):
     def test_inner_apostrophes_and_curly_quotes(self):
         _, out, _ = self.run_tool(["don't rock'n'roll dogs'"])
@@ -241,7 +254,7 @@ class PruningTest(ToolTestCase):
         uni = {r[0] for r in self.rows(out, "unigrams.tsv")}
         self.assertIn("q", uni)
         self.assertNotIn("z", uni)
-        # The bigram "<s> q" appears twice, below the default min2 of 3.
+        # The bigram "<s> q" appears twice, below the explicit min2 of 3.
         bi = self.rows(out, "bigrams.tsv")
         self.assertNotIn(("<s>", "q"), bi)
 

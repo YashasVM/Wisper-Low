@@ -32,9 +32,6 @@ data class EstimatorConfig(
  * the interpolated formula would have given it and the documented rules sum to one.
  */
 object NgramEstimator {
-    /** Smallest interpolation weight, so ln backoff stays finite when discounts degenerate. */
-    private const val LAMBDA_MIN = 1e-6
-
     /** Count-space floor keeping ln-probabilities finite for words with no continuation mass. */
     private const val NEGLIGIBLE_COUNT = 1e-6
 
@@ -47,7 +44,12 @@ object NgramEstimator {
         }
     }
 
-    fun estimate(counts: NgramCounts, config: EstimatorConfig = EstimatorConfig()): NgramTables {
+    /** [onDiscountFallback] reports the affected order (2 or 3) for compiler diagnostics. */
+    fun estimate(
+        counts: NgramCounts,
+        config: EstimatorConfig = EstimatorConfig(),
+        onDiscountFallback: (Int) -> Unit = {},
+    ): NgramTables {
         val words = counts.vocabulary.size
         require(words > 0) { "cannot estimate an empty vocabulary" }
         val bigramKept = BooleanArray(counts.bigramCounts.size) { counts.bigramCounts[it] >= config.minBigramCount }
@@ -76,7 +78,7 @@ object NgramEstimator {
 
         // Bigram order: for each context (a first word), discount its successors and hand the
         // leftover mass to the unigram base through lambda, stored as that word's backoff.
-        val bigramDiscounts = discountsOf(counts.bigramCounts, bigramKept)
+        val bigramDiscounts = discountsOf(counts.bigramCounts) { onDiscountFallback(2) }
         val keptBigrams = bigramKept.count { it }
         val bigramFirst = IntArray(keptBigrams)
         val bigramSecond = IntArray(keptBigrams)
@@ -98,11 +100,11 @@ object NgramEstimator {
                 if (bigramKept[end]) total += counts.bigramCounts[end]
                 end++
             }
-            var listedMass = 0.0
+            var removedMass = 0.0
             for (row in i until end) if (bigramKept[row]) {
-                listedMass += discountedShare(bigramDiscounts, counts.bigramCounts[row], total)
+                removedMass += bigramDiscounts.at(counts.bigramCounts[row]) / total
             }
-            val lambda = (1.0 - listedMass).coerceIn(LAMBDA_MIN, 1.0)
+            val lambda = removedMass.coerceAtMost(1.0)
             unigramBackoff[context] = ln(lambda).toFloat()
             for (row in i until end) if (bigramKept[row]) {
                 val successor = counts.bigramSecond[row]
@@ -127,7 +129,7 @@ object NgramEstimator {
         // Trigram order: same shape, but the lower order is the interpolated bigram and lambda
         // lands on the context's bigram row. Contexts with no surviving trigrams keep backoff 0
         // (ln 1), which is exactly lambda 1: back straight off to the bigram.
-        val trigramDiscounts = discountsOf(counts.trigramCounts, trigramKept)
+        val trigramDiscounts = discountsOf(counts.trigramCounts) { onDiscountFallback(3) }
         val keptTrigrams = trigramKept.count { it }
         val trigramFirst = IntArray(keptTrigrams)
         val trigramSecond = IntArray(keptTrigrams)
@@ -151,11 +153,11 @@ object NgramEstimator {
                 if (trigramKept[end]) total += counts.trigramCounts[end]
                 end++
             }
-            var listedMass = 0.0
+            var removedMass = 0.0
             for (row in i until end) if (trigramKept[row]) {
-                listedMass += discountedShare(trigramDiscounts, counts.trigramCounts[row], total)
+                removedMass += trigramDiscounts.at(counts.trigramCounts[row]) / total
             }
-            val lambda = (1.0 - listedMass).coerceIn(LAMBDA_MIN, 1.0)
+            val lambda = removedMass.coerceAtMost(1.0)
             val contextRow = keptBigramRow(counts, bigramKept, first, second)
             bigramBackoff[bigramOutRow[contextRow]] = ln(lambda).toFloat()
             for (row in i until end) if (trigramKept[row]) {
@@ -207,35 +209,25 @@ object NgramEstimator {
     }
 
     /**
-     * Chen & Goodman's fitted discounts from count-of-counts over the kept rows of one
-     * order: n1..n4 are the buckets of exact counts 1 to 4. A bucket the corpus never
-     * fills contributes discount 0 rather than an undefined fit, and results are clamped
-     * to [0, k] so a count can never be discounted below zero, which would push lambda
-     * (and the whole lower order) negative.
+     * Fit before estimator pruning: removing singleton/doubleton rows destroys the fit.
+     * The counter must also preserve them. For missing buckets or a nonpositive/out-of-range
+     * fit, use KenLM's documented fallback D1=0.5, D2=1, D3+=1.5 for the entire order.
+     * This is a training-data fallback, never a lambda chosen against typing evaluation.
+     * See https://github.com/kpu/kenlm/blob/master/lm/builder/adjust_counts.cc.
      */
-    private fun discountsOf(counts: IntArray, kept: BooleanArray): Discounts {
+    private fun discountsOf(counts: IntArray, onFallback: () -> Unit): Discounts {
         val buckets = LongArray(5)
-        for (i in counts.indices) {
-            val count = counts[i]
-            if (kept[i] && count in 1..4) buckets[count]++
+        for (count in counts) if (count in 1..4) buckets[count]++
+        val fallback = Discounts(0.5, 1.0, 1.5)
+        if ((1..3).any { buckets[it] == 0L }) return fallback.also { if (counts.isNotEmpty()) onFallback() }
+        val y = buckets[1].toDouble() / (buckets[1] + 2.0 * buckets[2])
+        val fitted = DoubleArray(3) { index ->
+            val k = index + 1
+            k - (k + 1) * y * buckets[k + 1] / buckets[k]
         }
-        val n1 = buckets[1]
-        val n2 = buckets[2]
-        val n3 = buckets[3]
-        val n4 = buckets[4]
-        val base = n1 + 2 * n2
-        return Discounts(
-            first = if (base > 0) n1.toDouble() / base else 0.0,
-            second = if (base > 0 && n2 > 0) {
-                (2.0 - 3.0 * n1 * n3 / (base.toDouble() * n2)).coerceIn(0.0, 2.0)
-            } else {
-                0.0
-            },
-            third = if (base > 0 && n3 > 0) {
-                (3.0 - n1 * n4 * 4.0 / (base.toDouble() * n3)).coerceIn(0.0, 3.0)
-            } else {
-                0.0
-            },
-        )
+        if (fitted.indices.any { !fitted[it].isFinite() || fitted[it] <= 0.0 || fitted[it] > it + 1 }) {
+            return fallback.also { onFallback() }
+        }
+        return Discounts(fitted[0], fitted[1], fitted[2])
     }
 }

@@ -17,6 +17,7 @@ gradle.beforeProject { project ->
     if (project.name != 'keyboard-core') return
     project.plugins.withId('org.jetbrains.kotlin.jvm') {
         project.kotlin.sourceSets.getByName('main').kotlin.srcDir(project.file('src/tools/kotlin'))
+        project.kotlin.sourceSets.getByName('test').kotlin.srcDir(project.file('src/toolsTest/kotlin'))
         project.tasks.register('compileModel', JavaExec) { task ->
             task.group = 'tools'
             task.description = 'Count TSVs -> verified compact WLM1 model (tools/lm/README.compile-model.md)'

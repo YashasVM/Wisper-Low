@@ -22,8 +22,8 @@ Options:
 | `--chunk-entries N` | 200000 | Spill the counting dicts after this many entries.           |
 | `--vocab N`      | none    | Keep only the `N` most frequent words (`<s>` is always kept).  |
 | `--min1 N`       | 2       | Drop unigrams with a smaller count.                            |
-| `--min2 N`       | 3       | Drop bigrams with a smaller count.                             |
-| `--min3 N`       | 3       | Drop trigrams with a smaller count.                            |
+| `--min2 N`       | 1       | Drop bigrams with a smaller count.                             |
+| `--min3 N`       | 1       | Drop trigrams with a smaller count.                            |
 | `--temp-dir DIR` | temp    | Scratch directory for spilled chunk files.                      |
 | `--keep-temp`    | off     | Keep chunk files for inspection.                               |
 | `--progress-every N` | 100000 | Log progress every `N` lines to stderr.                   |
@@ -34,9 +34,22 @@ Output:
 - `bigrams.tsv` — `w1<TAB>w2<TAB>count`.
 - `trigrams.tsv` — `w1<TAB>w2<TAB>w3<TAB>count`.
 - `stats.json` — lines, sentences, tokens, vocabulary size, n-gram row and
-  occurrence counts, elapsed seconds.
+  occurrence counts, input paths, pruning settings, elapsed seconds.
 
 Progress and diagnostics go to stderr, so stdout stays clean for scripting.
+
+## Kneser-Ney training
+
+Keep `--min2 1 --min3 1` when producing estimator input. Singleton and doubleton
+counts are evidence for the discount fit. Pruning them in the counter makes those
+statistics unrecoverable. Apply optional higher-order floors in `build_model.sh`
+instead; the estimator fits discounts before those floors. Vocabulary filtering still
+defines the model's probability space. `stats.json` records input paths and explicit
+pruning settings so a future audit can distinguish these operations.
+
+The old defaults of 3 removed that evidence in en-chat-v1. Recount from the same
+training inputs into a new directory; changing flags cannot restore existing TSVs.
+Never feed evaluation sentences or spelling pairs into the training counter.
 
 ## Normalisation rules
 
