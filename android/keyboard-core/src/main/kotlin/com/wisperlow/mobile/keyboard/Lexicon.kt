@@ -239,7 +239,7 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
         val k = key(typed)
         val ik = key(intended)
         if (k.isEmpty() || ik.isEmpty() || k == ik) return
-        if (intended.any { !it.isLetter() && !isApostrophe(it) }) return
+        if (!isWordText(intended)) return
         synchronized(userLock) {
             val fix = fixes[k]
             if (fix == null || !fix.surface.equals(intended, true)) {
@@ -256,7 +256,7 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
     /** Counts a word the user committed, after [previous] if there was one. */
     override fun learn(word: String, previous: String?) {
         val k = key(word)
-        if (k.isEmpty() || word.any { !it.isLetter() && !isApostrophe(it) }) return
+        if (k.isEmpty() || !isWordText(word)) return
         synchronized(userLock) {
             if (!isTypedWord(word, k)) {
                 val user = userWords.getOrPut(k) { UserWord(word, 0) }
@@ -489,6 +489,20 @@ class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
             if (d <= 1f) TYPO_WEIGHT * d else TYPO_WEIGHT + SECOND_TYPO_WEIGHT * (d - 1f)
 
         fun isApostrophe(c: Char) = c == '\'' || c == '’'
+
+        /**
+         * Marks that attach to a letter: dependent vowels and the virama in Devanagari and
+         * Kannada. They carry no sound of their own but are part of the word's letters.
+         */
+        fun isCombiningMark(c: Char): Boolean =
+            Character.getType(c) in Character.NON_SPACING_MARK.toInt()..Character.COMBINING_SPACING_MARK.toInt()
+
+        /**
+         * True when [text] is a word the lexicon may store: letters, the combining marks that
+         * complete native-script syllables, and apostrophes. English words are unaffected.
+         */
+        fun isWordText(text: String): Boolean =
+            text.isNotEmpty() && text.all { it.isLetter() || isCombiningMark(it) || isApostrophe(it) }
 
         /** Gives [word] the capitalization the user typed: "Teh" to "The", "TEH" to "THE". */
         fun matchCase(typed: String, word: String): String = when {

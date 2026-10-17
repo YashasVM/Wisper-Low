@@ -328,7 +328,7 @@ class TypingSession(
         private const val CODE_LEAD = "@#/\\_.:~\$`<>=|"
         private const val CORRECTING_PUNCTUATION = ".,!?;:)\""
         private val HUGGING_PUNCTUATION = setOf(".", ",", "!", "?", ";", ":")
-        private val LAST_WORD = Regex("([\\p{L}][\\p{L}'’]*)\\s*$")
+        private val LAST_WORD = Regex("([\\p{L}][\\p{L}\\p{M}'’]*)\\s*$")
 
         /** "tmrw" in "tomorrow": every letter of [short], in order, starting the same way. */
         fun isAbbreviation(short: String, long: String): Boolean {
@@ -338,7 +338,11 @@ class TypingSession(
             return i == short.length
         }
 
+        /**
+         * True for a character that stays inside the word being typed. A dependent vowel or
+         * virama only counts after a letter, so "नमस्ते" is one word while a stray mark is not.
+         */
         fun isWordChar(c: Char, inWord: Boolean): Boolean =
-            c.isLetterOrDigit() || (inWord && (c == '\'' || c == '’'))
+            c.isLetterOrDigit() || (inWord && (c == '\'' || c == '’' || Lexicon.isCombiningMark(c)))
     }
 }

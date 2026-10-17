@@ -32,6 +32,7 @@ import com.wisperlow.mobile.BuildConfig
 import com.wisperlow.mobile.MainUiState
 import com.wisperlow.mobile.MainViewModel
 import com.wisperlow.mobile.R
+import com.wisperlow.mobile.keyboard.KeyboardLanguage
 import com.wisperlow.mobile.settings.AutoStop
 import com.wisperlow.mobile.settings.KeyboardPrefs
 
@@ -70,6 +71,24 @@ fun SettingsScreen(
                 LinkRow(stringResource(R.string.settings_keyboard_pick), null, actions.pickKeyboard)
                 HorizontalDivider()
                 val kb = settings.keyboard
+                Text(stringResource(R.string.settings_keyboard_language), style = MaterialTheme.typography.titleMedium)
+                KeyboardLanguage.entries.forEach { language ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .selectable(
+                                selected = kb.inputLanguage == language,
+                                role = Role.RadioButton,
+                                onClick = { viewModel.updateKeyboard { it.copy(inputLanguage = language) } },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = kb.inputLanguage == language, onClick = null)
+                        Text(stringResource(languageLabel(language)), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                HorizontalDivider()
                 SwitchRow(
                     title = stringResource(R.string.settings_typing_autocorrect),
                     body = stringResource(R.string.settings_typing_autocorrect_body),
@@ -232,4 +251,10 @@ private fun autoStopLabel(value: AutoStop): Int = when (value) {
     AutoStop.RELAXED -> R.string.auto_stop_relaxed
     AutoStop.LONG -> R.string.auto_stop_long
     AutoStop.MANUAL -> R.string.auto_stop_manual
+}
+
+private fun languageLabel(value: KeyboardLanguage): Int = when (value) {
+    KeyboardLanguage.ENGLISH -> R.string.keyboard_language_english
+    KeyboardLanguage.HINDI -> R.string.keyboard_language_hindi
+    KeyboardLanguage.KANNADA -> R.string.keyboard_language_kannada
 }

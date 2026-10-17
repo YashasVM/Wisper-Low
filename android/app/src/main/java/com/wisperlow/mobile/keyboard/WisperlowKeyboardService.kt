@@ -83,6 +83,8 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     private var lastShiftTap = 0L
     /** True in a field marked NO_PERSONALIZED_LEARNING: no resolver reading, no learning. */
     private var privateField = false
+    /** The language the current engine types in, so a mode switch only fires on a real change. */
+    private var typingLanguage = KeyboardLanguage.ENGLISH
 
     /** True while the engine session in progress was started from this keyboard, not the app's practice area. */
     private var ownsSession: Boolean
@@ -129,6 +131,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
                     )
                 }
                 applyFieldOptions()
+                switchLanguage(settings.keyboard.inputLanguage)
             }
         }
         // Words from the personal dictionary are the user's own, so suggest them and never "fix" them.
@@ -331,7 +334,9 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
 
     /** Whether plain tapped letters may be read by the engine: an ordinary text field with suggestions and autocorrect on. */
     private fun resolvable() = ui.value.field == FieldKind.TEXT &&
-        typing.options.suggestions && typing.options.autoCorrect && !privateField
+        typing.options.suggestions && typing.options.autoCorrect && !privateField &&
+        // Only the English engine reads taps; the romanized modes type exactly what is pressed.
+        lexiconRepository.language.value == KeyboardLanguage.ENGLISH
 
     /**
      * Lets the engine correct a tap that may have slipped onto a neighbouring key. Everything
@@ -341,7 +346,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
      * marker says not to.
      */
     private fun resolveTap(landed: Char, touch: Touch): Char {
-        val engine = lexiconRepository.engine.value ?: return landed
+        val engine = lexiconRepository.engine.value as? KeyboardEngine ?: return landed
         val center = canonicalCenter(landed) ?: return landed
         return engine.resolveKey(touch, landed, center, typing.composing, typing.previousWord())
     }
@@ -402,7 +407,15 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             }
             return
         }
-        val engine = lexiconRepository.engine.value ?: return
+        val engine = lexiconRepository.engine.value
+        if (engine == null) {
+            // No engine yet (still loading, or mid mode switch): show nothing rather than a
+            // stale language's words.
+            if (state.suggestions != Suggestions.None || state.emojiHints.isNotEmpty()) {
+                ui.update { it.copy(suggestions = Suggestions.None, emojiHints = emptyList()) }
+            }
+            return
+        }
         val word = typing.composing
         val previous = typing.previousWord()
         val touches = typing.touches
@@ -423,6 +436,18 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             }
             ui.update { it.copy(suggestions = result, emojiHints = emojiHints) }
         }
+    }
+
+    /**
+     * Switches input languages. The word in progress is finished under the engine that knows it,
+     * then the repository swaps engines; the strip refreshes as soon as the new one is ready.
+     */
+    private fun switchLanguage(language: KeyboardLanguage) {
+        if (language == typingLanguage) return
+        typingLanguage = language
+        typing.finishWord()
+        lexiconRepository.selectLanguage(language)
+        refreshSuggestions()
     }
 
     private fun applyFieldOptions() {

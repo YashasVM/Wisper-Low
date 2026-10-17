@@ -244,6 +244,10 @@
     <string name="settings_typing_haptics">Vibrate on keypress</string>
     <string name="settings_typing_sound">Sound on keypress</string>
     <string name="settings_typing_height">Keyboard height</string>
+    <string name="settings_keyboard_language">Input language</string>
+    <string name="keyboard_language_english">English</string>
+    <string name="keyboard_language_hindi">हिन्दी (type in English)</string>
+    <string name="keyboard_language_kannada">ಕನ್ನಡ (type in English)</string>
     <string name="settings_live_preview">Live preview while speaking</string>
     <string name="settings_live_preview_body">Show words as you say them. Uses a little more battery.</string>
     <string name="keyboard_step_title">Turn on the Wisperlow keyboard</string>
