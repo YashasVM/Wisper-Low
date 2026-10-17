@@ -1,0 +1,45 @@
+# Forty common misspellings for the typing simulator: wrong<TAB>right, one pair per line.
+# Lines starting with # are comments. The right side must be a single word, because the
+# simulator checks it against the one token the keyboard commits. Pairs are typed exactly
+# by the spelling metric, and the noise presets may type the wrong side in place of the
+# right word.
+teh	the
+hte	the
+adn	and
+taht	that
+whta	what
+waht	what
+thier	their
+recieve	receive
+reciept	receipt
+seperate	separate
+definately	definitely
+occured	occurred
+untill	until
+wich	which
+wierd	weird
+tommorow	tomorrow
+tommorrow	tomorrow
+beleive	believe
+begining	beginning
+writting	writing
+freind	friend
+garantee	guarantee
+gratful	grateful
+harrass	harass
+grammer	grammar
+goverment	government
+neccessary	necessary
+noticable	noticeable
+occassion	occasion
+persistant	persistent
+posession	possession
+priviledge	privilege
+probaly	probably
+publically	publicly
+recomend	recommend
+relevent	relevant
+succesful	successful
+supercede	supersede
+truely	truly
+wether	whether
