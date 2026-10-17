@@ -83,8 +83,6 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     private var lastShiftTap = 0L
     /** True in a field marked NO_PERSONALIZED_LEARNING: no resolver reading, no learning. */
     private var privateField = false
-    /** The language the current engine types in, so a mode switch only fires on a real change. */
-    private var typingLanguage = KeyboardLanguage.ENGLISH
 
     /** True while the engine session in progress was started from this keyboard, not the app's practice area. */
     private var ownsSession: Boolean
@@ -441,10 +439,12 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     /**
      * Switches input languages. The word in progress is finished under the engine that knows it,
      * then the repository swaps engines; the strip refreshes as soon as the new one is ready.
+     *
+     * The repository is the source of truth, not a field on this (recreated) service: after an
+     * IME restart the singleton may still be on another language, so it is always synced to prefs.
      */
     private fun switchLanguage(language: KeyboardLanguage) {
-        if (language == typingLanguage) return
-        typingLanguage = language
+        if (lexiconRepository.language.value == language) return
         typing.finishWord()
         lexiconRepository.selectLanguage(language)
         refreshSuggestions()
