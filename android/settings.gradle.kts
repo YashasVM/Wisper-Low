@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WisperlowMobile"
 include(":app")
+include(":keyboard-core")

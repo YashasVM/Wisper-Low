@@ -83,6 +83,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":keyboard-core"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
 

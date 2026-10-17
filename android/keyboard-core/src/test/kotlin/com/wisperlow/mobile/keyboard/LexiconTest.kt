@@ -7,9 +7,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LexiconTest {
+    private val assets = File(System.getProperty("wisperlow.assets") ?: "../app/src/main/assets")
+
     private val lexicon by lazy {
-        val base = Lexicon.parse(File("src/main/assets/dict/en.txt").readLines().asSequence())
-        val modern = Lexicon.parse(File("src/main/assets/dict/en_modern.txt").readLines().asSequence())
+        val base = Lexicon.parse(File(assets, "dict/en.txt").readLines().asSequence())
+        val modern = Lexicon.parse(File(assets, "dict/en_modern.txt").readLines().asSequence())
         Lexicon(Lexicon.merge(base, modern))
     }
 
