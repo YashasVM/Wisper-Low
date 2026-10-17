@@ -1,5 +1,7 @@
 package com.wisperlow.mobile.keyboard
 
+import com.wisperlow.mobile.keyboard.spatial.KeyCenter
+
 /** A key laid out on the board, in pixels from the board's top-left corner. */
 data class PlacedKey(val key: Key, val left: Float, val top: Float, val right: Float, val bottom: Float) {
     val width: Float get() = right - left
@@ -29,4 +31,26 @@ object KeyboardGeometry {
         }
         return out
     }
+
+    /** Key units for a laid-out board: the usual letter key's width, the row height and the side padding. */
+    fun units(placed: List<PlacedKey>, rowHeight: Float, side: Float): BoardUnits {
+        val widths = placed.filter { isLetterKey(it.key) }.map { it.width }.sorted()
+        val keyWidth = widths.getOrNull(widths.size / 2) ?: placed.firstOrNull()?.width ?: 1f
+        return BoardUnits(keyWidth, rowHeight, side)
+    }
+
+    /** Centres of the single-letter keys, in key units, for the spatial model. */
+    fun letterCenters(placed: List<PlacedKey>, units: BoardUnits): List<KeyCenter> = placed
+        .filter { isLetterKey(it.key) }
+        .map { units.touch(it.centerX, it.centerY).let { t -> KeyCenter(it.key.text[0].lowercaseChar(), t.x, t.y) } }
+
+    private fun isLetterKey(key: Key) = key.kind == KeyKind.CHAR && key.text.length == 1 && key.text[0].isLetter()
+}
+
+/**
+ * Converts board pixels to key units, the coordinates [Touch] uses: x in standard key
+ * widths from the left padding, y in rows from the top of the board.
+ */
+data class BoardUnits(val keyWidth: Float, val rowHeight: Float, val side: Float) {
+    fun touch(px: Float, py: Float): Touch = Touch((px - side) / keyWidth, py / rowHeight)
 }
