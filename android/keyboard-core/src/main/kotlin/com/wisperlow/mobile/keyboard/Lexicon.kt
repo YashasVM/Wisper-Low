@@ -17,6 +17,44 @@ data class Suggestions(
 }
 
 /**
+ * What a typing engine offers the keyboard: suggestions for the word being typed,
+ * predictions for the next one, and the learning loop that makes them personal.
+ * Implemented by the legacy lexicon and the spatial engine alike, so the typing
+ * session, the suggestion strip and the simulator work with either.
+ * Default arguments live here; implementations must not repeat them.
+ */
+interface WordEngine {
+    /** Suggestions for [typed]; [touches], when given, holds where each character was pressed. */
+    fun suggest(typed: String, previous: String? = null, max: Int = 3, touches: List<Touch?>? = null): Suggestions
+
+    /** Likely next words after [previous]. */
+    fun predict(previous: String?, max: Int = 3): List<String>
+
+    /** True when [word] is in the dictionary or the user has made it theirs. */
+    fun isKnown(word: String): Boolean
+
+    /** Counts a word the user committed, after [previous] if there was one. */
+    fun learn(word: String, previous: String?)
+
+    /** The user rewrote [typed] as [intended] by hand. */
+    fun learnFix(typed: String, intended: String)
+
+    /** The user undid a correction or picked what they typed: [word] is theirs. */
+    fun trust(word: String)
+
+    /** True when [word] is something this keyboard picked up from the user rather than its word list. */
+    fun isLearned(word: String): Boolean
+
+    /** Forgets one learned word. */
+    fun forget(word: String)
+
+    /** Learned words and word pairs, for saving. */
+    fun exportLearned(): Lexicon.LearnedData
+
+    fun importLearned(data: Lexicon.LearnedData)
+}
+
+/**
  * English word frequencies plus what this user has typed. Finds completions and
  * spelling fixes, weighing typos between neighbouring keys as cheaper than others,
  * and learns words and word pairs so its suggestions become personal. Where each key
@@ -25,7 +63,7 @@ data class Suggestions(
  *
  * Thread-safe: queries may run on a worker while the keyboard learns on the main thread.
  */
-class Lexicon(entries: List<Pair<String, Long>>) {
+class Lexicon(entries: List<Pair<String, Long>>) : WordEngine {
     private val words: Array<String>
     private val keys: Array<String>
     private val scores: FloatArray
@@ -71,7 +109,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     val size: Int get() = words.size
 
     /** True when [word] is in the dictionary or the user has made it theirs. */
-    fun isKnown(word: String): Boolean {
+    override fun isKnown(word: String): Boolean {
         val k = key(word)
         if (k.isEmpty()) return false
         if (isTypedWord(word, k)) return true
@@ -82,7 +120,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
      * Suggestions for [typed]. [touches], when given, holds where each typed character
      * was pressed (null for characters typed without a known position).
      */
-    fun suggest(typed: String, previous: String? = null, max: Int = 3, touches: List<Touch?>? = null): Suggestions {
+    override fun suggest(typed: String, previous: String?, max: Int, touches: List<Touch?>?): Suggestions {
         val k = key(typed)
         if (k.isEmpty() || typed.any { !it.isLetter() && !isApostrophe(it) }) return Suggestions(listOf(typed).filter { it.isNotEmpty() })
         if (isExpressive(k, known = byKey.containsKey(k))) return expressive(typed, k, max)
@@ -186,7 +224,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         }
 
     /** Likely next words after [previous], from what this user has typed before. */
-    fun predict(previous: String?, max: Int = 3): List<String> {
+    override fun predict(previous: String?, max: Int): List<String> {
         val prev = previous?.let(::key)?.takeIf { it.isNotEmpty() } ?: return emptyList()
         val next = synchronized(userLock) { bigrams[prev]?.entries?.sortedByDescending { it.value }?.take(max * 2)?.map { it.key } }
             ?: return emptyList()
@@ -197,7 +235,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
      * The user rewrote [typed] as [intended] by hand. Remember it, so next time
      * [typed] is fixed to [intended] straight away.
      */
-    fun learnFix(typed: String, intended: String) {
+    override fun learnFix(typed: String, intended: String) {
         val k = key(typed)
         val ik = key(intended)
         if (k.isEmpty() || ik.isEmpty() || k == ik) return
@@ -216,7 +254,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     }
 
     /** Counts a word the user committed, after [previous] if there was one. */
-    fun learn(word: String, previous: String?) {
+    override fun learn(word: String, previous: String?) {
         val k = key(word)
         if (k.isEmpty() || word.any { !it.isLetter() && !isApostrophe(it) }) return
         synchronized(userLock) {
@@ -234,7 +272,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     }
 
     /** The user undid a correction: treat [word] as theirs from now on, and drop any fix they made for it. */
-    fun trust(word: String) {
+    override fun trust(word: String) {
         val k = key(word)
         if (k.isEmpty()) return
         synchronized(userLock) {
@@ -245,13 +283,13 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     }
 
     /** True when [word] is something this keyboard picked up from the user rather than its word list. */
-    fun isLearned(word: String): Boolean {
+    override fun isLearned(word: String): Boolean {
         val k = key(word)
         return synchronized(userLock) { userWords.containsKey(k) || fixes.values.any { key(it.surface) == k } }
     }
 
     /** Forgets one learned word: no longer suggested, and no longer a target for fixes. */
-    fun forget(word: String) {
+    override fun forget(word: String) {
         val k = key(word)
         if (k.isEmpty()) return
         synchronized(userLock) {
@@ -264,7 +302,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
     }
 
     /** Learned words and word pairs, for saving. */
-    fun exportLearned(): LearnedData = synchronized(userLock) {
+    override fun exportLearned(): LearnedData = synchronized(userLock) {
         LearnedData(
             words = userWords.values.map { it.surface to it.count },
             pairs = bigrams.flatMap { (prev, next) -> next.map { (n, c) -> Triple(prev, n, c) } },
@@ -272,7 +310,7 @@ class Lexicon(entries: List<Pair<String, Long>>) {
         )
     }
 
-    fun importLearned(data: LearnedData) {
+    override fun importLearned(data: LearnedData) {
         synchronized(userLock) {
             for ((word, count) in data.words) {
                 val k = key(word)

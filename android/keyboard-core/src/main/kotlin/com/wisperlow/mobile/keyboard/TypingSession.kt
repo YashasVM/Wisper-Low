@@ -32,7 +32,7 @@ data class TypingOptions(
  */
 class TypingSession(
     private val field: EditorField,
-    private val lexicon: () -> Lexicon?,
+    private val lexicon: () -> WordEngine?,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     var options = TypingOptions()
