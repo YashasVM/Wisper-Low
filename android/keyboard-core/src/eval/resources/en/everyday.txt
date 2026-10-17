@@ -1,0 +1,250 @@
+Mom, I'll be home for dinner around seven tonight.
+Dad, the car keys are on the kitchen counter where you left them.
+Grandma, thank you for the birthday card, it made my day.
+Sarah, can you pick up milk and bread on your way home?
+Happy birthday, Uncle Tom! Hope you have a wonderful day.
+Alex, the kids are asking if they can stay up for the movie.
+Please don't forget to take your medication before breakfast.
+Call me when you land so I know you arrived safely.
+I love you, and I am very proud of everything you have done.
+Aunt Linda, thanks again for sending the recipe, it turned out great.
+Ben and I are planning to visit you the weekend after next.
+Can you check whether Dad needs help with the gutters this weekend?
+I left the spare key under the blue planter by the door.
+We're hosting a small dinner party on Saturday, would you come?
+The dog has eaten everything in the kitchen bin, honestly.
+Happy anniversary, you two deserve many more wonderful years together.
+Nathan, your aunt wants to know when you're coming to visit us.
+Please tell little Emma that her package finally arrived, she was delighted.
+I am taking Grandma to the clinic tomorrow for her appointment.
+Could you pick up some flowers on your way home from work?
+Your room looks great, I love the photos on the wall.
+We are free on Sunday afternoon if you would like to visit.
+Happy retirement, Uncle Steve, enjoy every minute of your free time.
+Chloe, would you mind watching the cat while we are away?
+I will bring the dessert and the plates when I come over.
+Let me know if you need anything from the store this week.
+It was so good to see you both last weekend, we should do it again.
+Grandpa, the garden looks wonderful since you started composting.
+Cousin Martin is getting married in August, are you coming?
+Please forward me the address so I can update my calendar.
+The neighbour offered to watch our house while we travel next week.
+I am so grateful for everything you did for us last month.
+Do you want me to drive you to the station or meet you there?
+Your sister says hello and asks when you are visiting from London.
+We should schedule a family video call this weekend, what do you think?
+I burned the toast, so breakfast will be ready in ten minutes.
+Thanks for watering my plants while I was away, they look healthy.
+Happy birthday, sweetie, we are so proud of you.
+Please confirm whether you can collect the children on Friday afternoon.
+I cannot wait for our family reunion in the countryside next month.
+Sorry, I will be about fifteen minutes late to stand-up this morning.
+Can you review the pull request before the release cut-off?
+I pushed the latest changes, the tests are passing on my machine.
+Let's move the design review to Thursday so more people can attend.
+The client asked for a revised estimate with the maintenance costs included.
+I'll take ownership of the migration and update the project board.
+Please forward the quarterly numbers to finance before the end of the week.
+Do you have fifteen minutes to pair on the database query?
+The report is due Friday, so let's meet Wednesday to finalise it.
+I noticed the deployment failed halfway through, I'm investigating now.
+Could you share the meeting notes with everyone who missed it?
+Our deadline slipped by two days because the specification changed unexpectedly.
+I disagree with that approach, but I'm happy to discuss alternatives.
+Let's keep the scope small for the first release and iterate later.
+Thanks for covering my shift while I was at the conference.
+I'll write up the summary and circulate it before lunch tomorrow.
+Do we need approval from legal before we publish this announcement?
+The onboarding documentation is finally complete for new engineers.
+Please remember to log your hours in the timesheet every Friday.
+I'm reassigning two tickets so the critical bugs get fixed first.
+Can you send me the updated schedule for the vendor call?
+We should celebrate the launch properly once everything is stable.
+I disagree with the estimate, the complexity was underestimated somewhere.
+Let's schedule a retrospective next week while the details are fresh.
+My laptop died during the call, please resend the recording.
+The new hire starts Monday, can someone order the equipment?
+I'll take responsibility for coordinating the interview panel.
+Great job on the presentation, the leadership team loved the visuals.
+We need a decision by noon or the deadline will slip again.
+Please add the ticket number to your commit message for traceability.
+I'm drafting the announcement, send me quotes if you have any.
+The sprint board is out of date, please refresh your tickets.
+Unfortunately the vendor contract expired before anyone renewed it.
+We definitely need another round of testing before shipping.
+I'll grab a room for the workshop and send the details.
+Do we have budget left for the additional licences this quarter?
+Let's keep the retrospective blameless and focus on the process.
+The customer satisfaction scores improved noticeably after the last update.
+I am writing up the incident report while the details are still fresh.
+Someone from legal will join the call to discuss the indemnification clause.
+Thank you for your message; I will respond within one business day.
+Please find attached the revised budget for your review and approval.
+I am writing to confirm our appointment on Thursday afternoon.
+Kindly share the tracking number once the shipment has been dispatched.
+We have received your request and assigned it to the support team.
+Please let me know if the proposed schedule works for everyone involved.
+The invoice has been processed, and payment should arrive by Friday.
+Attached please find the minutes from yesterday's committee meeting.
+I appreciate your patience while the system was unavailable this morning.
+Please confirm your attendance before the deadline on the first of March.
+Unfortunately we are unable to process your refund without a receipt.
+We appreciate your loyalty and hope you continue enjoying our service.
+Should you have any questions, please reply to this email directly.
+I have attached the completed questionnaire for your records and reference.
+Thank you for sending the documents; our team is reviewing them now.
+Please note that our holiday schedule begins in the middle of December.
+The revised proposal is ready, and I am happy to walk you through it.
+We would be delighted to answer any further questions about the proposal.
+I am resending this message because the previous attachment failed to upload.
+Kindly arrange payment within seven days to avoid additional charges.
+Please confirm whether the delivery address on file is still accurate.
+It was a pleasure speaking with you today, and I look forward to helping.
+Our records indicate the subscription renews automatically unless cancelled.
+Thank you for your patience, and the replacement unit ships tomorrow morning.
+I am copying my colleague here so she can arrange the installation.
+Please complete the background check form before your first day begins.
+We regret to inform you that your application was not successful this time.
+If you have trouble with the portal, our technical team will assist.
+The maintenance window is scheduled for Saturday evening, lasting approximately two hours.
+Please submit your expense claims with receipts attached before month end.
+I have forwarded your message to the appropriate department for their action.
+Attached is the warranty certificate, which covers all major components.
+We are happy to arrange a replacement at no additional cost to you.
+Thank you for the referral; we have credited your account accordingly.
+Please reach out to your account manager with any billing questions.
+The seminar has been rescheduled to a later date next month.
+Please use the online booking system to reserve a desk in advance.
+I am unable to attend the meeting, but I have added my comments.
+The quotation remains valid for thirty days from the date of issue.
+Your subscription will not be renewed because payment failed twice.
+I would like to schedule an appointment with Dr. Patel next week.
+Can we book the car service for Thursday morning at the garage?
+Please bring your insurance card and a list of current medications.
+The dentist confirmed our appointment and asked us to arrive early.
+I rescheduled my physiotherapy session to avoid conflicting with work.
+The nurse said the results of the blood test will be available Friday.
+Please remember to bring your immunization record to the school office.
+The vet appointment is booked; we should fast the dog beforehand.
+I need to refill my prescription before the holiday weekend starts.
+The clinic called to say the earlier slot was cancelled, unfortunately.
+Our daughter has a parent-teacher conference scheduled for Tuesday evening.
+Please make sure the permission slip is signed before Friday morning.
+The school newsletter went home yesterday, could you check the dates?
+My exam is scheduled for the second week of June, so I am nervous.
+The library books are due next Wednesday, please return or renew them.
+I will collect the prescription from the pharmacy on my way home.
+The specialist referral has been processed, and we heard back quickly.
+Children's swimming lessons start again after the school holidays finish.
+Please pay the school fees online before the end of the month.
+The kindergarten orientation is scheduled for Saturday at ten o'clock.
+I need to write a note explaining the absence for the past week.
+The physiotherapist recommended stretching exercises twice each day.
+Our son's football practice was cancelled because of the heavy rain.
+The dentist suggested a follow-up visit in six months from now.
+I have an appointment at the barber tomorrow afternoon if you need me.
+Please confirm whether you can attend the graduation ceremony in July.
+The nurse practitioner will call us once the lab results arrive.
+We need to book the annual check-up before the year ends.
+The tutoring session on Monday evening is cancelled due to the tutor's illness.
+My mother needs someone to drive her to the hospital on Tuesday.
+The school bus will drop the children at half past three as usual.
+Please remind me to call the clinic about the follow-up appointment.
+The optician suggested a new prescription for my reading glasses.
+We are booking a family appointment so everyone is seen at once.
+The pediatrician recommended the vaccine be repeated in three months.
+I am taking a personal day to handle the appointment and errands.
+The appointment confirmation has been sent to your email address.
+Please arrive fifteen minutes early to complete the registration paperwork.
+The hearing test results suggest mild loss in the left ear.
+Our daughter starts university in September and needs accommodation.
+The course syllabus includes weekly reading and one group project.
+I forgot to renew my membership, so the gym refused entry.
+The prescription refilled successfully and will be ready this afternoon.
+Parents are invited to attend the school's open evening next week.
+The insurance form requires the policy number and the clinic address.
+We should schedule the car's annual inspection before the holidays.
+The doctor said recovery should take about two weeks of rest.
+My brother is moving into his new apartment at the end of the month.
+The tutoring centre offers evening classes in mathematics and physics.
+Please let the school office know before three o'clock tomorrow.
+My order has not arrived yet and the tracking hasn't updated since Monday.
+Please cancel the subscription before the next billing date to avoid charges.
+The package arrived damaged, and I would like a replacement sent.
+Can you confirm the delivery window for the replacement order?
+I would like to exchange this jacket for a larger size, please.
+The refund has not appeared on my statement yet, unfortunately.
+Please send the invoice to our accounts department for processing.
+The warranty does not cover accidental damage or misuse of the equipment.
+I am requesting an extension on the payment because of the delay.
+Your discount code was rejected, could you check the expiration date?
+We received the wrong colour and would appreciate a correct shipment.
+The item is out of stock; please notify me when it is available again.
+Could you confirm whether the store will hold the parcel for collection?
+The courier attempted delivery twice but nobody was available to sign.
+I need an invoice with our company registration details on it.
+Please advise whether the installation service includes removal of packaging.
+The website showed the item in stock, but checkout failed repeatedly.
+Could you send a replacement charger because the original stopped working?
+Your loyalty points expired at the end of the last calendar year.
+We would like to return the product unused within the stated period.
+The manual is missing from the box, could you post a copy?
+I paid by card and the bank says the payment is still processing.
+Please add the gift note message before you ship the parcel.
+The support chat disconnected twice, but the agent answered eventually.
+I need to update the delivery instructions for the whole order.
+The discount applied only to one item instead of the entire basket.
+Your technician completed the repair and left an itemised invoice.
+Could you confirm the serial number registered on my account?
+The subscription renews annually unless you cancel beforehand.
+Please escalate this to a supervisor because the previous reply was unhelpful.
+I received a courtesy credit that nobody explained, so I am confused.
+The packaging looked damaged but everything inside was in perfect condition.
+We would appreciate a firm delivery date rather than a vague estimate.
+The return label generated by the website does not scan properly.
+Please confirm whether the extended warranty transfers to the new owner.
+I am comparing two models before deciding which one to order.
+The colours are slightly different in person than on the website.
+Could you notify me when the backordered item finally arrives?
+The receipt shows the wrong tax amount for our region, unfortunately.
+I would like the order split into two separate shipments, please.
+Our supplier needs a purchase order before they will process the order.
+The loyalty scheme allows a discount on your second purchase.
+I am requesting a refund because the appliance stopped working after two days.
+Please check if the installation date can be moved to a weekday.
+The shop offered a store credit, but I would prefer a full refund.
+Our flight leaves at seven, so we should leave the house by five.
+The hotel confirmed our reservation and sent the booking reference.
+Have you checked whether the passport needs renewing before October?
+The train from Manchester is delayed by about thirty minutes currently.
+Could you book me a window seat for the return journey on Friday?
+We are renting a car at the airport to travel around the coast.
+Please pack warm layers because the forecast shows cold evenings.
+The tour guide recommends the early start to avoid the crowds.
+Our connecting flight in Lisbon gives us a two hour layover.
+I have printed the boarding passes and put them in my bag.
+The hotel said the room will be ready after three o'clock.
+Did you remember to bring the adapter for the European sockets?
+The visa application requires proof of accommodation for the whole trip.
+Our flight was diverted and we are waiting on the tarmac for updates.
+Let me know your arrival time so I can collect you from the station.
+We are taking the scenic route along the coast, it takes longer.
+The currency exchange office near the airport offers a poor rate.
+Is the museum included in the city pass we bought yesterday?
+Please book the parking space online before arriving at the airport.
+The tour includes breakfast, lunch, and an evening river cruise.
+Our luggage was delayed, so we are travelling with hand luggage only.
+The bus timetable changed and the last service now leaves earlier.
+I have reserved a table near the window for dinner on Tuesday.
+The insurance policy covers cancellations due to illness and bad weather.
+Weather forecasts suggest storms, so we may postpone the hiking trip.
+The plumber is coming on Friday to replace the kitchen tap.
+Could you recommend a reliable contractor for the roof repair?
+The boiler is making a strange noise, so it needs servicing soon.
+We need to schedule maintenance for the air conditioning units.
+Please measure the kitchen before ordering the new countertop.
+The painter finished the hallway and touched up the trim carefully.
+There is a leak under the sink that needs fixing before it worsens.
+The electrician recommended replacing the old fuse box entirely.
+Our landlord finally sent someone to repair the broken window.
+That is everything for this week; I will follow up tomorrow.

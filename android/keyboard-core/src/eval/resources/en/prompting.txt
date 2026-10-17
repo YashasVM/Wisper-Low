@@ -1,0 +1,250 @@
+Refactor this function to use async await.
+Why does my React component re-render on every keystroke?
+write a Python script that renames all files in a folder
+How do I center a div in CSS.
+Explain the difference between let and const in JavaScript.
+what is a closure in JavaScript
+fix this TypeScript error cannot find name useState
+how to fetch data with useEffect and cleanup
+convert this callback to a promise
+Why is my API returning undefined.
+how to read a JSON file in Node
+explain async await with a simple example
+what does the map function do in JavaScript
+how to filter an array of objects by property
+Debug this infinite loop in my while statement.
+how to sort an array of strings alphabetically
+explain the spread operator with examples
+what is the difference between null and undefined
+how to handle errors in a fetch request
+Write a function that validates an email address.
+how to debounce a search input in React
+explain useEffect dependency array in React
+why does setState not update immediately
+how to pass props to a child component
+Convert class component to functional component.
+how to use useContext for theme switching
+explain useMemo versus useCallback in React
+what is prop drilling and how to avoid it
+how to create a custom hook in React
+Fix this cannot read property of undefined.
+how to loop through an object in JavaScript
+explain promises and then catch finally
+what is event delegation in the DOM
+how to add an event listener properly
+Remove duplicates from an array of numbers.
+how to merge two objects in JavaScript
+explain hoisting with var let and const
+what is a pure function
+how to clone an object deeply
+Write a recursive function for factorial.
+how to check if a value is an array
+explain template literals with interpolation
+what is the ternary operator
+how to use optional chaining safely
+Explain the nullish coalescing operator in JavaScript.
+how to format a date in JavaScript
+convert a string to a number safely
+how to check if a string contains a substring
+explain arrow functions versus regular functions
+What is this binding in JavaScript.
+how to use reduce to sum an array
+explain destructuring assignment syntax with examples
+how to rename a variable while destructuring
+what is the rest parameter
+How to swap two variables without temp.
+explain short circuit evaluation in JavaScript
+how to check for NaN properly
+what is strict mode in JavaScript
+how to use try catch finally
+Explain synchronous versus asynchronous code.
+how to create a promise from scratch
+what is callback hell and how to fix
+explain the event loop simply
+how to use async await in a loop
+What is Promise all and when to use it.
+how to retry a failed fetch request
+explain fetch with async await example
+what is CORS and how to fix it
+how to set headers in a fetch request
+Explain JSON stringify and parse.
+how to store data in localStorage
+what is sessionStorage versus localStorage
+how to clear all items from localStorage
+explain cookies and their attributes
+How to set a cookie with expiry.
+what is JWT and how does it work
+how to decode a JWT token safely
+explain OAuth flow in simple terms
+what is an API key and where to store
+How to hide secrets in environment variables.
+how to push code to GitHub with SSH
+how to build a Docker image for my app
+write a SQL query to join two tables
+how to use coroutines in Kotlin
+Rename getUserData to fetchUserProfile in code.
+Why does my Kotlin app crash on launch?
+how to parse JSON with Kotlinx serialization
+explain GitHub Actions workflow syntax
+how to optimize a slow SQL query
+Explain Docker compose for local dev.
+how to handle null in Kotlin safely
+fix this Kotlin null pointer exception
+explain suspend functions in Kotlin
+how to serialize data classes in Kotlin
+What is the difference between val and var in Kotlin.
+why does handleClick fire twice
+how to debounce onChange in React
+explain the naming convention for handleInputChange
+Help me rewrite this paragraph to sound more professional.
+Fix grammar and flow in this email draft.
+make this sentence shorter and clearer
+suggest a better subject line for this message
+rewrite this intro to be more engaging
+improve the tone of this apology email
+Help me write a thank you note to my manager.
+make this paragraph less wordy
+suggest stronger verbs for this paragraph
+rewrite this bio to sound confident
+help me draft a resignation letter
+Make this review sound constructive.
+improve readability of this documentation
+rewrite this abstract for clarity
+help me polish this cover letter
+make this headline more catchy
+Suggest a better opening for my essay.
+rewrite this conclusion to be memorable
+help me simplify this technical explanation
+make this paragraph more persuasive
+rewrite this message to be more polite
+Help me draft a follow up email.
+make this announcement sound official
+rewrite this to be more concise
+help me craft a good thesis statement
+improve transitions between paragraphs in this essay
+Rewrite this to sound more friendly.
+help me draft a meeting agenda
+make this summary more accurate
+rewrite this to remove passive voice
+help me write a product description
+Make this call to action stronger.
+rewrite this to be more formal
+help me draft a press release
+make this tagline more memorable
+rewrite this to be more engaging
+Help me write a short story opening.
+make this dialogue sound natural
+rewrite this to be more vivid
+help me draft an apology to a customer
+explain how DNS resolution works
+What is the difference between HTTP and HTTPS.
+explain how a CDN speeds up websites
+what is caching and why use it
+explain the request response cycle
+what is a REST API in simple terms
+Explain GraphQL versus REST for APIs.
+what is a microservice architecture
+explain Docker containers simply for beginners
+what is Kubernetes used for
+explain how Git branching works
+What is a pull request.
+explain merge conflicts and resolution
+what is continuous integration in software development
+explain continuous deployment in simple terms
+what is a database index
+Explain SQL joins with examples.
+what is normalization in databases
+explain primary versus foreign keys
+what is a transaction in SQL
+explain ACID properties simply for databases
+What is NoSQL and when to use.
+explain Redis and its use cases
+what is a message queue
+explain the pub sub pattern in messaging
+what is load balancing in web apps
+Explain horizontal versus vertical scaling.
+what is a reverse proxy
+explain the TLS handshake simply for beginners
+what is encryption at rest
+explain hashing versus encryption clearly
+What is a hash collision.
+explain public key cryptography in simple terms
+what is a digital signature
+explain OAuth versus SAML for authentication
+what is single sign on
+Explain session versus token auth.
+what is CSRF and how to prevent
+explain XSS attack and mitigation
+what is SQL injection and prevention
+help me plan a weekend trip to the mountains
+Create a study schedule for my exams.
+plan a healthy weekly meal prep
+outline a project roadmap for my app
+help me organize my daily routine
+plan a birthday party for my friend
+Create a budget for my monthly expenses.
+help me structure a workout plan
+plan a reading list for this year
+outline steps to learn guitar basics
+help me plan a road trip itinerary
+Create a cleaning schedule for my house.
+plan a content calendar for my blog
+help me organize my project files
+create a timeline for my thesis
+plan a grocery shopping list
+Help me structure my resume sections.
+create a morning routine checklist
+plan a weekend family activity
+help me organize my email inbox
+create a packing list for vacation
+Plan a weekly study timetable.
+help me structure a presentation
+create a to do list for moving
+plan a simple dinner party menu
+help me organize my bookshelf
+Create a fitness tracking plan.
+plan a day trip to the city
+help me structure my notes
+create a weekly reflection template
+draft an email asking for a meeting
+Write an email to my landlord about repairs.
+draft a follow up email after an interview
+write an email declining a meeting politely
+draft an email requesting a deadline extension
+write an email to a client about delays
+Draft an email asking for feedback.
+write an email introducing myself to a team
+draft an email thanking a colleague for help
+write an email requesting time off
+draft an email to cancel a subscription
+Write an email to customer support.
+explain photosynthesis in simple terms
+Help me understand quantum mechanics basics.
+summarize this chapter on the French Revolution
+explain the water cycle step by step
+help me memorize periodic table groups
+explain Newtons laws with examples
+Summarize the causes of World War One.
+explain supply and demand simply
+help me understand calculus derivatives
+summarize this article about climate change
+explain the cell cycle phases
+help me study for my biology exam
+explain the difference between mitosis and meiosis
+summarize the plot of this novel
+explain the Pythagorean theorem simply
+help me understand organic chemistry basics
+summarize this research paper for me
+explain the nervous system simply
+help me prepare for my history test
+explain the carbon cycle in nature
+what is the capital of Australia
+how many ounces in a cup
+what does LOL stand for
+how do I convert Fahrenheit to Celsius
+what is the speed of light
+how many days in a leap year
+what is the largest ocean
+how do I say hello in Spanish
+what time zone is Tokyo in
+how many planets are in our solar system
