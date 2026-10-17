@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.keyboard.decoder
 
+import com.wisperlow.mobile.keyboard.Suggestions
 import com.wisperlow.mobile.keyboard.lm.Vocabulary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -8,21 +9,25 @@ import org.junit.Test
 class SuggestionPolicyTest {
     private val policy = SuggestionPolicy()
 
-    private fun lit(word: String, score: Float) =
-        Candidate(Vocabulary.UNKNOWN, word, score, 0f, 0f, CandidateKind.LITERAL, 0)
+    private fun lit(word: String, score: Float, lm: Float = score) =
+        Candidate(Vocabulary.UNKNOWN, word, score, 0f, lm, CandidateKind.LITERAL, 0)
 
-    private fun exact(word: String, score: Float, wordId: Int = 101) =
-        Candidate(wordId, word, score, 0f, 0f, CandidateKind.EXACT, 0)
+    private fun exact(word: String, score: Float, wordId: Int = 101, lm: Float = score) =
+        Candidate(wordId, word, score, 0f, lm, CandidateKind.EXACT, 0)
 
     /** A slip fix, as the decoder emits one after spatial and edit penalties. */
-    private fun fix(word: String, score: Float, wordId: Int = 102) =
-        Candidate(wordId, word, score, 0f, 0f, CandidateKind.CORRECTION, 1)
+    private fun fix(word: String, score: Float, wordId: Int = 102, lm: Float = score) =
+        Candidate(wordId, word, score, 0f, lm, CandidateKind.CORRECTION, 1)
 
-    private fun comp(word: String, score: Float, wordId: Int = 103) =
-        Candidate(wordId, word, score, 0f, 0f, CandidateKind.COMPLETION, 1)
+    private fun comp(word: String, score: Float, wordId: Int = 103, lm: Float = score) =
+        Candidate(wordId, word, score, 0f, lm, CandidateKind.COMPLETION, 1)
 
-    private fun facts(known: Boolean, trusted: Boolean = false, strength: CorrectionStrength = CorrectionStrength.MODEST) =
-        TypedFacts(known, trusted, strength)
+    private fun facts(
+        known: Boolean,
+        trusted: Boolean = false,
+        strength: CorrectionStrength = CorrectionStrength.MODEST,
+        logOdds: Float = 0f,
+    ) = TypedFacts(known, trusted, strength, logOdds)
 
     private val teh = listOf(
         lit("teh", -20f),
@@ -208,5 +213,55 @@ class SuggestionPolicyTest {
         val out = policy.decide("teh", teh, facts(known = false), slots = 2)
         assertEquals(listOf("teh", "the"), out.words)
         assertEquals("the", out.autoCorrect)
+    }
+
+    @Test
+    fun `no slots means no suggestions and no correction`() {
+        val out = policy.decide("teh", teh, facts(known = false), slots = 0)
+        assertEquals(Suggestions.None, out)
+        assertNull(out.autoCorrect)
+    }
+
+    @Test
+    fun `a common word keeps the middle slot`() {
+        val out = policy.decide("form", form, facts(known = true, logOdds = -6f))
+        assertNull(out.autoCorrect)
+        assertEquals(listOf("from", "form", "forms"), out.words)
+    }
+
+    @Test
+    fun `a common word is not replaced when a rival is merely more frequent`() {
+        // "from" outranks "form" by 5 nats, far past the unknown-literal margin of 1.5,
+        // but the literal is a common word, so frequency alone may not replace it.
+        val out = policy.decide(
+            "form",
+            listOf(lit("form", -5f), fix("from", 0f)),
+            facts(known = true, logOdds = -5f),
+        )
+        assertNull(out.autoCorrect)
+        assertEquals("form", out.words[1])
+    }
+
+    @Test
+    fun `a rare dictionary word is corrected on a strong log-probability ratio`() {
+        // Log-odds of -11 against the model's best word mark "helo" as a rare entry, and
+        // the correction beats it by 7 nats (about 1000x): replace it.
+        val out = policy.decide(
+            "helo",
+            listOf(lit("helo", -12f), fix("hello", -5f)),
+            facts(known = true, logOdds = -11f),
+        )
+        assertEquals("hello", out.autoCorrect)
+    }
+
+    @Test
+    fun `a rare dictionary word is kept when the correction's ratio is weak`() {
+        // Same rare literal, but the correction leads by only 3 nats (about 20x): hold back.
+        val out = policy.decide(
+            "helo",
+            listOf(lit("helo", -12f), fix("hello", -9f)),
+            facts(known = true, logOdds = -11f),
+        )
+        assertNull(out.autoCorrect)
     }
 }

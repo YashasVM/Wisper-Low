@@ -27,6 +27,12 @@ data class TypedFacts(
     /** The user restored this literal after an undo; nothing may replace it. */
     val userTrusted: Boolean,
     val strength: CorrectionStrength = CorrectionStrength.MODEST,
+    /**
+     * ln P(typed literal) - ln P(the model's most probable word), so it is at most 0 and
+     * unchanged by any uniform scaling of the counts. 0 means unknown or unpriced, which
+     * the policy reads as "not rare".
+     */
+    val literalLogOdds: Float = 0f,
 )
 
 /** Every threshold the policy weighs, in natural-log score units so they read as odds. */
@@ -45,12 +51,18 @@ data class PolicyParams(
     val knownLiteralAggressiveMargin: Float = 5.0f,
     /** Same-normalized surface restoration (apostrophe/case) only needs this much lead. */
     val variantMargin: Float = 3.5f,
-    /** ln unigram score below which a dictionary literal counts as rare for typo correction. */
-    val rareLiteralScore: Float = 7.0f,
-    /** ln ratio a rare literal's correction must exceed. */
+    /**
+     * A dictionary literal at or above this log-odds against the model's most probable word
+     * (about 1 in 2200) is common enough to keep the middle slot over completions.
+     */
+    val commonLiteralLogOdds: Float = -7.7f,
+    /**
+     * A dictionary literal below this log-odds (about 1 in 27000) is rare enough that its
+     * entry may be a misspelling rather than a word the user meant.
+     */
+    val rareLiteralLogOdds: Float = -10.2f,
+    /** ln ratio a rare literal's correction must beat it by to replace it (about 50x). */
     val rareLiteralRatio: Float = 3.9f,
-    /** ln unigram score at/above which a literal keeps the middle slot over completions. */
-    val commonLiteralScore: Float = 9.5f,
     /** Three letters leave little evidence, so correcting them takes extra margin. */
     val shortWordExtraMargin: Float = 1.0f,
 )
@@ -66,7 +78,7 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
     private class Shown(val index: Int, val candidate: Candidate, val word: String)
 
     fun decide(typed: String, candidates: List<Candidate>, facts: TypedFacts, slots: Int = 3): Suggestions {
-        if (typed.isBlank()) return Suggestions.None
+        if (typed.isBlank() || slots <= 0) return Suggestions.None
         // Every word on the strip carries the capitalization the user typed ("Teh" to "The").
         val shown = candidates.mapIndexed { i, c -> Shown(i, c, Lexicon.matchCase(typed, c.word)) }
         val literal = literalOf(shown, typed)
@@ -90,13 +102,15 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
             .distinctBy { it.word.lowercase() }
             .map { it.word }
             .toList()
+        // A common word is likelier to be what the user meant than a completion of it.
+        val common = facts.literalKnown && facts.literalLogOdds >= params.commonLiteralLogOdds
         // Slots read left to right; the middle one is what space will type, as on most keyboards.
         val words = when {
             auto != null -> listOf(typed, auto) + others.take(1)
-            facts.literalKnown -> listOfNotNull(others.getOrNull(0), typed, others.getOrNull(1))
+            common -> listOfNotNull(others.getOrNull(0), typed, others.getOrNull(1))
             else -> listOf(typed) + others.take(2)
         }
-        return Suggestions(words.take(slots.coerceAtLeast(0)), autoCorrect = auto)
+        return Suggestions(words.take(slots), autoCorrect = auto)
     }
 
     /** The reading that is exactly what was typed: a LITERAL candidate, or an EXACT one spelled so. */
@@ -117,16 +131,21 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
     private fun mayReplace(typed: String, target: Shown, literal: Shown?, shown: List<Shown>, facts: TypedFacts): Boolean {
         if (facts.strength == CorrectionStrength.OFF || facts.userTrusted) return false
         if (isProtected(typed)) return false
-        val margin = target.candidate.score - (literal?.candidate?.score ?: return false)
+        val literalScore = literal?.candidate?.score ?: return false
+        val margin = target.candidate.score - literalScore
         val variant = target.candidate.kind == CandidateKind.EXACT && Lexicon.key(target.candidate.word) == Lexicon.key(typed)
         if (variant) {
             val key = Lexicon.key(typed)
             if (key in AMBIGUOUS) return false
         }
         if (typed.length <= 2 && !variant && !shortWordPasses(typed, target, margin)) return false
+        // A rare dictionary word may be a misspelling, but only a correction far more
+        // probable than it in calibrated log-probability terms may replace it.
+        val rare = !variant && facts.literalKnown && facts.literalLogOdds < params.rareLiteralLogOdds
+        if (rare && target.candidate.lmScore - (literal?.candidate?.lmScore ?: 0f) < params.rareLiteralRatio) return false
         val required = when {
             variant -> params.variantMargin
-            else -> requiredMargin(typed, facts)
+            else -> requiredMargin(typed, facts.literalKnown && !rare, facts.strength)
         }
         if (margin <= required) return false
         if (rivalNear(target, shown, typed)) return false
@@ -144,10 +163,10 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
         (typed.equals("i", ignoreCase = true) && target.word == "I") ||
             (target.candidate.kind == CandidateKind.CORRECTION && margin > params.taughtMargin)
 
-    private fun requiredMargin(typed: String, facts: TypedFacts): Float {
-        val base = when (facts.strength) {
-            CorrectionStrength.MODEST -> if (facts.literalKnown) params.knownLiteralMargin else params.unknownLiteralMargin
-            CorrectionStrength.AGGRESSIVE -> if (facts.literalKnown) params.knownLiteralAggressiveMargin else params.unknownLiteralAggressiveMargin
+    private fun requiredMargin(typed: String, known: Boolean, strength: CorrectionStrength): Float {
+        val base = when (strength) {
+            CorrectionStrength.MODEST -> if (known) params.knownLiteralMargin else params.unknownLiteralMargin
+            CorrectionStrength.AGGRESSIVE -> if (known) params.knownLiteralAggressiveMargin else params.unknownLiteralAggressiveMargin
             CorrectionStrength.OFF -> return Float.POSITIVE_INFINITY
         }
         return base + if (typed.length == 3) params.shortWordExtraMargin else 0f

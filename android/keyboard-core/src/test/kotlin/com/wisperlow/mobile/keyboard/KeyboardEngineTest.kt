@@ -276,6 +276,46 @@ class KeyboardEngineTest {
         assertTrue(copy.isLearned("skrrt"))
     }
 
+    // --- rarity, centre slot and scaling (the d681e49 regressions) ------------------------
+
+    @Test
+    fun `a common word keeps the middle slot when a rival is more frequent`() {
+        // "from" outranks "form" 100 to 1. A real word must not be silently replaced for
+        // frequency alone, and it keeps the middle slot over any alternative.
+        val e = engineOf(listOf("form" to 20_000L, "from" to 2_000_000L))
+        val s = e.suggest("form")
+        assertNull(s.autoCorrect)
+        assertEquals("form", s.words[1])
+        assertTrue(s.words.toString(), s.words.contains("from"))
+    }
+
+    @Test
+    fun `a rare dictionary misspelling still fixes to the common word`() {
+        // "helo" is in the word list, but far rarer than the "hello" a doubled letter away.
+        val e = engineOf(listOf("helo" to 5L, "hello" to 1_000_000L))
+        assertEquals("hello", e.suggest("helo").autoCorrect)
+    }
+
+    @Test
+    fun `scaling every count does not change the suggestions`() {
+        val words = listOf(
+            "teh" to 4L, "the" to 400L, "cat" to 20L,
+            "form" to 30L, "from" to 3_000L, "helo" to 2L, "hello" to 1_000L,
+        )
+        val base = engineOf(words)
+        val scaled = engineOf(words.map { (word, count) -> word to count * 1_000L })
+        for (typed in listOf("teh", "cat", "form", "helo")) {
+            assertEquals("$typed words", base.suggest(typed).words, scaled.suggest(typed).words)
+            assertEquals("$typed fix", base.suggest(typed).autoCorrect, scaled.suggest(typed).autoCorrect)
+        }
+    }
+
+    @Test
+    fun `a non-positive slot count yields nothing at all`() {
+        assertEquals(Suggestions.None, engine.suggest("teh", max = 0))
+        assertEquals(Suggestions.None, engine.suggest("teh", max = -1))
+    }
+
     /** A model with some words made more likely, so the keyboard prefers them in context. */
     private class BoostedModel(private val base: LanguageModel, boosts: Map<String, Float>) : LanguageModel {
         override val vocabulary = base.vocabulary
