@@ -20,9 +20,6 @@ import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import com.wisperlow.mobile.keyboard.spatial.SpatialModel
 import com.wisperlow.mobile.keyboard.spatial.SpatialParams
 
-/** Type alias so the shared [WordEngine] interface can name [Lexicon.LearnedData]. */
-typealias LearnedData = Lexicon.LearnedData
-
 /**
  * The new typing engine: a noisy-channel decoder over the word list, wrapped in the same
  * personal-word behaviour [Lexicon] has. Touch positions, language-model context and edit
@@ -51,6 +48,20 @@ class KeyboardEngine(
 
     private val sentenceStart = vocabulary.id(Vocabulary.SENTENCE_START)
 
+    /**
+     * The model's most probable unigram, the reference that makes rarity a ratio rather
+     * than a magic count: a word's log-odds against it do not move when every count is
+     * scaled by the same constant.
+     */
+    private val topUnigram: Float by lazy {
+        var best = Float.NEGATIVE_INFINITY
+        for (id in 0 until vocabulary.size) {
+            val p = model.unigramLogProb(id)
+            if (p > best) best = p
+        }
+        best
+    }
+
     override fun suggest(typed: String, previous: String?, max: Int, touches: List<Touch?>?): Suggestions {
         if (max <= 0) return Suggestions.None
         if (typed.isEmpty()) return Suggestions.None
@@ -63,6 +74,7 @@ class KeyboardEngine(
             return expressive(typed, key, max)
         }
 
+        val literalIds = vocabulary.idsForKey(key)
         val context = contextOf(previous)
         val input = typedKeys(typed, touches)
         val decoded = decoder.decode(input, context, DECODE_POOL)
@@ -70,9 +82,15 @@ class KeyboardEngine(
         val personal = user.suggest(typed, previous, max, touches)
         val ranking = ArrayList<Candidate>(decoded.size + personal.words.size + 1)
         // A fix the user taught by hand before beats anything the word list suggests.
-        // Real dictionary words need two lessons before a taught fix applies.
-        val taughtCount = user.exportLearned().fixes.firstOrNull { Lexicon.key(it.first) == key }?.third ?: 0
-        val taughtAllowed = taughtCount >= 2 || vocabulary.idsForKey(key).isEmpty()
+        // Real dictionary words need two lessons before a taught fix applies. The fix
+        // count is only needed when there is a taught fix for these letters, so the whole
+        // learned snapshot is not exported (and its private dictionary copied) per key.
+        val taughtCount = if (personal.autoCorrect != null) {
+            user.exportLearned().fixes.firstOrNull { Lexicon.key(it.first) == key }?.third ?: 0
+        } else {
+            0
+        }
+        val taughtAllowed = taughtCount >= 2 || literalIds.isEmpty()
         if (taughtAllowed) {
             personal.autoCorrect?.let {
                 ranking += Candidate(Vocabulary.UNKNOWN, it, TAUGHT_FIX_SCORE, 0f, 0f, CandidateKind.CORRECTION, 1)
@@ -85,12 +103,19 @@ class KeyboardEngine(
         }
         ranking += decoded
 
-        val literalIds = vocabulary.idsForKey(key)
-        val literalScore = if (literalIds.isNotEmpty()) model.unigramLogProb(literalIds.first()) else Float.NEGATIVE_INFINITY
-        // Rare dictionary literals (misspellings like "helo") are treated as unknown so the
-        // common correction can replace them; common words keep their protection.
-        val literalKnown = literalIds.isNotEmpty() && literalScore > 7.0f
-        val facts = TypedFacts(literalKnown = literalKnown, userTrusted = user.isKnown(typed))
+        // The typed letters are a dictionary word; how rare its entry is decides whether a
+        // much more probable correction may replace it (the policy owns that threshold).
+        val literalKnown = literalIds.isNotEmpty()
+        val literalLogOdds = if (literalKnown) {
+            literalIds.maxOf { model.unigramLogProb(it) } - topUnigram
+        } else {
+            0f
+        }
+        val facts = TypedFacts(
+            literalKnown = literalKnown,
+            userTrusted = user.isKnown(typed),
+            literalLogOdds = literalLogOdds,
+        )
         val decided = policy.decide(typed, ranking, facts, max.coerceAtLeast(0))
         return if (key in SLANG) decided.copy(autoCorrect = null) else decided
     }
