@@ -19,6 +19,7 @@ import com.wisperlow.mobile.keyboard.spatial.GaussianSpatialModel
 import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import com.wisperlow.mobile.keyboard.spatial.SpatialModel
 import com.wisperlow.mobile.keyboard.spatial.SpatialParams
+import kotlin.math.abs
 
 /**
  * The new typing engine: a noisy-channel decoder over the word list, wrapped in the same
@@ -36,6 +37,8 @@ class KeyboardEngine(
     policyParams: PolicyParams = PolicyParams(),
     resolverParams: ResolverParams = ResolverParams(),
 ) : WordEngine {
+    private val keyRows = keys.filter { it.char in 'a'..'z' }.groupBy { it.y }.values
+        .map { row -> row.sortedBy { it.x } }.sortedBy { it.first().y }
     private val vocabulary = model.vocabulary
     private val index = ArrayWordIndex(model)
     private val spatial: SpatialModel = GaussianSpatialModel(keys, spatialParams)
@@ -63,6 +66,20 @@ class KeyboardEngine(
     }
 
     override fun suggest(typed: String, previous: String?, max: Int, touches: List<Touch?>?): Suggestions {
+        if (max <= 0 || typed.isEmpty()) return Suggestions.None
+        // Per-key prediction is provisional. Once the rectangle-hit letters spell a word,
+        // judge that literal with the ordinary word policy before accepting greedy changes.
+        val raw = rawKnownWord(typed, touches) ?: return suggestWord(typed, previous, max, touches)
+        val decided = suggestWord(raw, previous, max, touches)
+        val committed = decided.autoCorrect ?: raw
+        if (committed == typed) return decided.copy(autoCorrect = null)
+        return decided.copy(
+            words = (listOf(typed, committed) + decided.words).distinct().take(max),
+            autoCorrect = committed,
+        )
+    }
+
+    private fun suggestWord(typed: String, previous: String?, max: Int, touches: List<Touch?>?): Suggestions {
         if (max <= 0) return Suggestions.None
         if (typed.isEmpty()) return Suggestions.None
         val key = Vocabulary.keyOf(typed)
@@ -163,6 +180,26 @@ class KeyboardEngine(
     /** The letter a tap types, corrected by touch position and what the model expects next. */
     fun resolveKey(touch: Touch, landedOn: Char, landed: KeyCenter, prefix: String, previous: String?): Char =
         resolver.resolve(touch, landedOn, landed, prefix, contextOf(previous))
+
+    /** Reconstructs KeyArea's rectangle hits on the canonical letter grid, before prediction. */
+    private fun rawKnownWord(typed: String, touches: List<Touch?>?): String? {
+        if (touches == null || touches.size != typed.length || keyRows.isEmpty()) return null
+        val raw = buildString(typed.length) {
+            for ((i, c) in typed.withIndex()) {
+                val touch = touches[i]
+                if (touch == null || c.lowercaseChar() !in 'a'..'z' || !touch.x.isFinite() || !touch.y.isFinite()) {
+                    append(c)
+                    continue
+                }
+                // Row boundaries belong to the lower row, and key boundaries to the right
+                // key, just as KeyArea's inclusive-left/exclusive-right rectangle test does.
+                val row = keyRows.minWith(compareBy<List<KeyCenter>> { abs(it.first().y - touch.y) }.thenByDescending { it.first().y })
+                val landed = row.minWith(compareBy<KeyCenter> { abs(it.x - touch.x) }.thenByDescending { it.x }).char
+                append(if (c.isUpperCase()) landed.uppercaseChar() else landed)
+            }
+        }
+        return raw.takeIf { it != typed && isKnown(it) }
+    }
 
     /** The preceding word ids, oldest first: "<s>" at a sentence start, [Vocabulary.UNKNOWN] otherwise. */
     private fun contextOf(previous: String?): IntArray {

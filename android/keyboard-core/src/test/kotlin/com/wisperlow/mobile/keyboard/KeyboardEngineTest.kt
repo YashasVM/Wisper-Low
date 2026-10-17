@@ -1,5 +1,6 @@
 package com.wisperlow.mobile.keyboard
 
+import com.wisperlow.mobile.keyboard.eval.EvalField
 import com.wisperlow.mobile.keyboard.lm.LanguageModel
 import com.wisperlow.mobile.keyboard.lm.ScoredWord
 import com.wisperlow.mobile.keyboard.lm.UnigramModel
@@ -78,6 +79,81 @@ class KeyboardEngineTest {
         val y = centerOf('y')
         val touch = Touch((t.x + y.x) / 2f, (t.y + y.y) / 2f)
         assertEquals('y', boostedEngine.resolveKey(touch, 't', t, "he", null))
+    }
+
+    /** Types the same rectangle-hit keys the IME resolves before its session sees them. */
+    private fun resolvedWord(e: KeyboardEngine, raw: String, offsets: Map<Int, Pair<Float, Float>> = emptyMap()): Pair<String, List<Touch?>> {
+        var composing = ""
+        val touches = raw.mapIndexed { i, c ->
+            val (dx, dy) = offsets[i] ?: (0f to 0f)
+            val touch = Qwerty.touch(c, dx, dy)!!
+            val landed = centerOf(c.lowercaseChar())
+            composing += e.resolveKey(touch, c, landed, composing, null)
+            touch
+        }
+        return composing to touches
+    }
+
+    @Test
+    fun `word-level policy restores a known word after a greedy edge tap`() {
+        val (composing, touches) = resolvedWord(engine, "dinner", mapOf(1 to (0.49f to 0f)))
+        assertEquals("donner", composing)
+        assertEquals("dinner", engine.suggest(composing, touches = touches).autoCorrect)
+    }
+
+    @Test
+    fun `raw title case survives a greedy key prediction`() {
+        val e = engineOf(listOf("Linda" to 100L, "out" to 1_000_000L, "ounda" to 1L))
+        val (composing, touches) = resolvedWord(e, "Linda", mapOf(0 to (0f to -0.49f)))
+        assertEquals("Oinda", composing)
+        assertEquals("Linda", e.suggest(composing, touches = touches).autoCorrect)
+    }
+
+    @Test
+    fun `trusted raw spelling survives a greedy key prediction`() {
+        val e = engineOf(listOf("do" to 1_000_000L, "donner" to 1000L))
+        e.trust("dinner")
+        val (composing, touches) = resolvedWord(e, "dinner", mapOf(1 to (0.49f to 0f)))
+        assertEquals("donner", composing)
+        assertEquals("dinner", e.suggest(composing, touches = touches).autoCorrect)
+    }
+
+    @Test
+    fun `helpful resolver recovery of an unknown raw word stays available`() {
+        val e = engineOf(listOf("around" to 1_000_000L, "about" to 10L))
+        val (composing, touches) = resolvedWord(e, "arounx", mapOf(5 to (0f to -0.49f)))
+        assertEquals("around", composing)
+        val suggestion = e.suggest(composing, touches = touches)
+        assertEquals("around", suggestion.autoCorrect ?: composing)
+    }
+
+    @Test
+    fun `word reconciliation still lets the calibrated policy fix a rare raw word`() {
+        val e = engineOf(listOf("fir" to 1L, "for" to 1_000_000L))
+        val (composing, touches) = resolvedWord(e, "fir", mapOf(1 to (0.49f to 0f)))
+        assertEquals("for", composing)
+        val suggestion = e.suggest(composing, touches = touches)
+        assertEquals("for", suggestion.autoCorrect ?: composing)
+    }
+
+    @Test
+    fun `undo of word reconciliation restores visible composing without teaching a reverse fix`() {
+        val e = engineOf(listOf("dinner" to 100_000L, "do" to 1_000_000L, "donner" to 1000L))
+        val (composing, touches) = resolvedWord(e, "dinner", mapOf(1 to (0.49f to 0f)))
+        assertEquals("donner", composing)
+        val field = EvalField()
+        val session = TypingSession(field, { e })
+        composing.forEachIndexed { i, c -> session.type(c.toString(), touches[i]) }
+        assertEquals("donner", field.toString())
+
+        session.space()
+        assertEquals("dinner ", field.toString())
+        session.backspace()
+        assertEquals("donner", field.toString())
+        assertTrue(e.exportLearned().fixes.isEmpty())
+        session.space()
+        assertEquals("donner ", field.toString())
+        assertTrue(e.exportLearned().fixes.isEmpty())
     }
 
     // --- LexiconTest cases, ported ---------------------------------------------------------
