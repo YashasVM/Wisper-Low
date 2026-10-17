@@ -63,6 +63,7 @@ class BeamTypingDecoder(
     private val vocabulary: Vocabulary get() = model.vocabulary
 
     override fun decode(input: List<TypedKey>, context: IntArray, max: Int): List<Candidate> {
+        if (max <= 0 || input.isEmpty()) return emptyList()
         val typed = input.joinToString("") { it.char.toString() }
         val literal = literalCandidate(typed, context)
         // Apostrophes have no key: the search only sees the keys the user pressed.
@@ -125,18 +126,20 @@ class BeamTypingDecoder(
 
     /** A state may skip a letter of the word (an omission) without consuming input. */
     private fun closeOmissions(cur: State, slots: Slots, position: Int, maxEdits: Int) {
-        val initial = cur.size
-        for (t in 0 until initial) {
+        var t = 0
+        while (t < cur.size) {
             val edits = cur.edits[t]
-            if (edits >= maxEdits) continue
-            val node = cur.node[t]
-            for (c in index.children(node)) {
-                val child = index.child(node, c)
-                val penalty = if (c == cur.prev[t]) params.doubledOmissionPenalty else params.omissionPenalty
-                // Skipping the word's first letter is its own rare kind of slip.
-                val extra = if (position == 0) params.firstLetterPenalty else 0f
-                add(cur, slots, child, edits + 1, cur.score[t] + penalty + extra, cur.spatial[t], cur.changed[t], c, cur.depth[t] + 1)
+            if (edits < maxEdits) {
+                val node = cur.node[t]
+                for (c in index.children(node)) {
+                    val child = index.child(node, c)
+                    val penalty = if (c == cur.prev[t]) params.doubledOmissionPenalty else params.omissionPenalty
+                    // Skipping the word's first letter is its own rare kind of slip.
+                    val extra = if (position == 0) params.firstLetterPenalty else 0f
+                    add(cur, slots, child, edits + 1, cur.score[t] + penalty + extra, cur.spatial[t], cur.changed[t], c, cur.depth[t] + 1)
+                }
             }
+            t++
         }
     }
 

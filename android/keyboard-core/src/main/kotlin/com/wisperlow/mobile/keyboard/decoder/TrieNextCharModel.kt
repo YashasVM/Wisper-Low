@@ -26,6 +26,7 @@ class TrieNextCharModel(
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Map<Char, Float>>) = size > CACHE_SIZE
         }
 
+    @Synchronized
     override fun logProbs(prefix: String, context: IntArray): Map<Char, Float> {
         // The trie holds keys, so the prefix has to be normalised the way a word key is.
         val cacheKey = Key(Vocabulary.keyOf(prefix), context)
