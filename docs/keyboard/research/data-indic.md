@@ -9,7 +9,7 @@
 
 Downloads live only under `/home/yvm/kbdata/raw/{hi,kn}/<source>/`, never in the repo. Every download is treated as untrusted data: streamed with `python -I`, never executed, converted to NFC one-sentence-per-line `.txt.gz`. Full download log (URLs, dates, bytes, line counts): `/home/yvm/kbdata/README.md`. Budget: ≤ 10 GB downloads; ~1–3 GB native text per language. **Total Indic downloads: 5,772,071,811 bytes stored (+~111 MB FineWeb-2 native row groups fetched remotely) ≈ 5.88 GB.**
 
-> Note: the transliteration asset builder (task I31) consumes the Dakshina **train** lexicon TSVs directly from the raw paths below and owns its inputs; this document records provenance only — do not modify `assets/` or the builder from here. Any statement about what the builder enforces applies only once I31 has landed.
+> Note: the transliteration asset builder consumes the Dakshina **train** lexicon TSVs directly from the raw paths below and owns its inputs; this document records provenance only — do not modify `assets/` or the builder from here. The builder must consume train-only inputs.
 
 ---
 
@@ -17,7 +17,7 @@ Downloads live only under `/home/yvm/kbdata/raw/{hi,kn}/<source>/`, never in the
 
 | Source | License & primary-source citation (verified) | Verdict | Why / notes |
 |---|---|---|---|
-| **Dakshina** (Google) | CC BY-SA 4.0 — official README, github.com/google-research-datasets/dakshina, License section (lines 251–275): *"The dataset is licensed under CC BY-SA 4.0. Any third party content or data is provided 'As Is' without any warranty, express or implied."* | **ACCEPT** | On allowlist; full tar downloaded (2,008,340,480 B). Lexicons + native wiki text + romanized wiki text. |
+| **Dakshina** (Google) | CC BY-SA 4.0 — official README License section, https://github.com/google-research-datasets/dakshina#license: *"The dataset is licensed under CC BY-SA 4.0. Any third party content or data is provided 'As Is' without any warranty, express or implied."* | **ACCEPT** | On allowlist; full tar downloaded (2,008,340,480 B). Lexicons + native wiki text + romanized wiki text. |
 | **FineWeb-2** (Hugging Face) | ODC-By 1.0 — dataset's published license statement: README metadata `license: odc-by` at https://huggingface.co/datasets/HuggingFaceFW/fineweb-2 (license text: https://opendatacommons.org/licenses/by/1-0/) | **ACCEPT** | On allowlist; native `hin_Deva` / `kan_Knda` read via HTTP range; Latin shards downloaded. |
 | **IndicCorp v2** (AI4Bharat) | CC0 — dataset README, https://huggingface.co/datasets/ai4bharat/IndicCorpV2 (License section): *"All the datasets created as part of this work will be released under a CC-0 license and all models & code will be release under an MIT license"* | **ACCEPT** | Public domain; largest clean native corpus per language. |
 | **Sangraha** (AI4Bharat) | CC BY 4.0 — dataset README, https://huggingface.co/datasets/ai4bharat/sangraha, metadata `license: cc-by-4.0` (https://creativecommons.org/licenses/by/4.0/) | **ACCEPT** | Verified + synthetic splits used; unverified kn raw kept but its conversion excluded from the native budget. |
@@ -93,7 +93,7 @@ Path: `/home/yvm/kbdata/raw/{hi,kn}/dakshina/lexicons/{hi,kn}.translit.sampled.{
 
 **Count semantics:** the train lexicon covers **25,000 native word types** (official Dakshina README, lines 251–275), but the train TSV has more lines than types because a single word can have several accepted romanizations (hi train: **44,204 lines / 1,326,377 B**; kn train: **50,624 lines / 2,004,624 B**). Dev and test lexicons hold 2,500 word types each (hi dev 4,358 lines / 125,512 B, hi test 4,502 / 128,062 B; kn dev 5,027 / 190,913 B, kn test 5,047 / 194,253 B).
 
-**Split rule (hard):** production training uses **only** `*.train.tsv`. Dev/test are evaluation-only and must never enter production data (the builder's enforcement of this lands with task I31). Likewise `derived/*/dakshina_lexicon_pairs.tsv` concatenates all splits with a **4th split column** (`train`/`dev`/`test`) — analysis only, never a production input.
+**Split rule (hard):** production training uses **only** `*.train.tsv`. Dev/test are evaluation-only and must never enter production data; the builder must consume train-only inputs. Likewise `derived/*/dakshina_lexicon_pairs.tsv` concatenates all splits with a **4th split column** (`train`/`dev`/`test`) — analysis only, never a production input.
 
 **Romanized-sentence origin (hard fact, official Dakshina README lines 251–275):** **all** romanized sentences in Dakshina originate from **validation pages** and are then randomly split into dev/test — there is **no romanized-sentence training portion**. Consequently every romanized-text artifact derived from them (`dakshina_romanized_sentences.txt.gz`, `dakshina_sentence_pairs.tsv`, `dakshina_token_pairs.tsv`) is **analysis/eval-only** and must never enter production training.
 
@@ -101,7 +101,7 @@ Path: `/home/yvm/kbdata/raw/{hi,kn}/dakshina/lexicons/{hi,kn}.translit.sampled.{
 
 - `dakshina_sentence_pairs.tsv` — **analysis/eval only**: `native sentence \t romanized sentence \t tag` (tag `rejoined`). Derived from the rejoined/aligned romanized files, which originate from **validation pages** (official README lines 251–275); there is no romanized-sentence training portion.
 - `dakshina_token_pairs.tsv` — **analysis/eval only**: `native token \t romanized token \t tag` (tag `aligned`), same validation-page origin.
-- `{hin,kan}_aksharantar_pairs.tsv`: `native word \t romanized word \t source` where source ∈ {Dakshina, AK-Freq, Existing, Wikidata, Samanantar, IndicCorp, AK-NEF, AK-NEI}. **Mixed provenance — not uniformly CC0.** Row counts: hi {IndicCorp 958,614; Samanantar 154,110; Existing 131,773; Wikidata 25,012; Dakshina 31,295; AK-Freq 12,806; AK-NEI 1,188; AK-NEF 826}; kn {IndicCorp 2,830,544; Dakshina 51,117; Samanantar 36,923; AK-Freq 4,213; AK-NEI 1,274; AK-NEF 878; Wikidata 184}. Under the paper's scheme, only the **mined** rows are CC0; rows sourced from `Wikidata`/`Samanantar`/`IndicCorp` are the mined subset (this is the filter our builder applies). `Dakshina`-sourced rows duplicate Dakshina content (CC BY-SA 4.0), and `AK-Freq`/`Existing`/manual-collection rows fall under the CC-BY portion — treat those per their own provenance and de-duplicate against the Dakshina train lexicon when merging.
+- `{hin,kan}_aksharantar_pairs.tsv`: `native word \t romanized word \t source` where source ∈ {Dakshina, AK-Freq, Existing, Wikidata, Samanantar, IndicCorp, AK-NEF, AK-NEI}. **Mixed provenance — not uniformly CC0.** Row counts: hi {IndicCorp 958,614; Samanantar 154,110; Existing 131,773; Wikidata 25,012; Dakshina 31,295; AK-Freq 12,806; AK-NEI 1,188; AK-NEF 826}; kn {IndicCorp 2,830,544; Dakshina 51,117; Samanantar 36,923; AK-Freq 4,213; AK-NEI 1,274; AK-NEF 878; Wikidata 184}. Under the paper's scheme, only the **mined** rows are CC0; rows sourced from `Wikidata`/`Samanantar`/`IndicCorp` are the mined subset (the builder filters to exactly this subset). Provenance of the non-mined rows: `Dakshina`-sourced rows duplicate Dakshina content (CC BY-SA 4.0); `AK-Freq` rows are manually collected (CC BY 4.0); `Existing` rows have **unverified mixed third-party origin** and are **excluded** as unclear — do not assign them a license. De-duplicate against the Dakshina train lexicon when merging.
 
 ---
 
@@ -133,7 +133,7 @@ Inputs: `derived/kn/{sangraha_synthetic_latn, fineweb2_kan_Latn}_sentences.txt.g
 ### 5. Transliteration pairs
 
 - **Primary lexicon:** raw train TSVs only — `raw/hi/dakshina/lexicons/hi.translit.sampled.train.tsv` (44,204 rows) and `raw/kn/dakshina/lexicons/kn.translit.sampled.train.tsv` (50,624 rows). Column 3 (annotator agreement) can weight candidate ranking; dev/test TSVs reserved strictly for evaluation.
-- **Scale-out pairs (production-eligible):** `derived/{hi,kn}/*_aksharantar_pairs.tsv`, filtered to the CC0-mined provenance subset (`source` ∈ {Wikidata, Samanantar, IndicCorp}); de-duplicate vs. the Dakshina train lexicon on merge. Non-mined source rows (Dakshina/AK-Freq/Existing) keep their own licenses.
+- **Scale-out pairs (production-eligible):** `derived/{hi,kn}/*_aksharantar_pairs.tsv`, filtered to the CC0-mined provenance subset (`source` ∈ {Wikidata, Samanantar, IndicCorp}); de-duplicate vs. the Dakshina train lexicon on merge. Non-mined rows: `Dakshina` (CC BY-SA 4.0), `AK-Freq` (CC BY 4.0); `Existing` rows excluded (unverified mixed third-party origin).
 - **Analysis/eval only (never production):** `derived/{hi,kn}/dakshina_{sentence,token}_pairs.tsv` (validation-page origin, no training portion) and `derived/*/dakshina_lexicon_pairs.tsv` (mixed splits).
 
 ---
