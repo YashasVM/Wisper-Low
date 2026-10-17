@@ -20,7 +20,11 @@ object EvalData {
         }
     }
 
-    /** Every *misspellings*.tsv: "wrong<TAB>right" pairs, as written in the files. */
+    /**
+     * Every *misspellings*.tsv: "wrong<TAB>right" pairs, de-duplicated and sorted by
+     * (wrong, right). The old HashSet iteration order made the pair list — and any
+     * fingerprint over it — vary between runs and JVMs; sorting pins it down.
+     */
     fun misspellings(dir: File): List<Pair<String, String>> {
         val files = dir.listFiles { f -> f.isFile && f.extension == "tsv" && f.name.contains("misspellings") } ?: return emptyList()
         val seen = HashSet<Pair<String, String>>()
@@ -34,7 +38,7 @@ object EvalData {
                 if (wrong.isNotEmpty() && right.isNotEmpty() && ' ' !in right) seen += wrong to right
             }
         }
-        return seen.toList()
+        return seen.sortedWith(compareBy({ it.first }, { it.second }))
     }
 
     /** Splits a sentence into word and trailing-punctuation tokens. */

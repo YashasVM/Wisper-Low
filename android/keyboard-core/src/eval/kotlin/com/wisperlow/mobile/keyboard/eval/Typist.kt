@@ -25,7 +25,14 @@ import java.util.Random
  * over the same (preset, seed) see byte-identical input.
  */
 
-/** Noise strength per preset; sigma in key units, mistake rates as probabilities. */
+/**
+ * Noise strength per preset; sigma in key units, mistake rates as probabilities.
+ *
+ * [EXACT] is the true zero-noise control the simulator needs to separate engine
+ * behaviour from touch error: every tap lands on its key's centre and no word takes a
+ * mistake. [PRECISE] is NOT that control — it still draws Gaussian noise at sigma 0.15,
+ * so a PRECISE run can misland on a neighbouring key.
+ */
 enum class TypistPreset(
     val id: String,
     val sigma: Float,
@@ -34,6 +41,7 @@ enum class TypistPreset(
     val transposition: Double,
     val misspelling: Double,
 ) {
+    EXACT("exact", 0.0f, 0.0, 0.0, 0.0, 0.0),
     PRECISE("precise", 0.15f, 0.0, 0.0, 0.0, 0.0),
     NORMAL("normal", 0.25f, 0.01, 0.005, 0.01, 0.05),
     SLOPPY("sloppy", 0.35f, 0.02, 0.01, 0.02, 0.10),

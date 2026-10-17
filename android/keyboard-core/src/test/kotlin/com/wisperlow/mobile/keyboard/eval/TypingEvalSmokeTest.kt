@@ -41,17 +41,22 @@ class TypingEvalSmokeTest {
     }
 
     @Test
-    fun `no-strip user matches the plain typing path`() {
+    fun `exact preset is a true zero-noise control`() {
+        // EXACT has sigma 0 and no mistakes: every tap lands on its key's centre, so the
+        // raw typed literal is the intended sentence and nothing is a touch miss. PRECISE,
+        // by contrast, still draws Gaussian noise at sigma 0.15.
+        assertEquals(0f, TypistPreset.EXACT.sigma, 0f)
+        assertTrue(TypistPreset.PRECISE.sigma > 0f)
+
         val sentence = EvalData.sentences(data).first()
         val intended = EvalData.tokens(sentence)
         val engine = BaselineEngine(assets)
-        val plan = Typist(TypistPreset.PRECISE)
+        val plan = Typist(TypistPreset.EXACT)
             .plan(intended, EvalData.misspellings(data).associate { (w, r) -> Lexicon.key(r) to w }, seed = 1L)
         val run = Simulator.run(engine, plan, intended, stripUser = false, latencies = null)
-        // Precise preset, no noise, no strip: the text should survive untouched.
-        val out = engine.text().trim()
-        assertTrue("precise no-strip run lost the sentence: \"$out\"", run.intendedCorrect >= intended.size - 1)
-        assertEquals(0, run.cleanFalseCorrections)
+        assertEquals("zero-noise typing should have no touch mislandings", 0, run.touchMissWords)
+        assertEquals("zero-noise typing should not be corrupted", 0, run.cleanFalseCorrections)
+        assertEquals("every word typed exactly should survive", intended.count { it.hasWord }, run.intendedCorrect)
     }
 
     @Test
