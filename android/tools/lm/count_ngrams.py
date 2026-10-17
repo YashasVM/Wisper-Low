@@ -29,8 +29,8 @@ from functools import partial
 SENTENCE_START = "<s>"
 DEFAULT_CHUNK_ENTRIES = 200_000
 DEFAULT_MIN1 = 2
-DEFAULT_MIN2 = 3
-DEFAULT_MIN3 = 3
+DEFAULT_MIN2 = 1
+DEFAULT_MIN3 = 1
 MAX_FAN_IN = 128
 
 # Curly quotes and modifier apostrophes that all mean a plain apostrophe.
@@ -615,6 +615,8 @@ def main(argv=None):
 
     elapsed = time.time() - start
     stats = {
+        "inputs": args.inputs,
+        "pruning": {"min1": args.min1, "min2": args.min2, "min3": args.min3, "vocab": args.vocab},
         "lines": counter.lines,
         "sentences": counter.sentences,
         "tokens": counter.tokens,

@@ -4,12 +4,14 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.io.File
 import java.nio.file.Files
 import kotlin.math.exp
 
 class NgramEstimatorTest {
-    /** Counts spread across 1..9, so every discount bucket of every order has evidence. */
+    /** Frequent phrases and singleton alternatives, with missing buckets exercising fallback. */
     private val corpus = List(4) { "the cat sat on the mat" } +
         listOf("the cat ran home") +
         List(4) { "the dog ran home" } +
@@ -54,7 +56,9 @@ class NgramEstimatorTest {
         val context = intArrayOf(wordId("cat"))
         val frequent = probability(tables, wordId("sat"), context) // bigram count 4
         val rare = probability(tables, wordId("ran"), context) // bigram count 1
-        assertTrue("sat=$frequent vs ran=$rare", frequent > 5 * rare)
+        assertEquals(2.5 / 6 + (2.5 / 6) / 13, frequent, 1e-7)
+        assertEquals(0.5 / 6 + (2.5 / 6) * 2 / 13, rare, 1e-7)
+        assertTrue("sat=$frequent vs ran=$rare", frequent > rare)
     }
 
     @Test
@@ -81,6 +85,64 @@ class NgramEstimatorTest {
     }
 
     @Test
+    fun `missing count buckets use positive fallback discounts without inventing mass`() {
+        val fallbackOrders = mutableListOf<Int>()
+        val heavy = NgramEstimator.estimate(countsOf(List(5) { "x y z" }), onDiscountFallback = { fallbackOrders.add(it) })
+        assertEquals(listOf(2, 3), fallbackOrders)
+        val x = idOf(heavy, "x")
+        val y = idOf(heavy, "y")
+        // D3+=1.5 removes 1.5/5 of each context's count mass.
+        assertEquals(0.3, exp(heavy.unigramBackoff[x].toDouble()), 1e-7)
+        assertEquals(0.3, exp(heavy.bigramBackoff[bigramRow(heavy, x, y)].toDouble()), 1e-7)
+        assertEquals(0.1, probability(heavy, x, intArrayOf(x)), 1e-6)
+        for (a in heavy.vocabulary.indices) {
+            assertEquals(1.0, sumOverVocabulary(heavy, intArrayOf(a)), 1e-6)
+            for (b in heavy.vocabulary.indices) {
+                assertEquals(1.0, sumOverVocabulary(heavy, intArrayOf(a, b)), 1e-6)
+            }
+        }
+    }
+
+    @Test
+    fun `pruning does not refit discounts after deleting rare count evidence`() {
+        val pruned = NgramEstimator.estimate(counts, EstimatorConfig(minBigramCount = 3, minTrigramCount = 3))
+        // Count buckets for this corpus are n1=4 n2=0, so fallback D3+=1.5.
+        // 'the' retains cat=5 and dog=4 and mat=4: removed mass is 4.5/13.
+        val the = idOf(pruned, "the")
+        assertEquals(4.5 / 13, exp(pruned.unigramBackoff[the].toDouble()), 1e-7)
+        assertEquals(1.0, sumOverVocabulary(pruned, intArrayOf(the)), 1e-6)
+    }
+
+    @Test
+    fun `invalid fitted discounts use the whole order fallback`() {
+        withCounterOutput { dir ->
+            File(dir, "unigrams.tsv").writeText("<s>\t10\na\t10\nb\t10\nc\t10\n")
+            File(dir, "bigrams.tsv").writeText(
+                "a\ta\t1\na\tb\t2\na\tc\t3\nb\ta\t3\nb\tb\t3\nb\tc\t3\n",
+            )
+            val fallbackOrders = mutableListOf<Int>()
+            val fitted = NgramEstimator.estimate(NgramCounts.read(dir, 4), onDiscountFallback = { fallbackOrders.add(it) })
+            // n1=n2=1, n3=4 would fit D2=-2, which cannot define a distribution.
+            assertEquals(listOf(2), fallbackOrders)
+            assertEquals(0.5, exp(fitted.unigramBackoff[idOf(fitted, "a")].toDouble()), 1e-7)
+            assertEquals(1.0, sumOverVocabulary(fitted, intArrayOf(idOf(fitted, "a"))), 1e-6)
+        }
+    }
+
+    @Test
+    fun `discount fit uses singleton and doubleton evidence before pruning`() {
+        withCounterOutput { dir ->
+            File(dir, "unigrams.tsv").writeText("<s>\t10\na\t10\nb\t10\nc\t10\nd\t10\n")
+            File(dir, "bigrams.tsv").writeText("a\ta\t1\na\tb\t2\na\tc\t3\na\td\t4\n")
+            val raw = NgramCounts.read(dir, 5)
+            val pruned = NgramEstimator.estimate(raw, EstimatorConfig(minBigramCount = 3))
+            // n1=n2=n3=n4=1: Y=1/3, D3+=5/3. Kept total=7.
+            assertEquals(10.0 / 21, exp(pruned.unigramBackoff[idOf(pruned, "a")].toDouble()), 1e-7)
+            assertEquals(1.0, sumOverVocabulary(pruned, intArrayOf(idOf(pruned, "a"))), 1e-6)
+        }
+    }
+
+    @Test
     fun `min counts prune rows before estimation`() {
         val pruned = NgramEstimator.estimate(counts, EstimatorConfig(minBigramCount = 2))
         assertEquals(9, pruned.bigramCount)
@@ -92,6 +154,32 @@ class NgramEstimatorTest {
         val common = floored.vocabulary.indexOf("cat") // unigram count 6
         assertTrue(exp(floored.unigramLogProb[rare].toDouble()) < 1e-6)
         assertTrue(exp(floored.unigramLogProb[common].toDouble()) > 1e-3)
+    }
+
+    @Test
+    fun `estimated distributions stay normalized through artifact round trip`() {
+        for (raw in listOf(counts, countsOf(List(5) { "x y z" }), countsOf(listOf("a b c d")))) {
+            val estimate = NgramEstimator.estimate(raw)
+            val bytes = ByteArrayOutputStream().use {
+                NgramModelWriter.write(estimate, it)
+                it.toByteArray()
+            }
+            val loaded = NgramModel.load(ByteBuffer.wrap(bytes))
+            val contexts = listOf(intArrayOf()) + raw.vocabulary.indices.flatMap { a ->
+                listOf(intArrayOf(a)) + raw.vocabulary.indices.map { b -> intArrayOf(a, b) }
+            }
+            for (context in contexts) {
+                assertEquals(1.0, sumOverVocabulary(estimate, context), 1e-6)
+                val mass = raw.vocabulary.indices.sumOf { exp(loaded.logProb(it, context).toDouble()) }
+                assertEquals("loaded mass after ${context.toList()}", 1.0, mass, 0.02)
+                for (word in raw.vocabulary.indices) {
+                    assertEquals(
+                        TablesModel(estimate).logProb(word, context).toDouble(),
+                        loaded.logProb(word, context).toDouble(), 0.1,
+                    )
+                }
+            }
+        }
     }
 
     @Test

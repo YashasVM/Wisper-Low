@@ -17,6 +17,7 @@ import java.security.MessageDigest
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.random.Random
 import kotlin.system.exitProcess
 
@@ -113,7 +114,9 @@ private fun run(argv: Array<String>, started: Long) {
     val afterRead = System.nanoTime()
 
     progress("estimating interpolated modified Kneser-Ney tables")
-    val tables = NgramEstimator.estimate(counts, options.floors())
+    val tables = NgramEstimator.estimate(counts, options.floors()) { order ->
+        progress("WARNING: order $order discount fit is undefined or nonpositive/out-of-range; using D1=0.5 D2=1 D3+=1.5")
+    }
     checkTables(tables, options)
     val afterEstimate = System.nanoTime()
 
@@ -217,9 +220,32 @@ private fun checkTables(tables: NgramTables, options: Options) {
     for (v in tables.bigramBackoff) if (v > 1e-6f) throw CompilerException("bigram backoff > 0 ($v)")
     for (v in tables.trigramLogProb) if (v > 1e-6f) throw CompilerException("trigram logprob > 0 ($v)")
 
+    checkBackoffCollapse(tables.unigramBackoff, "unigram backoff")
+    checkBackoffCollapse(tables.bigramBackoff, "bigram backoff")
+
     if (tables.bigramCount == 0) {
         progress("WARNING: floors pruned every bigram (--min2 ${options.minBigram}); the model is unigram-only")
     }
+}
+
+/** Rejects the v1 failure signature without prescribing an evaluation-tuned lambda. */
+internal fun checkBackoffCollapse(values: FloatArray, name: String) {
+    if (values.isEmpty()) return
+    val collapsed = values.count { it <= ln(1e-6).toFloat() + 1e-5f }
+    if (collapsed * 2 >= values.size) {
+        throw CompilerException(
+            "$name collapses at or below lambda=1e-6 in $collapsed/${values.size} contexts; " +
+                "preserve count-1/count-2 evidence and inspect discount estimation",
+        )
+    }
+}
+
+private fun backoffReport(values: FloatArray): String {
+    if (values.isEmpty()) return "no contexts"
+    val sorted = values.sortedArray()
+    fun lambda(q: Double) = exp(sorted[((sorted.size - 1) * q).toInt()].toDouble())
+    return "lambda min=${lambda(0.0)} p50=${lambda(0.5)} p95=${lambda(0.95)} " +
+        "max=${lambda(1.0)} at/below-1e-6=${values.count { it <= ln(1e-6).toFloat() + 1e-5f }}/${values.size}"
 }
 
 /**
@@ -451,6 +477,8 @@ private fun printReport(
         "total ${secs(System.nanoTime() - started)}")
     println("counts rows: ${counts.vocabulary.size} words, ${counts.bigramCounts.size} bigrams, ${counts.trigramCounts.size} trigrams")
     println("tables:      ${tables.vocabulary.size} words, ${tables.bigramCount} bigrams, ${tables.trigramCount} trigrams")
+    println("unigram backoff: ${backoffReport(tables.unigramBackoff)}")
+    println("bigram backoff:  ${backoffReport(tables.bigramBackoff)}")
     println("verification: ${verification.contexts} contexts, ${verification.pairs} (context, word) pairs")
     println(
         "quantization: max |delta logprob| ${f(verification.maxAbsErrorNats.toDouble())} nats, " +

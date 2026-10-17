@@ -28,8 +28,8 @@ Example on the prepared chat corpus:
 
 ```
 android/tools/lm/build_model.sh \
-  --counts /home/yvm/kbdata/counts/en-chat-v1 \
-  --out /tmp/en-chat-v1.wlm --vocab 60001
+  --counts /home/yvm/kbdata/counts/en-chat-v2 \
+  --out /tmp/en-chat-v2.wlm --vocab 60001
 ```
 
 ## What the verification checks (and why the model cannot claim quality from this)
@@ -56,6 +56,30 @@ previously published output is left byte-identical. The gate bound is
 **Caveat on "quality"**: passing here means the file round-trips within the measured
 quantization error and its unigram marginal is normalized. Perplexity, coverage and typing-level evaluation are separate work, and a
 normalized model can still be poorly trained.
+
+The compiler also reports each order's backoff lambda minimum, median and 95th
+percentile. It rejects an order when at least half its stored backoff weights have
+lambda at or below `1e-6`, the collapse signature measured in en-chat-v1. This is a
+pipeline sanity gate, not a typing-quality threshold. A minority of very frequent
+contexts may legitimately have tiny lambda. Empty orders and ordinary backoff-only
+contexts pass. The gate runs before writing the candidate.
+
+Discounts are fitted from all supplied rows before estimator pruning. If n1, n2 or
+n3 is missing, or any fitted discount is nonpositive or exceeds its count bucket,
+the compiler reports the affected order and the estimator uses the whole-order fallback D1=0.5, D2=1, D3+=1.5. These are KenLM's
+[documented fallback values](https://github.com/kpu/kenlm/blob/master/lm/builder/lmplz_main.cc),
+with the same whole-order fallback structure as its
+[discount fit](https://github.com/kpu/kenlm/blob/master/lm/builder/adjust_counts.cc).
+Rejecting zero discounts is an additional guard against losing all lower-order mass.
+Lambda is the sum of discounts divided by retained context counts, with no fixed
+lower bound that adds probability mass. Fallback keeps sparse/artificial corpora
+usable; it does not recover statistics already lost through counter pruning.
+
+Compiler gate tests are enabled with the tool init script:
+
+```sh
+android/scripts/gradle-locked.sh -I tools/lm/compile-model.init.gradle :keyboard-core:test
+```
 
 ## How it builds without touching shared files
 
