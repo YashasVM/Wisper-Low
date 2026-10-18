@@ -28,6 +28,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import com.wisperlow.mobile.MainActivity
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.dictation.DictationEngine
@@ -62,6 +63,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var transcriptRepository: TranscriptRepository
     @Inject lateinit var lexiconRepository: LexiconRepository
+    @Inject lateinit var emojiRepository: EmojiRepository
 
     private val registry = LifecycleRegistry(this)
     private val savedState = SavedStateRegistryController.create(this)
@@ -73,12 +75,14 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     private var inputView: View? = null
 
     private val field = ConnectionField()
-    private val typing = TypingSession(field, { lexiconRepository.lexicon.value })
+    private val typing = TypingSession(field, { lexiconRepository.engine.value })
     private var suggestJob: Job? = null
     /** When the keyboard last changed the text, to tell its own cursor updates from the user's. */
     private var lastEditAt = 0L
     private var prefs = KeyboardPrefs()
     private var lastShiftTap = 0L
+    /** True in a field marked NO_PERSONALIZED_LEARNING: no resolver reading, no learning. */
+    private var privateField = false
 
     /** True while the engine session in progress was started from this keyboard, not the app's practice area. */
     private var ownsSession: Boolean
@@ -110,6 +114,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         savedState.performRestore(null)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lexiconRepository.load()
+        emojiRepository.load()
         clipHistory.prune(System.currentTimeMillis())
         ui.update { it.copy(recentEmoji = loadRecentEmoji(), clips = clipHistory.entries) }
         // As the active keyboard, Wisperlow may read the clipboard; keep a history for the panel.
@@ -124,14 +129,15 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
                     )
                 }
                 applyFieldOptions()
+                switchLanguage(settings.keyboard.inputLanguage)
             }
         }
         // Words from the personal dictionary are the user's own, so suggest them and never "fix" them.
         scope.launch {
-            combine(lexiconRepository.lexicon, settingsRepository.current) { lexicon, settings -> lexicon to settings.personalDictionary }
-                .collect { (lexicon, dictionary) ->
-                    lexicon ?: return@collect
-                    dictionary.values.flatMap { it.split(' ') }.filter { it.length > 1 }.forEach(lexicon::trust)
+            combine(lexiconRepository.engine, settingsRepository.current) { engine, settings -> engine to settings.personalDictionary }
+                .collect { (engine, dictionary) ->
+                    engine ?: return@collect
+                    dictionary.values.flatMap { it.split(' ') }.filter { it.length > 1 }.forEach(engine::trust)
                     refreshSuggestions()
                 }
         }
@@ -270,8 +276,18 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         }
 
         override fun onText(text: String, at: Offset?) {
-            val touch = if (at != null && ui.value.page == Page.LETTERS) text.singleOrNull()?.let { Qwerty.touch(it, at.x, at.y) } else null
-            typing.type(text, touch)
+            val c = text.singleOrNull()
+            val isLetter = c != null && (c in 'a'..'z' || c in 'A'..'Z')
+            // [at] is where inside the key the thumb landed, as a fraction of the key's size;
+            // Qwerty turns that into the canonical letter-board coordinates, number row or
+            // not, so the touch sits on the same grid as the key centres the engine expects.
+            val touch = if (at != null && ui.value.page == Page.LETTERS && isLetter) {
+                c?.let { Qwerty.touch(it, at.x, at.y) }
+            } else {
+                null
+            }
+            val typed = if (touch != null && resolvable()) c?.let { resolveTap(it, touch) } else null
+            typing.type(typed?.toString() ?: text, touch)
             afterEdit()
         }
 
@@ -313,6 +329,29 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }
     }
+
+    /** Whether plain tapped letters may be read by the engine: an ordinary text field with suggestions and autocorrect on. */
+    private fun resolvable() = ui.value.field == FieldKind.TEXT &&
+        typing.options.suggestions && typing.options.autoCorrect && !privateField &&
+        // Regional Latin modes keep the landed letters while English also predicts key hits.
+        lexiconRepository.language.value == KeyboardLanguage.ENGLISH
+
+    /**
+     * Lets the engine correct a tap that may have slipped onto a neighbouring key. Everything
+     * chosen directly — capitals, digits from long presses, alternates, symbols — reaches here
+     * without a touch or fails the gate, so it types exactly as picked. Private fields
+     * (NO_PERSONALIZED_LEARNING) are typed key by key: reading taps is learning, and the
+     * marker says not to.
+     */
+    private fun resolveTap(landed: Char, touch: Touch): Char {
+        val engine = lexiconRepository.engine.value as? KeyboardEngine ?: return landed
+        val center = canonicalCenter(landed) ?: return landed
+        return engine.resolveKey(touch, landed, center, typing.composing, typing.previousWord())
+    }
+
+    /** The canonical centre of the key that types [landed], on the same grid the engine was built over. */
+    private fun canonicalCenter(landed: Char): KeyCenter? =
+        Qwerty.touch(landed.lowercaseChar(), 0f, 0f)?.let { KeyCenter(landed.lowercaseChar(), it.x, it.y) }
 
     private fun afterEdit() {
         lastEditAt = SystemClock.uptimeMillis()
@@ -366,24 +405,49 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             }
             return
         }
-        val lexicon = lexiconRepository.lexicon.value ?: return
+        val engine = lexiconRepository.engine.value
+        if (engine == null) {
+            // No engine yet (still loading, or mid mode switch): show nothing rather than a
+            // stale language's words.
+            if (state.suggestions != Suggestions.None || state.emojiHints.isNotEmpty()) {
+                ui.update { it.copy(suggestions = Suggestions.None, emojiHints = emptyList()) }
+            }
+            return
+        }
         val word = typing.composing
         val previous = typing.previousWord()
         val touches = typing.touches
         val corrects = typing.autoCorrectsHere()
         val revert = typing.revertible
+        val hintWord = word.ifEmpty { previous.orEmpty() }
         suggestJob?.cancel()
         suggestJob = scope.launch {
-            val result = withContext(Dispatchers.Default) {
-                when {
-                    word.isNotEmpty() -> lexicon.suggest(word, previous, touches = touches).let { if (corrects) it else it.copy(autoCorrect = null) }
+            // Words keep typing responsive; the emoji dictionary is parsed once and read here.
+            val (result, emojiHints) = withContext(Dispatchers.Default) {
+                val suggestions = when {
+                    word.isNotEmpty() -> engine.suggest(word, previous, touches = touches).let { if (corrects) it else it.copy(autoCorrect = null) }
                     // Right after an autocorrection, offer what was typed so one tap puts it back.
-                    revert != null -> Suggestions(listOf(revert) + lexicon.predict(previous, max = 2), revert = revert)
-                    else -> Suggestions(lexicon.predict(previous))
+                    revert != null -> Suggestions(listOf(revert) + engine.predict(previous, max = 2), revert = revert)
+                    else -> Suggestions(engine.predict(previous))
                 }
+                suggestions to emojiRepository.hints(hintWord)
             }
-            ui.update { it.copy(suggestions = result, emojiHints = Emoji.forWord(word.ifEmpty { previous.orEmpty() })) }
+            ui.update { it.copy(suggestions = result, emojiHints = emojiHints) }
         }
+    }
+
+    /**
+     * Switches input languages. The word in progress is finished under the engine that knows it,
+     * then the repository swaps engines; the strip refreshes as soon as the new one is ready.
+     *
+     * The repository is the source of truth, not a field on this (recreated) service: after an
+     * IME restart the singleton may still be on another language, so it is always synced to prefs.
+     */
+    private fun switchLanguage(language: KeyboardLanguage) {
+        if (lexiconRepository.language.value == language) return
+        typing.finishWord()
+        lexiconRepository.selectLanguage(language)
+        refreshSuggestions()
     }
 
     private fun applyFieldOptions() {
@@ -396,6 +460,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         // treat it as a hint and still help with typing; password fields stay off regardless.
         Log.d(TAG, "Field ${info?.packageName}: inputType=0x${Integer.toHexString(inputType)} kind=$kind")
         val private = (info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        privateField = private
         val names = variation == InputType.TYPE_TEXT_VARIATION_PERSON_NAME ||
             variation == InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS ||
             variation == InputType.TYPE_TEXT_VARIATION_FILTER
@@ -574,10 +639,10 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
 
     /** Long-pressing a suggestion the keyboard learned from the user removes just that word. */
     private fun forgetSuggestion(word: String) {
-        val lexicon = lexiconRepository.lexicon.value ?: return
-        if (!lexicon.isLearned(word)) return
+        val engine = lexiconRepository.engine.value ?: return
+        if (!engine.isLearned(word)) return
         inputView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        lexicon.forget(word)
+        engine.forget(word)
         lexiconRepository.scheduleSave()
         Toast.makeText(this, getString(R.string.keyboard_forgot_word, word), Toast.LENGTH_SHORT).show()
         refreshSuggestions()

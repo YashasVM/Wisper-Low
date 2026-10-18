@@ -1,0 +1,323 @@
+Legal notice for Wisperlow romanization assets
+===============================================
+
+Scope
+-----
+
+This notice covers the romanization word-pair assets built from open data by
+`android/tools/indic/build_indic_pairs.py`:
+
+- `android/tools/indic/reference/hi.tsv`  (Hindi, Devanagari)
+- `android/tools/indic/reference/kn.tsv`  (Kannada, Kannada script)
+
+These are offline research references. They are excluded from the Android APK;
+the app's Hindi and Kannada modes output Latin text. No proprietary data was used
+in these references.
+
+License of the assets
+---------------------
+
+The two files above are a modified/adapted work that combines word pairs from
+two openly licensed datasets: the Dakshina dataset (CC BY-SA 4.0) and the
+Aksharantar dataset (mined rows under CC0 1.0). Because the combined work
+incorporates CC BY-SA 4.0 material, it is distributed as a whole under
+
+    CC BY-SA 4.0
+    https://creativecommons.org/licenses/by-sa/4.0/
+
+Full legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+The Aksharantar-derived rows within the asset remain available from their
+source under CC0 1.0, independently of the combined license:
+
+    CC0 1.0 (public domain dedication)
+    https://creativecommons.org/publicdomain/zero/1.0/
+
+The CC BY-SA 4.0 share-alike obligation attaches only to these data assets (and
+to any modified versions or adaptations of them), not to the surrounding
+Wisperlow application, which is licensed separately under the MIT License
+(`LICENSE` at the repository root). Shipping these assets alongside the MIT
+application does not relicense the application.
+
+Provenance (source page, file/member name, decompressed sha256, split,
+generation command) is embedded in each TSV's `#`-comment header.
+
+Source data [1] — Aksharantar (CC0)
+-----------------------------------
+
+Source: Aksharantar train split (train members only; the dev/test members of
+the dataset were never read, so neither file contains evaluation data).
+
+Dataset page: https://indicnlp.ai4bharat.org/aksharantar/
+Project/repository (code and models, MIT):
+https://github.com/AI4Bharat/IndicXlit
+Paper: Madhani et al., "Aksharantar: Towards building open transliteration
+tools for the next billion users", arXiv:2205.03018, Findings of EMNLP 2023,
+https://aclanthology.org/2023.findings-emnlp.4/
+
+License declaration of the source (quoted from the paper's introduction):
+
+  "The code and models are available under an MIT license, the Aksharantar
+   benchmark and all data we created manually are available under the CCBY
+   license, whereas all the mined data is available under the CC0 license."
+
+Footnote 3 (CC BY): https://creativecommons.org/licenses/by/4.0/
+Footnote 4 (CC0):   https://creativecommons.org/publicdomain/zero/1.0/
+
+Row-level license filter used when building the assets: only Aksharantar rows
+whose `source` field is one of the mined CC0 subsets — Wikidata, Samanantar,
+IndicCorp — were accepted. Rows with `source = Dakshina` (imported
+third-party data under CC BY-SA 4.0), `source = AK-Freq` and other manually
+created rows (CC BY 4.0, and also evaluation-benchmark rows), and
+`source = Existing` (a compilation of prior transliteration corpora whose
+per-row licenses cannot be verified) were all excluded.
+
+Source data [2] — Dakshina v1.0 (CC BY-SA 4.0)
+----------------------------------------------
+
+Source: the Dakshina v1.0 *word-lexicon train split only*:
+
+- `hi/lexicons/hi.translit.sampled.train.tsv` (44,204 pair rows)
+- `kn/lexicons/kn.translit.sampled.train.tsv` (50,624 pair rows)
+
+Only the word-lexicon `*.train.tsv` files are used. The dev and test lexicons
+are refused at the builder's CLI and are never opened, so no evaluation data
+enters the asset. The full-sentence `romanized/` tree (which holds
+validation-derived sentences and their romanizations) is likewise never read.
+
+Dataset page: https://github.com/google-research-datasets/dakshina
+Archive: https://storage.googleapis.com/dakshina/dakshina_dataset_v1.0.tar
+Paper: Roark, Wolf-Sonkin, Kirov, Mielke, Johny, Demirşahin, and Hall,
+"Processing South Asian Languages Written in the Latin Script: the Dakshina
+Dataset", LREC 2020, pp. 2413-2423,
+https://www.aclweb.org/anthology/2020.lrec-1.294
+
+License declaration of the source (quoted from the dataset README):
+
+  "The dataset is licensed under CC BY-SA 4.0."
+
+License URI: https://creativecommons.org/licenses/by-sa/4.0/
+
+The Dakshina lexicon layout is `native<TAB>romanization<TAB>attestations`. The
+lexicons are partitioned by native-script word, so a word in the train lexicon
+never appears in the dev or test lexicons. There are 25,000 native word types
+in the Hindi and Kannada training lexicons.
+
+Attribution (CC BY-SA 4.0 §3(a))
+--------------------------------
+
+The asset is a modified combination of the two sources above. In line with the
+attribution and "indicate modifications" requirements of CC BY-SA 4.0:
+
+    The Hindi and Kannada romanization word-pair assets shipped by Wisperlow
+    are derived from and adapt:
+      (a) the Dakshina dataset (Roark et al. 2020,
+          https://github.com/google-research-datasets/dakshina), licensed
+          CC BY-SA 4.0; and
+      (b) the Aksharantar dataset (AI4Bharat IndicXlit,
+          https://indicnlp.ai4bharat.org/aksharantar/), whose mined data is
+          released under CC0 1.0.
+    The combined asset is distributed under CC BY-SA 4.0.
+
+Modifications
+-------------
+
+Starting from the sources' `(romanization, native word, count)` rows, the
+builder applies the following modifications. No sentence, context or
+raw-corpus text is retained; only word-level pairs are kept.
+
+- Aksharantar: only the train split is read; only rows from the CC0 mined
+  sources (Wikidata, Samanantar, IndicCorp) are kept; exact `(roman, native)`
+  pairs are aggregated by counting their rows.
+- Dakshina: only the train word-lexicon split is read; the `(native, roman,
+  attestations)` triples are lower-cased on the roman side, NFC-normalized on
+  both sides, and stripped of ZWJ/ZWNJ.
+- Both sources: strings are lower-cased to the ASCII `a-z` key alphabet on the
+  roman side and restricted to letters and combining marks of the target
+  script on the native side; URL/email/domain junk, control characters,
+  digits, punctuation, mixed-script words, over-long fields and malformed
+  rows are dropped.
+- Selection: all valid Dakshina train-lexicon pairs are placed first (capped
+  at 8 romanizations per native word), then Aksharantar mined pairs fill the
+  remaining budget, up to 100,000 pairs and 6,000,000 bytes per language.
+- Counts: the per-pair `count` column holds the positive attestation count of
+  that exact pair within its source. Counts from the two sources come from
+  different collection methods and are never summed or compared; on an
+  identical pair (not observed in the shipped files) the Dakshina count is
+  kept. Unmodified source files used as input are identified by sha256 in each
+  TSV header.
+
+Generation
+----------
+
+Historical generation command (before these files moved out of app assets):
+
+    python3 -I android/tools/indic/build_indic_pairs.py \
+        --hi-zip hin.zip \
+        --kn-zip kan.zip \
+        --hi-dakshina hi.translit.sampled.train.tsv \
+        --kn-dakshina kn.translit.sampled.train.tsv \
+        --out-dir android/app/src/main/assets/indic \
+        --max-pairs 100000 --max-bytes 6000000 --split train
+
+The zips are the Aksharantar per-language archives (aksharantar-hin.zip,
+aksharantar-kan.zip) from the Aksharantar dataset page; the Dakshina TSVs are
+the word-lexicon train files from
+`dakshina_dataset_v1.0.tar` (`<lang>/lexicons/`). The builder is deterministic:
+the same inputs and flags produce byte-identical TSVs.
+
+CC0 1.0 legal text (applies to the Aksharantar-derived rows)
+------------------------------------------------------------
+
+Creative Commons Legal Code
+
+CC0 1.0 UNIVERSAL
+
+    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
+    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
+    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
+    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
+    HEREUNDER.
+
+Statement of Purpose
+
+    The laws of most jurisdictions throughout the world automatically
+    confer exclusive Copyright and Related Rights (defined below) upon the
+    creator and subsequent owner(s) (each and all, an "owner") of an
+    original work of authorship and/or a database (each, a "Work").
+
+    Certain owners wish to permanently relinquish those rights to a Work
+    for the purpose of contributing to a commons of creative, cultural and
+    scientific works ("Commons") that the public can reliably and without
+    fear of later claims of infringement build upon, modify, incorporate
+    in other works, reuse and redistribute as freely as possible in any
+    form whatsoever and for any purposes, including without limitation
+    commercial purposes. These owners may contribute to the Commons to
+    promote the ideal of a free culture and the further production of
+    creative, cultural and scientific works, or to gain reputation or
+    greater distribution for their Work in part through the use and
+    efforts of others.
+
+    For these and/or other purposes and motivations, and without any
+    expectation of additional consideration or compensation, the person
+    associating CC0 with a Work (the "Affirmer"), to the extent that he or
+    she is an owner of Copyright and Related Rights in the Work,
+    voluntarily elects to apply CC0 to the Work and publicly distribute
+    the Work under its terms, with knowledge of his or her Copyright and
+    Related Rights in the Work and the meaning and intended legal effect
+    of CC0 on those rights.
+
+1. Copyright and Related Rights. A Work made available under CC0 may be
+   protected by copyright and related or neighboring rights ("Copyright
+   and Related Rights"). Copyright and Related Rights include, but are not
+   limited to, the following:
+
+     i. the right to reproduce, adapt, distribute, perform, display,
+        communicate, and translate a Work;
+
+    ii. moral rights retained by the original author(s) and/or performer(s);
+
+   iii. publicity and privacy rights pertaining to a person's image or
+        likeness depicted in a Work;
+
+    iv. rights protecting against unfair competition in regards to a Work,
+        subject to the limitations in paragraph 4(a), below;
+
+     v. rights protecting the extraction, dissemination, use and reuse of
+        data in a Work;
+
+    vi. database rights (such as those arising under Directive 96/9/EC of
+        the European Parliament and of the Council of 11 March 1996 on the
+        legal protection of databases, and under any national
+        implementation thereof, including any amended or successor
+        version of such directive); and
+
+   vii. other similar, equivalent or corresponding rights throughout the
+        world based on applicable law or treaty, and any national
+        implementations thereof.
+
+2. Waiver. To the greatest extent permitted by, but not contrary to,
+   applicable law, Affirmer hereby overtly, fully, permanently,
+   irrevocably and unconditionally waives, abandons, and surrenders all of
+   Affirmer's Copyright and Related Rights and associated claims and
+   causes of action, whether now known or unknown (including existing as
+   well as future claims and causes of action), in the Work (i) in all
+   territories worldwide, (ii) for the maximum duration provided by
+   applicable law or treaty (including future time extensions), (iii) in
+   any current or future medium and for any number of copies, and (iv)
+   for any purpose whatsoever, including without limitation commercial,
+   advertising or promotional purposes (the "Waiver"). Affirmer makes the
+   Waiver for the benefit of each member of the public at large and to the
+   detriment of Affirmer's heirs and successors, fully intending that such
+   Waiver shall not be subject to revocation, rescission, cancellation,
+   termination, or any other legal or equitable action to disrupt the
+   quiet enjoyment of the public at large's rights of use of, and use of
+   the Work consistent with, the terms and conditions of this Waiver.
+
+3. Public License Fallback. Should any part of the Waiver for any reason
+   be judged legally invalid or ineffective under applicable law, then the
+   Waiver shall be preserved to the maximum extent permitted taking into
+   account Affirmer's express stated intent. In addition, to the extent
+   the Waiver is so judged Affirmer hereby grants to each affected person
+   a royalty-free, non transferable, non sublicensable, non commercial,
+   irrevocable and unconditional license to exercise Affirmer's Copyright
+   and Related Rights in the Work (i) in all territories worldwide, (ii)
+   for the maximum duration provided by applicable law or treaty
+   (including future time extensions), (iii) in any current or future
+   medium and for any number of copies, and (iv) for any purpose
+   whatsoever, including without limitation commercial, advertising or
+   promotional purposes (the "License"). The License shall be deemed
+   effective as of the date CC0 was applied by Affirmer to the Work.
+   Should any part of the License for any reason be judged legally invalid
+   or ineffective under applicable law, such partial invalidity or
+   ineffectiveness shall not invalidate the remainder of the License, and
+   in such case Affirmer hereby affirms that he or she will not (i)
+   otherwise exercise any of the affected rights held by Affirmer in the
+   Work, (ii) assert any objection, claim or action regarding the
+   affected person's use of the Work, except as required by paragraph
+   4(d), or (iii) in any way restrict the affected person's exercise of
+   the affected rights in the Work.
+
+4. Limitations and Disclaimers.
+
+     a. Affirmer expressly and fully disclaims, to the greatest extent
+        permitted by applicable law, any and all express, implied, or
+        statutory representations, guarantees, warranties, or covenants
+        regarding the Work, including but not limited to all warranties
+        of title, that the Work is free from infringement of any third
+        party rights, merchantability, fitness for any particular
+        purpose, non infringement, accuracy, absence of latent or other
+        defects, and that the Work is or will be uninterrupted, error
+        free, or free of harmful components.
+
+     b. Affirmer makes no representations regarding any patent or
+        trademark rights of Affirmer or third parties, and expressly
+        disclaims, to the greatest extent permitted by applicable law,
+        any and all representations, guarantees, warranties or covenants
+        regarding Affirmer's rights in the Work or third party patents or
+        trademarks.
+
+     c. Affirmer shall have no obligation or liability to any third party
+        (including all persons who are or may hereafter become users of,
+        or otherwise make use of, the Work) arising in connection with
+        this CC0 or use or reuse of the Work.
+
+     d. Nothing in this CC0 shall be considered to be or operate as a
+        waiver, abandonment, relinquishment, release, license, or other
+        limitation of Affirmer's Copyright and Related Rights, or of any
+        claims or causes of action, in any jurisdiction with respect to
+        any defamation, invasion of privacy or the rights of publicity,
+        or unfair competition law, or other specific legal doctrines that
+        require an express statement of intent or other specific facts to
+        arise or exist.
+
+     e. Affirmer represents and warrants that it has the authority and
+        capacity to make this CC0 available and applicable to the Work.
+
+EXHIBIT A: text of an affirmation that may be used by Affirmer.
+
+    CC0 1.0 Universal. To the extent possible under law, Affirmer has
+    waived all copyright and related or neighboring rights to the Work.

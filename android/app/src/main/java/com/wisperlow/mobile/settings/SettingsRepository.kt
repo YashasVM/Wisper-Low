@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wisperlow.mobile.keyboard.KeyboardLanguage
 import com.wisperlow.mobile.stt.ModelCatalog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -68,6 +69,8 @@ data class KeyboardPrefs(
     val livePreview: Boolean = true,
     /** Key height relative to the default, from [MIN_HEIGHT_SCALE] to [MAX_HEIGHT_SCALE]. */
     val heightScale: Float = 1f,
+    /** The input language; romanized Hindi and Kannada still type on the QWERTY board. */
+    val inputLanguage: KeyboardLanguage = KeyboardLanguage.ENGLISH,
 ) {
     companion object {
         const val MIN_HEIGHT_SCALE = 0.8f
@@ -95,6 +98,7 @@ class SettingsRepository @Inject constructor(
         val sound = booleanPreferencesKey("kb_sound")
         val livePreview = booleanPreferencesKey("live_preview")
         val heightScale = floatPreferencesKey("kb_height_scale")
+        val inputLanguage = stringPreferencesKey("kb_input_language")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -122,6 +126,7 @@ class SettingsRepository @Inject constructor(
                     livePreview = prefs[Keys.livePreview] ?: d.livePreview,
                     heightScale = (prefs[Keys.heightScale] ?: d.heightScale)
                         .coerceIn(KeyboardPrefs.MIN_HEIGHT_SCALE, KeyboardPrefs.MAX_HEIGHT_SCALE),
+                    inputLanguage = KeyboardLanguage.fromCode(prefs[Keys.inputLanguage]),
                 )
             },
         )
@@ -165,6 +170,7 @@ class SettingsRepository @Inject constructor(
         it[Keys.sound] = prefs.sound
         it[Keys.livePreview] = prefs.livePreview
         it[Keys.heightScale] = prefs.heightScale
+        it[Keys.inputLanguage] = prefs.inputLanguage.code
     }
 
     suspend fun setPersonalDictionary(dict: Map<String, String>) = edit {

@@ -1,0 +1,65 @@
+Wisperlow Latin Hindi/Kannada suggestion dictionaries
+
+Files: dict/hi_latn.tsv, dict/hi_latn_bigrams.tsv,
+       dict/kn_latn.tsv, dict/kn_latn_bigrams.tsv
+Modified by the Wisperlow contributors, 2026-10-17: lowercase ASCII token
+filtering, explicit-content line exclusion, bounded source-line selection,
+weighted and capped counts, conversational-word priority, TRAIN lexicon
+membership fallback, vocabulary selection and conversational-only bigrams.
+Only original input spelling is counted; normalization target columns are not.
+Conversational comments are deduplicated across source files. Pairs of common
+English words are excluded using the top2000 entries of the existing English
+frequency asset (Hermit Dave/FrequencyWords, MIT; see its separate notice). Scores are not raw corpus frequencies or speaker preferences.
+Exact input SHA-256 hashes and consumed-line counts appear in each file header.
+
+1. KanHope — Hande, Adeep; Priyadharshini, Ruba; Sampath, Anbukkarasi;
+   Thamburaj, Kingston Pal; Chandran, Prabakaran; Chakravarthi, Bharathi Raja.
+   Hope Speech detection in under-resourced Kannada language, 2021.
+   https://zenodo.org/records/5006517
+   train_hope.csv only, Hope and Not-Hope classes; excludes not-Kannada.
+   Creative Commons Attribution 4.0 International:
+   https://creativecommons.org/licenses/by/4.0/
+
+2. DravidianCodeMix — Chakravarthi, Bharathi Raja; Priyadharshini, Ruba;
+   Muralidaran, Vigneshwaran; Jose, Navya; Suryawanshi, Shardul;
+   McCrae, John P., 2021.
+   https://zenodo.org/records/4750858
+   DravidianCodeMix-2020.zip/kannada_offensive_train.csv only;
+   only rows labeled Not_offensive, no dev/test/all-data CSVs.
+   Creative Commons Attribution 4.0 International:
+   https://creativecommons.org/licenses/by/4.0/
+
+3. COMI-LINGUA — IIT Gandhinagar, LINGO Lab, 2025.
+   https://github.com/lingo-iitgn/COMI-LINGUA
+   TN_train.csv original Sentences column only; no normalized annotation targets.
+   The README prose says CC BY 4.0; the repository's LICENSE.txt and README badge
+   specify Creative Commons Attribution-ShareAlike 4.0 International. These
+   derivatives retain that stricter Attribution-ShareAlike notice:
+   https://creativecommons.org/licenses/by-sa/4.0/
+
+4. FineWeb2 — HuggingFaceFW / Hugging Face, 2025.
+   https://huggingface.co/datasets/HuggingFaceFW/fineweb-2
+   Hindi (hin_Latn) and Kannada (kan_Latn) train shard 0000.parquet.
+   Open Data Commons Attribution License (ODC-By) 1.0:
+   https://opendatacommons.org/licenses/by/1-0/
+   The source database retains its ODC-By attribution notice.
+
+5. Sangraha — AI4Bharat, 2024.
+   https://huggingface.co/datasets/ai4bharat/sangraha
+   synthetic/hin_Latn/wiki_hin_Latn_0000_of_0063.parquet and
+   synthetic/kan_Latn/wiki_kan_Latn_0000_of_0063.parquet.
+   Creative Commons Attribution 4.0 International:
+   https://creativecommons.org/licenses/by/4.0/
+
+6. Dakshina v1.0 — Google Research, Roark et al., LREC 2020.
+   https://github.com/google-research-datasets/dakshina
+   Hindi/Kannada lexicons/*.translit.sampled.train.tsv only.
+   Romanization membership is used; annotator counts are not frequencies.
+   Creative Commons Attribution-ShareAlike 4.0 International:
+   https://creativecommons.org/licenses/by-sa/4.0/
+   Validation/test lexicons and full-sentence romanizations are excluded.
+
+The combined derivative dictionary tables are offered under Creative Commons
+Attribution-ShareAlike 4.0 International. This notice does not relicense the
+Wisperlow application code or other independent assets. No original corpus
+sentences are included in these word/bigram tables.

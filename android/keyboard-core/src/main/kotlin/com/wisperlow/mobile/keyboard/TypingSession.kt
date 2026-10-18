@@ -32,7 +32,7 @@ data class TypingOptions(
  */
 class TypingSession(
     private val field: EditorField,
-    private val lexicon: () -> Lexicon?,
+    private val lexicon: () -> WordEngine?,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     var options = TypingOptions()
@@ -139,7 +139,7 @@ class TypingSession(
                 setWord(u.typed)
                 field.setComposing(u.typed)
             }
-            lexicon()?.trust(u.typed)
+            if (options.learn) lexicon()?.trust(u.typed)
             // If they go on to change it themselves, that is the fix they wanted.
             rewriting = u.typed
             last = null
@@ -188,7 +188,7 @@ class TypingSession(
                 field.deleteBefore(u.replacement.length)
                 field.commit(u.typed + u.trailing)
             }
-            lexicon()?.trust(u.typed)
+            if (options.learn) lexicon()?.trust(u.typed)
             last = Committed(u.typed, u.typed)
             return
         }
@@ -199,7 +199,7 @@ class TypingSession(
                 clearWord()
                 field.commit("$suggestion ")
                 // Picking exactly what was typed over the correction means "I meant that".
-                if (suggestion == typed) lexicon()?.trust(typed)
+                if (options.learn && suggestion == typed) lexicon()?.trust(typed)
                 rewriting?.let { learnFix(it, suggestion) }
                 rewriting = null
                 last = Committed(typed, suggestion)
@@ -328,7 +328,7 @@ class TypingSession(
         private const val CODE_LEAD = "@#/\\_.:~\$`<>=|"
         private const val CORRECTING_PUNCTUATION = ".,!?;:)\""
         private val HUGGING_PUNCTUATION = setOf(".", ",", "!", "?", ";", ":")
-        private val LAST_WORD = Regex("([\\p{L}][\\p{L}'’]*)\\s*$")
+        private val LAST_WORD = Regex("([\\p{L}][\\p{L}\\p{M}'’]*)\\s*$")
 
         /** "tmrw" in "tomorrow": every letter of [short], in order, starting the same way. */
         fun isAbbreviation(short: String, long: String): Boolean {
@@ -338,7 +338,11 @@ class TypingSession(
             return i == short.length
         }
 
+        /**
+         * True for a character that stays inside the word being typed. A dependent vowel or
+         * virama only counts after a letter, so "नमस्ते" is one word while a stray mark is not.
+         */
         fun isWordChar(c: Char, inWord: Boolean): Boolean =
-            c.isLetterOrDigit() || (inWord && (c == '\'' || c == '’'))
+            c.isLetterOrDigit() || (inWord && (c == '\'' || c == '’' || Lexicon.isCombiningMark(c)))
     }
 }

@@ -286,19 +286,8 @@ fun KeyArea(
     }
 }
 
-private fun layoutKeys(rows: List<KeyRow>, width: Float, rowHeight: Float, side: Float): List<KeyRect> {
-    val out = ArrayList<KeyRect>()
-    rows.forEachIndexed { r, row ->
-        val unit = (width - side * 2) / row.units
-        var x = side + row.inset * unit
-        for (key in row.keys) {
-            val w = key.width * unit
-            out += KeyRect(key, Rect(x, r * rowHeight, x + w, (r + 1) * rowHeight))
-            x += w
-        }
-    }
-    return out
-}
+private fun layoutKeys(rows: List<KeyRow>, width: Float, rowHeight: Float, side: Float): List<KeyRect> =
+    KeyboardGeometry.layout(rows, width, rowHeight, side).map { KeyRect(it.key, Rect(it.left, it.top, it.right, it.bottom)) }
 
 @Composable
 private fun KeyCap(
