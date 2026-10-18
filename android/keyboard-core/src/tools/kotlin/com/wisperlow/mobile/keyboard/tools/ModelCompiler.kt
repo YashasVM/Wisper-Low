@@ -407,13 +407,17 @@ private fun sampleContexts(tables: NgramTables, sentenceStart: Int, rng: Random)
     }
 
     // Listed bigram contexts (full bigram path), evenly spread plus random rows.
-    for (index in evenRows(tables.bigramCount, 16) + List(8) { rng.nextInt(tables.bigramCount) }) {
-        contexts.add(intArrayOf(tables.bigramFirst[index], tables.bigramSecond[index]))
+    if (tables.bigramCount > 0) {
+        for (index in evenRows(tables.bigramCount, 16) + List(8) { rng.nextInt(tables.bigramCount) }) {
+            contexts.add(intArrayOf(tables.bigramFirst[index], tables.bigramSecond[index]))
+        }
     }
 
     // Listed trigram contexts (full trigram path), evenly spread plus random rows.
-    for (index in evenRows(tables.trigramCount, 24) + List(8) { rng.nextInt(tables.trigramCount) }) {
-        contexts.add(intArrayOf(tables.trigramFirst[index], tables.trigramSecond[index]))
+    if (tables.trigramCount > 0) {
+        for (index in evenRows(tables.trigramCount, 24) + List(8) { rng.nextInt(tables.trigramCount) }) {
+            contexts.add(intArrayOf(tables.trigramFirst[index], tables.trigramSecond[index]))
+        }
     }
 
     // Unknown ids inside two-word contexts, both positions.

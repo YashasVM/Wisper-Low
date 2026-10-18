@@ -139,7 +139,7 @@ class TypingSession(
                 setWord(u.typed)
                 field.setComposing(u.typed)
             }
-            lexicon()?.trust(u.typed)
+            if (options.learn) lexicon()?.trust(u.typed)
             // If they go on to change it themselves, that is the fix they wanted.
             rewriting = u.typed
             last = null
@@ -188,7 +188,7 @@ class TypingSession(
                 field.deleteBefore(u.replacement.length)
                 field.commit(u.typed + u.trailing)
             }
-            lexicon()?.trust(u.typed)
+            if (options.learn) lexicon()?.trust(u.typed)
             last = Committed(u.typed, u.typed)
             return
         }
@@ -199,7 +199,7 @@ class TypingSession(
                 clearWord()
                 field.commit("$suggestion ")
                 // Picking exactly what was typed over the correction means "I meant that".
-                if (suggestion == typed) lexicon()?.trust(typed)
+                if (options.learn && suggestion == typed) lexicon()?.trust(typed)
                 rewriting?.let { learnFix(it, suggestion) }
                 rewriting = null
                 last = Committed(typed, suggestion)

@@ -1,6 +1,7 @@
 package com.wisperlow.mobile.keyboard
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** An editor with a cursor and a composing span, behaving like Android's BaseInputConnection. */
@@ -249,4 +250,56 @@ class TypingSessionTest {
         session.pick("teh")
         assertEquals("the teh ", field.toString())
     }
+
+    @Test
+    fun `literal selection does not learn in a private field`() = checkTrustPath("literal", learn = false)
+
+    @Test
+    fun `backspace undo does not learn in a private field`() = checkTrustPath("backspace", learn = false)
+
+    @Test
+    fun `strip undo does not learn in a private field`() = checkTrustPath("strip", learn = false)
+
+    @Test
+    fun `literal selection trusts the word when learning is enabled`() = checkTrustPath("literal", learn = true)
+
+    @Test
+    fun `backspace undo trusts the word when learning is enabled`() = checkTrustPath("backspace", learn = true)
+
+    @Test
+    fun `strip undo trusts the word when learning is enabled`() = checkTrustPath("strip", learn = true)
+
+    private fun checkTrustPath(path: String, learn: Boolean) {
+        lexicon.learn("private", null)
+        lexicon.learn("secret", "private")
+        lexicon.learnFix("wsp", "wassup")
+        val before = lexicon.exportLearned()
+        session.options = TypingOptions(learn = learn)
+        val typed = if (path == "literal") "zorbix" else "teh"
+        typeWord(typed)
+        when (path) {
+            "literal" -> session.pick(typed)
+            "backspace" -> {
+                session.space()
+                assertEquals("the ", field.toString())
+                session.backspace()
+            }
+            "strip" -> {
+                session.space()
+                assertEquals("the ", field.toString())
+                session.pick(typed)
+            }
+            else -> error("Unknown trust path: $path")
+        }
+        assertEquals(if (path == "backspace") typed else "$typed ", field.toString())
+        assertEquals(if (path == "backspace") typed else "", session.composing)
+        assertEquals(null, session.revertible)
+        if (learn) {
+            assertTrue(lexicon.isKnown(typed))
+            assertTrue(lexicon.exportLearned().words.any { it.first == typed && it.second >= 2 })
+        } else {
+            assertEquals(before, lexicon.exportLearned())
+        }
+    }
+
 }
