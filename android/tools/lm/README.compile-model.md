@@ -15,7 +15,7 @@ android/tools/lm/build_model.sh --counts DIR --out FILE --vocab N [--min1 C] [--
 | Flag          | Default | Meaning                                                        |
 | ------------- | ------- | -------------------------------------------------------------- |
 | `--counts DIR` | (required) | Directory with `unigrams.tsv`, `bigrams.tsv`, `trigrams.tsv` |
-| `--out FILE`  | (required) | Output WLM1 binary; written atomically (tmp file + rename)    |
+| `--out FILE`  | (required) | Output WLM1 binary; written to a candidate file, verified and published with an atomic rename only on pass — a failed run never replaces the previous output |
 | `--vocab N`   | (required) | Vocabulary cap, 2..65535 (u16 word ids)                       |
 | `--min1/2/3 C` | 1      | Estimator count floors (1 keeps every observed n-gram)         |
 
@@ -42,10 +42,17 @@ unknown ids (`Vocabulary.UNKNOWN`, always `-1`) in both context positions. Sampl
 words include the unknown id, sentence start, fixed frequency ranks and the model's own
 top predictions.
 
-Reported per run: vocab and n-gram counts, byte size and SHA-256, timings, unigram mass
-sum, max/mean quantization error (nats) and top-5 prediction agreement, plus
-representative next-word predictions. Failures (non-finite probabilities, a vocabulary
-or header mismatch, an unparseable or drift-beyond-threshold file) exit non-zero.
+Reported per run: vocab and n-gram counts, byte size and SHA-256 (of the verified
+candidate bytes, which are the published bytes), timings, unigram mass of both the
+reference estimate and the loaded artifact (explicitly labeled; measured ~0.9987
+loaded vs ~1.0000 reference on the en-chat-v1 audit), max/mean quantization error
+(nats) and top-5 prediction agreement, plus representative next-word predictions.
+Failures (non-finite probabilities, a vocabulary or header mismatch, an unparseable
+file, drift past the gate) exit non-zero **after** discarding the candidate, so a
+previously published output is left byte-identical. The gate bound is
+**0.1 nats** (documented in ModelCompiler.kt): the audited artifact measures
+0.0527 nats, so the bound leaves generous headroom above real quantization noise
+while catching a codebook regime change like the one the first writer had.
 
 **Caveat on "quality"**: passing here means the file round-trips within the measured
 quantization error and its unigram marginal is normalized. It does *not* mean the model
