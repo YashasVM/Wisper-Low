@@ -76,6 +76,8 @@ class TypingSession(
      * so undo and fix learning never act on text the user did not just write.
      */
     fun forgetHistory() {
+        // Only consecutive manual space taps may end a sentence.
+        lastSpaceAt = 0L
         undo = null
         last = null
         rewriting = null
@@ -181,6 +183,8 @@ class TypingSession(
 
     /** Replaces the current word with a strip suggestion, puts back an autocorrected word, or adds a predicted word. */
     fun pick(suggestion: String) {
+        // Only consecutive manual space taps may end a sentence.
+        lastSpaceAt = 0L
         val u = undo
         undo = null
         if (u != null && word.isEmpty() && suggestion == u.typed && field.before(u.replacement.length) == u.replacement) {
@@ -218,6 +222,8 @@ class TypingSession(
 
     /** Inserts text that is not typed key by key (emoji, clipboard), ending the current word as typed. */
     fun insert(text: String) {
+        // Only consecutive manual space taps may end a sentence.
+        lastSpaceAt = 0L
         undo = null
         field.batch {
             endWord(autoCorrect = false, trailing = "")
@@ -230,6 +236,8 @@ class TypingSession(
 
     /** Ends the current word as typed, e.g. before Enter or dictation. */
     fun finishWord() {
+        // Only consecutive manual space taps may end a sentence.
+        lastSpaceAt = 0L
         undo = null
         if (word.isNotEmpty()) endWord(autoCorrect = false, trailing = "")
     }

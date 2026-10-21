@@ -3,6 +3,10 @@ package com.wisperlow.mobile.keyboard
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Validate copied text without changing whitespace that must survive pasting. */
+internal fun clipboardText(text: String?, maxLength: Int): String? =
+    text?.takeIf { it.isNotBlank() && it.length <= maxLength }
+
 data class ClipEntry(val text: String, val time: Long, val pinned: Boolean = false)
 
 /**
@@ -14,8 +18,7 @@ class ClipboardHistory(entries: List<ClipEntry> = emptyList()) {
         private set
 
     fun add(text: String, now: Long) {
-        val clean = text.trim()
-        if (clean.isEmpty() || clean.length > MAX_LENGTH) return
+        val clean = clipboardText(text, MAX_LENGTH) ?: return
         val existing = entries.firstOrNull { it.text == clean }
         val rest = entries.filter { it.text != clean }
         entries = listOf(ClipEntry(clean, now, existing?.pinned == true)) + rest

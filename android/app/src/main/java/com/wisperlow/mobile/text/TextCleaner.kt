@@ -3,7 +3,7 @@ package com.wisperlow.mobile.text
 object TextCleaner {
 
     private val horizontalWhitespaceRun = Regex("[^\\S\n]+")
-    private val spaceBeforePunct = Regex("\\s+([,.!?;:])")
+    private val spaceBeforePunct = Regex("[^\\S\\n]+([,.!?;:])")
 
     private val wordToken = Regex("[\\p{L}\\p{M}\\p{N}']+")
 
