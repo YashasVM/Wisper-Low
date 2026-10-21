@@ -26,6 +26,21 @@ class TextCleanerTest {
     }
 
     @Test
+    fun spokenLineBreaksRemainBeforePunctuation() {
+        assertEquals("Hi\n, there", TextCleaner.clean("Hi new line comma there"))
+        assertEquals("Hi\n\n?", TextCleaner.clean("Hi new paragraph question mark"))
+    }
+
+    @Test
+    fun literalLineBreaksRemainBeforePunctuation() {
+        for (punctuation in ",.!?;:") {
+            assertEquals("Hi\n$punctuation", TextCleaner.clean("Hi\n $punctuation"))
+            assertEquals("Hi\n\n$punctuation", TextCleaner.clean("Hi\n\n\t$punctuation"))
+            assertEquals("Hi$punctuation", TextCleaner.clean("Hi \t $punctuation"))
+        }
+    }
+
+    @Test
     fun acceptsShortNumericMultilingualAndRepeatedSpeech() {
         listOf("I", "a", "12345", "हिंदी भाषा", "你好", "cat cat cat cat", "hahahaha").forEach {
             assertFalse(it, TextCleaner.looksLikeGibberish(it))

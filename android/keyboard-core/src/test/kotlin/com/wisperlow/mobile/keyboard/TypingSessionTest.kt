@@ -102,6 +102,83 @@ class TypingSessionTest {
     }
 
     @Test
+    fun `cursor movement resets double space timing`() {
+        now = 1_000
+        session.insert("first second")
+        session.space()
+        field.cursor = 6
+        session.reset()
+        now += 200
+        session.space()
+        assertEquals("first  second ", field.toString())
+    }
+
+    @Test
+    fun `forget history resets double space timing`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.forgetHistory()
+        now += 200
+        session.space()
+        assertEquals("hello  ", field.toString())
+    }
+
+    @Test
+    fun `finish word resets double space timing`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.finishWord()
+        now += 200
+        session.space()
+        assertEquals("hello  ", field.toString())
+    }
+
+    @Test
+    fun `suggestion space is not counted as a double space tap`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.pick("world")
+        now += 200
+        session.space()
+        assertEquals("hello world  ", field.toString())
+    }
+
+    @Test
+    fun `strip undo space is not counted as a double space tap`() {
+        now = 1_000
+        typeWord("teh")
+        session.space()
+        session.pick("teh")
+        now += 200
+        session.space()
+        assertEquals("teh  ", field.toString())
+    }
+
+    @Test
+    fun `pasted space is not counted as a double space tap`() {
+        now = 1_000
+        typeWord("hello")
+        session.space()
+        session.insert("world ")
+        now += 200
+        session.space()
+        assertEquals("hello world  ", field.toString())
+    }
+
+    @Test
+    fun `two manual spaces after insertion still end the sentence`() {
+        now = 1_000
+        session.insert("hello")
+        session.space()
+        now += 200
+        session.space()
+        assertEquals("hello. ", field.toString())
+    }
+
+    @Test
     fun `picking a suggestion replaces the word and adds a space`() {
         typeWord("wor")
         session.pick("world")
