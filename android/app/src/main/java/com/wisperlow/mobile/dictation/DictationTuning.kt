@@ -10,6 +10,16 @@ internal object DictationTuning {
     /** Continuous speech with no pause is cut here so decode never sees one huge clip. */
     const val MAX_SEGMENT_SAMPLES = SAMPLE_RATE * 20
 
+    /** Long previews are allowed only after this phone has demonstrated cheap decoding. */
+    fun shouldPreview(length: Int, trailingSilence: Int, previousSamples: Int, previousMs: Long): Boolean {
+        if (length < SAMPLE_RATE * 6 / 10 || length > MAX_SEGMENT_SAMPLES || trailingSilence > 0) return false
+        if (previousSamples == 0) return length <= SAMPLE_RATE * 4
+        return previousMs * length / previousSamples <= 200L
+    }
+
+    fun previewTooSlow(length: Int, decodeMs: Long): Boolean =
+        decodeMs > (200L + length * 1_000L / SAMPLE_RATE / 4).coerceAtMost(450L)
+
     /** First sample worth decoding: skips leading silence, keeps a pre-roll before speech. */
     fun leadStart(speechStartCaptured: Int): Int =
         (speechStartCaptured - LEAD_BACKOFF_SAMPLES).coerceAtLeast(0)

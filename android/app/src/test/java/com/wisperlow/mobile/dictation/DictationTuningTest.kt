@@ -18,6 +18,28 @@ class DictationTuningTest {
         assertFalse(DictationTuning.shouldForceBoundary(16_000 * 21, 16_000 * 5))
     }
 
+    @Test fun previewsAvoidSilenceAndUnprovenLongDecodes() {
+        assertTrue(DictationTuning.shouldPreview(16_000, 0, 0, 0))
+        assertFalse(DictationTuning.shouldPreview(16_000, 512, 16_000, 50))
+        assertFalse(DictationTuning.shouldPreview(16_000 * 5, 0, 0, 0))
+        assertFalse(DictationTuning.shouldPreview(16_000 * 5, 0, 16_000, 100))
+        assertFalse(DictationTuning.shouldPreview(8_000, 0, 0, 0))
+    }
+
+    @Test fun fastPhonesCanPreviewThroughTheWholeSegment() {
+        for (seconds in 12..20) {
+            assertTrue(DictationTuning.shouldPreview(16_000 * seconds, 0, 16_000, 10))
+        }
+        assertFalse(DictationTuning.shouldPreview(16_000 * 21, 0, 16_000, 1))
+    }
+
+    @Test fun previewBudgetScalesWithAudioAndNeverAllowsNineHundredMs() {
+        assertFalse(DictationTuning.previewTooSlow(16_000 / 2, 325))
+        assertTrue(DictationTuning.previewTooSlow(16_000 / 2, 326))
+        assertFalse(DictationTuning.previewTooSlow(16_000 * 20, 450))
+        assertTrue(DictationTuning.previewTooSlow(16_000 * 20, 451))
+    }
+
     @Test fun trimReleaseRules() {
         assertTrue(DictationTuning.shouldReleaseOnTrim(15, true))
         assertFalse(DictationTuning.shouldReleaseOnTrim(20, true))

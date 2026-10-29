@@ -128,7 +128,7 @@ class DictationEngine @Inject constructor(
         val boundaries = Channel<Int>(Channel.UNLIMITED)
         val parts = mutableListOf<String>()
         var consumer: Job? = null
-        var finishing = false
+        @Volatile var finishing = false
         var modelLoading = true
         val startedNanos = System.nanoTime()
         @Volatile var leadStart = 0
@@ -140,6 +140,8 @@ class DictationEngine @Inject constructor(
         var preview = ""
         var previewEnd = 0
         var previewTooSlow = false
+        var previewSamples = 0
+        var previewMs = 0L
     }
 
     private var nextSessionId = 0L
@@ -458,9 +460,10 @@ class DictationEngine @Inject constructor(
             Log.d(TAG, "timing decode ${pcm.size / 16} ms audio in ${(System.nanoTime() - t0) / 1_000_000} ms")
             val cleaned = TextCleaner.clean(text)
             if (!TextCleaner.looksLikeGibberish(cleaned)) s.parts += cleaned
-            // While finishing, keep the stale preview on screen until the last phrase replaces it.
-            if (!s.finishing) s.preview = ""
-            if (session === s) {
+            // Clear the internal tail without shrinking the published pill between phrases.
+            val hadPreview = s.preview.isNotBlank()
+            s.preview = ""
+            if (session === s && (s.finishing || !hadPreview)) {
                 _state.value = if (s.finishing) {
                     DictationState.Finishing(livePartial(s))
                 } else {
@@ -482,14 +485,24 @@ class DictationEngine @Inject constructor(
         val end = s.pcm.size
         val begin = from.coerceIn(0, end)
         val length = end - begin
-        if (length < PREVIEW_MIN_SAMPLES || length > PREVIEW_MAX_SAMPLES || end - s.previewEnd < PREVIEW_STEP_SAMPLES) return
+        if (!wantsPreview(s) || end - s.previewEnd < PREVIEW_STEP_SAMPLES ||
+            !DictationTuning.shouldPreview(
+                length, s.detector?.trailingSilenceSamples ?: 0, s.previewSamples, s.previewMs,
+            )
+        ) return
         s.previewEnd = end
         val pcm = s.pcm.slice(begin, end)
         val t0 = System.nanoTime()
-        val text = withContext(decodeDispatcher) { engine.transcribe(pcm) }
+        val text = withContext(decodeDispatcher) {
+            // Finish may have arrived while this work was queued.
+            if (s.finishing || session !== s) return@withContext null
+            engine.transcribe(pcm)
+        } ?: return
         val ms = (System.nanoTime() - t0) / 1_000_000
         // A phone too slow to keep up stops previewing rather than delaying the real transcript.
-        if (ms > PREVIEW_BUDGET_MS) {
+        s.previewSamples = length
+        s.previewMs = ms
+        if (DictationTuning.previewTooSlow(length, ms)) {
             Log.i(TAG, "Live preview off for this session: ${length / 16} ms audio took $ms ms")
             s.previewTooSlow = true
         }
@@ -585,10 +598,7 @@ class DictationEngine @Inject constructor(
         private const val IDLE_RELEASE_MS = 5 * 60_000L
         private const val LEVEL_INTERVAL_NANOS = 60_000_000L
         private const val PREVIEW_INTERVAL_MS = 450L
-        private const val PREVIEW_MIN_SAMPLES = SAMPLE_RATE * 6 / 10
-        private const val PREVIEW_MAX_SAMPLES = SAMPLE_RATE * 12
         private const val PREVIEW_STEP_SAMPLES = SAMPLE_RATE * 4 / 10
-        private const val PREVIEW_BUDGET_MS = 900L
     }
 }
 
