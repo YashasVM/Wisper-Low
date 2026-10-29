@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Looper
 import android.util.Log
 import com.wisperlow.mobile.audio.AudioEngine
+import com.wisperlow.mobile.audio.MediaPauser
 import com.wisperlow.mobile.audio.VadEngine
 import com.wisperlow.mobile.audio.VadEvent
 import com.wisperlow.mobile.settings.SettingsRepository
@@ -92,6 +93,7 @@ class DictationEngine @Inject constructor(
     }.asCoroutineDispatcher()
 
     private val audio = AudioEngine()
+    private val mediaPauser = MediaPauser(context)
 
     // Touched only on the decode thread.
     private var stt: SttEngine? = null
@@ -187,6 +189,8 @@ class DictationEngine @Inject constructor(
         val s = Session(++nextSessionId, settings, listener, onCancelled)
         session = s
         _level.value = 0f
+        // Silence music and videos while the user talks; they resume when the mic closes.
+        mediaPauser.pause()
         // Fast path: the detector is already loaded. Otherwise it loads on the
         // decode thread and the audio captured meanwhile is replayed into it.
         vad?.let { activateDetector(s, it) }
@@ -221,6 +225,7 @@ class DictationEngine @Inject constructor(
 
     /** Closes the microphone off the main thread, after any start still in flight. */
     private fun stopAudio() {
+        mediaPauser.resume()
         scope.launch(audioDispatcher) { audio.stop() }
     }
 

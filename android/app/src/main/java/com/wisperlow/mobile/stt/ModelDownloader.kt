@@ -330,7 +330,11 @@ class ModelDownloader @Inject constructor(
                 TarArchiveInputStream(bz).use { tar ->
                     while (true) {
                         val entry = tar.nextEntry ?: break
-                        val normalizedName = entry.name.trimStart('/')
+                        // Some archives (the 110M model) prefix every path with "./";
+                        // drop "." segments so the real root folder is the one stripped.
+                        val normalizedName = entry.name.split('/')
+                            .filter { it.isNotEmpty() && it != "." }
+                            .joinToString("/")
                         if (normalizedName.split('/').any { it == ".." }) {
                             Log.w(TAG, "Skipping suspicious tar entry: ${entry.name}")
                             continue
