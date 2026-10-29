@@ -1,11 +1,42 @@
 package com.wisperlow.mobile.settings
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsRepositoryTest {
+    @Test
+    fun upgradeMissingOverlayReopensSetupOnlyOnce() {
+        val pending = booleanPreferencesKey("bubble_setup_pending")
+        val prefs = mutablePreferencesOf(booleanPreferencesKey("onboarding_completed") to true)
+        SettingsRepository.migrateBubbleSetup(prefs, overlayGranted = false)
+        assertEquals(true, prefs[pending])
+        assertEquals(true, prefs[booleanPreferencesKey("bubble_setup_migrated")])
+        assertEquals(true, prefs[booleanPreferencesKey("onboarding_completed")])
+
+        // Dismissing the guide survives another launch with permission still denied.
+        prefs[pending] = false
+        SettingsRepository.migrateBubbleSetup(prefs, overlayGranted = false)
+        assertEquals(false, prefs[pending])
+    }
+
+    @Test
+    fun newInstallsAndUpgradesWithOverlayKeepTheirExistingOnboarding() {
+        val pending = booleanPreferencesKey("bubble_setup_pending")
+        val fresh = mutablePreferencesOf()
+        SettingsRepository.migrateBubbleSetup(fresh, overlayGranted = false)
+        assertEquals(false, fresh[pending])
+
+        val granted = mutablePreferencesOf(booleanPreferencesKey("onboarding_completed") to true)
+        SettingsRepository.migrateBubbleSetup(granted, overlayGranted = true)
+        assertEquals(false, granted[pending])
+        SettingsRepository.migrateBubbleSetup(granted, overlayGranted = false)
+        assertEquals(false, granted[pending])
+    }
+
     @Test
     fun defaultsFavorFastInsertion() {
         val defaults = WisperlowSettings()

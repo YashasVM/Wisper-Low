@@ -134,8 +134,9 @@ fun OnboardingScreen(
     level: () -> Float,
     actions: AppActions,
     callbacks: OnboardingCallbacks,
+    startAtOverlay: Boolean = false,
 ) {
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    var index by rememberSaveable { mutableIntStateOf(if (startAtOverlay) GuideStep.OVERLAY.ordinal else 0) }
     var micAsked by rememberSaveable { mutableStateOf(false) }
     var demoPhase by remember { mutableIntStateOf(0) }
     val steps = GuideStep.entries

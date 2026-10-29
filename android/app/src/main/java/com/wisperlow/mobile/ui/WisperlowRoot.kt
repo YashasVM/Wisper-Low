@@ -50,7 +50,7 @@ fun WisperlowRoot(state: MainUiState, level: () -> Float, viewModel: MainViewMod
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         val screen = when {
             !state.settingsLoaded -> 0
-            !state.settings.onboardingCompleted || showGuide -> 1
+            !state.settings.onboardingCompleted || state.settings.bubbleSetupPending || showGuide -> 1
             else -> 2
         }
         androidx.compose.animation.Crossfade(screen, animationSpec = Motion.tween(), label = "root") { target ->
@@ -61,6 +61,7 @@ fun WisperlowRoot(state: MainUiState, level: () -> Float, viewModel: MainViewMod
                 state = state,
                 level = level,
                 actions = actions,
+                startAtOverlay = state.settings.bubbleSetupPending,
                 callbacks = OnboardingCallbacks(
                     onDownload = viewModel::downloadModel,
                     onCancelDownload = viewModel::cancelDownload,
@@ -74,7 +75,10 @@ fun WisperlowRoot(state: MainUiState, level: () -> Float, viewModel: MainViewMod
                         if (state.setup.canRunBubble) actions.startBubble()
                         showGuide = false
                     },
-                    onClose = if (state.settings.onboardingCompleted) ({ showGuide = false }) else null,
+                    onClose = if (state.settings.onboardingCompleted) ({
+                        viewModel.dismissBubbleSetup()
+                        showGuide = false
+                    }) else null,
                 ),
             )
             else -> MainTabs(state, level, viewModel, actions, onOpenGuide = { showGuide = true })

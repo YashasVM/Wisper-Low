@@ -1,6 +1,7 @@
 package com.wisperlow.mobile.settings
 
 import android.content.Context
+import android.provider.Settings
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "wisperlow_settings",
@@ -58,6 +60,7 @@ data class WisperlowSettings(
     val historyEnabled: Boolean = true,
     val personalDictionary: Map<String, String> = emptyMap(),
     val onboardingCompleted: Boolean = false,
+    val bubbleSetupPending: Boolean = false,
 )
 
 @Singleton
@@ -75,6 +78,8 @@ class SettingsRepository @Inject constructor(
         val historyEnabled = booleanPreferencesKey("history_enabled")
         val dictionary = stringPreferencesKey("personal_dictionary")
         val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
+        val bubbleSetupMigrated = booleanPreferencesKey("bubble_setup_migrated")
+        val bubbleSetupPending = booleanPreferencesKey("bubble_setup_pending")
         // Older builds stored a pixel x under "bubble_x"; a new key keeps it from being read as a side.
         val bubbleSide = intPreferencesKey("bubble_side")
         val bubbleY = intPreferencesKey("bubble_y")
@@ -84,7 +89,7 @@ class SettingsRepository @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    val settings: Flow<WisperlowSettings> = context.dataStore.data.map { prefs ->
+    val settings: Flow<WisperlowSettings> = context.dataStore.data.onStart { migrateBubbleSetup() }.map { prefs ->
         val defaults = WisperlowSettings()
         WisperlowSettings(
             selectedModelId = prefs[Keys.selectedModelId]
@@ -99,6 +104,7 @@ class SettingsRepository @Inject constructor(
             historyEnabled = prefs[Keys.historyEnabled] ?: defaults.historyEnabled,
             personalDictionary = parseDictionary(prefs[Keys.dictionary] ?: ""),
             onboardingCompleted = prefs[Keys.onboardingCompleted] ?: false,
+            bubbleSetupPending = prefs[Keys.bubbleSetupPending] ?: false,
         )
     }
 
@@ -140,6 +146,17 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoStop(value: AutoStop) = edit { it[Keys.autoStop] = value.name }
     suspend fun setKeepModelLoaded(enabled: Boolean) = edit { it[Keys.keepModelLoaded] = enabled }
     suspend fun setHistoryEnabled(enabled: Boolean) = edit { it[Keys.historyEnabled] = enabled }
+
+    private suspend fun migrateBubbleSetup() {
+        context.dataStore.edit { prefs ->
+            if (prefs[Keys.bubbleSetupMigrated] != true) {
+                migrateBubbleSetup(prefs, Settings.canDrawOverlays(context))
+            }
+        }
+    }
+
+    suspend fun dismissBubbleSetup() = edit { it[Keys.bubbleSetupPending] = false }
+
     suspend fun setOnboardingCompleted(completed: Boolean) = edit { it[Keys.onboardingCompleted] = completed }
 
     suspend fun setPersonalDictionary(dict: Map<String, String>) = edit {
@@ -163,6 +180,12 @@ class SettingsRepository @Inject constructor(
     }
 
     companion object {
+        internal fun migrateBubbleSetup(prefs: androidx.datastore.preferences.core.MutablePreferences, overlayGranted: Boolean) {
+            if (prefs[Keys.bubbleSetupMigrated] == true) return
+            prefs[Keys.bubbleSetupPending] = prefs[Keys.onboardingCompleted] == true && !overlayGranted
+            prefs[Keys.bubbleSetupMigrated] = true
+        }
+
         fun parseAutoStop(raw: String?): AutoStop =
             raw?.trim()?.uppercase()?.let { value -> AutoStop.entries.firstOrNull { it.name == value } }
                 ?: AutoStop.NORMAL

@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val state = viewModel.uiState.first { it.settingsLoaded }
             // Bring the bubble back after a reboot or app update once the user opens the app.
-            if (state.settings.onboardingCompleted && state.settings.bubbleEnabled && !state.bubbleRunning) {
+            if (state.settings.onboardingCompleted && state.settings.bubbleEnabled && state.setup.canRunBubble && !state.bubbleRunning) {
                 DictationService.start(this@MainActivity)
             }
         }

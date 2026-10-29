@@ -169,7 +169,10 @@ class MainViewModel @Inject constructor(
         if (enabled) engine.preload() else engine.releaseModelIfIdle()
     }
 
+    fun dismissBubbleSetup() = viewModelScope.launch { settingsRepository.dismissBubbleSetup() }
+
     fun completeOnboarding() = viewModelScope.launch {
+        settingsRepository.dismissBubbleSetup()
         settingsRepository.setOnboardingCompleted(true)
         settingsRepository.setBubbleEnabled(true)
     }
