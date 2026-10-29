@@ -1,4 +1,4 @@
-package com.wisperlow.mobile.keyboard
+package com.wisperlow.mobile.accessibility
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

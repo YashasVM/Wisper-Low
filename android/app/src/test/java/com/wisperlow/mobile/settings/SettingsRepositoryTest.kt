@@ -11,8 +11,10 @@ class SettingsRepositoryTest {
         val defaults = WisperlowSettings()
 
         assertFalse(defaults.reviewBeforeInsert)
+        assertTrue(defaults.livePreview)
         assertEquals(AutoStop.NORMAL, defaults.autoStop)
         assertTrue(defaults.historyEnabled)
+        assertTrue(defaults.bubbleOnlyWhenTyping)
         assertFalse(defaults.onboardingCompleted)
     }
 

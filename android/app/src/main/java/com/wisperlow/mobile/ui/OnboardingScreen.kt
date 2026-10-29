@@ -39,16 +39,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.PauseCircle
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Spellcheck
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.Button
@@ -80,7 +84,7 @@ import com.wisperlow.mobile.stt.DownloadState
 import com.wisperlow.mobile.stt.SttModel
 import kotlinx.coroutines.delay
 
-private enum class GuideStep { WELCOME, HOW, MODEL, MICROPHONE, KEYBOARD, SWITCH, TRY, DONE }
+private enum class GuideStep { WELCOME, HOW, MODEL, MICROPHONE, OVERLAY, ACCESSIBILITY, TRY, DONE }
 
 class OnboardingCallbacks(
     val onDownload: (SttModel, Boolean) -> Unit,
@@ -109,7 +113,7 @@ private fun orbHeight(step: GuideStep) = when (step) {
     GuideStep.WELCOME -> 250.dp
     GuideStep.HOW -> 250.dp
     GuideStep.MODEL -> 210.dp
-    GuideStep.MICROPHONE, GuideStep.KEYBOARD, GuideStep.SWITCH -> 190.dp
+    GuideStep.MICROPHONE, GuideStep.OVERLAY, GuideStep.ACCESSIBILITY -> 190.dp
     GuideStep.TRY -> 130.dp
     GuideStep.DONE -> 230.dp
 }
@@ -118,8 +122,8 @@ private fun orbIcon(step: GuideStep): ImageVector = when (step) {
     GuideStep.WELCOME, GuideStep.MICROPHONE -> Icons.Rounded.Mic
     GuideStep.HOW -> Icons.Rounded.GraphicEq
     GuideStep.MODEL -> Icons.Rounded.Download
-    GuideStep.KEYBOARD -> Icons.Rounded.Keyboard
-    GuideStep.SWITCH -> Icons.Rounded.SwapHoriz
+    GuideStep.OVERLAY -> Icons.Rounded.Layers
+    GuideStep.ACCESSIBILITY -> Icons.Rounded.Accessibility
     GuideStep.TRY -> Icons.Rounded.Edit
     GuideStep.DONE -> Icons.Rounded.Check
 }
@@ -145,8 +149,8 @@ fun OnboardingScreen(
 
     // Returning from a system settings screen with the switch on moves ahead by itself.
     AutoAdvance(step == GuideStep.MICROPHONE, setup.microphone, next)
-    AutoAdvance(step == GuideStep.KEYBOARD, setup.keyboardEnabled, next)
-    AutoAdvance(step == GuideStep.SWITCH, setup.keyboardSelected, next)
+    AutoAdvance(step == GuideStep.OVERLAY, setup.overlay, next)
+    AutoAdvance(step == GuideStep.ACCESSIBILITY, setup.accessibility, next)
 
     val modelStarted = state.downloads.values.any {
         it is DownloadState.Completed || it is DownloadState.Downloading || it is DownloadState.Extracting
@@ -157,8 +161,8 @@ fun OnboardingScreen(
 
     val granted = when (step) {
         GuideStep.MICROPHONE -> setup.microphone
-        GuideStep.KEYBOARD -> setup.keyboardEnabled
-        GuideStep.SWITCH -> setup.keyboardSelected
+        GuideStep.OVERLAY -> setup.overlay
+        GuideStep.ACCESSIBILITY -> setup.accessibility
         else -> false
     }
     val spec = when {
@@ -173,8 +177,8 @@ fun OnboardingScreen(
             },
         )
         step == GuideStep.MICROPHONE -> OrbSpec(Magenta, MagentaSoft, 0.7f)
-        step == GuideStep.KEYBOARD -> OrbSpec(Violet, BlueSoft, 0.45f)
-        step == GuideStep.SWITCH -> OrbSpec(Teal, TealSoft, 0.45f)
+        step == GuideStep.OVERLAY -> OrbSpec(Violet, BlueSoft, 0.45f)
+        step == GuideStep.ACCESSIBILITY -> OrbSpec(Teal, TealSoft, 0.45f)
         step == GuideStep.TRY -> OrbSpec(Violet, VioletSoft, 0.15f)
         else -> OrbSpec(Violet, VioletSoft, 0.55f)
     }
@@ -299,10 +303,10 @@ fun OnboardingScreen(
                     GuideStep.HOW -> HowStep(demoPhase)
                     GuideStep.MODEL -> ModelStep(state, actions, callbacks, active)
                     GuideStep.MICROPHONE -> MicrophoneStep(setup.microphone, micAsked, actions)
-                    GuideStep.KEYBOARD -> KeyboardStep(setup.keyboardEnabled)
-                    GuideStep.SWITCH -> SwitchStep(setup.keyboardSelected)
+                    GuideStep.OVERLAY -> OverlayStep(setup.overlay)
+                    GuideStep.ACCESSIBILITY -> AccessibilityStep(setup.accessibility, actions)
                     GuideStep.TRY -> TryStep(state, level, callbacks)
-                    GuideStep.DONE -> DoneStep(setup.canDictate)
+                    GuideStep.DONE -> DoneStep(setup.canRunBubble)
                 }
             }
         }
@@ -316,7 +320,7 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(Space.S),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (step == GuideStep.SWITCH && !setup.keyboardSelected) {
+            if (step == GuideStep.ACCESSIBILITY && !setup.accessibility) {
                 TextButton(onClick = next) { Text(stringResource(R.string.action_skip)) }
             }
             val cta: Pair<Int, () -> Unit> = when (step) {
@@ -329,10 +333,10 @@ fun OnboardingScreen(
                         actions.requestMicrophone()
                     }
                 }
-                GuideStep.KEYBOARD -> if (setup.keyboardEnabled) R.string.action_next to next
-                else R.string.action_open_settings to actions.openKeyboardSettings
-                GuideStep.SWITCH -> if (setup.keyboardSelected) R.string.action_next to next
-                else R.string.keyboard_step_pick to actions.pickKeyboard
+                GuideStep.OVERLAY -> if (setup.overlay) R.string.action_next to next
+                else R.string.action_open_settings to actions.openOverlaySettings
+                GuideStep.ACCESSIBILITY -> if (setup.accessibility) R.string.action_next to next
+                else R.string.action_open_settings to actions.openAccessibilitySettings
                 GuideStep.DONE -> R.string.done_start to callbacks.onFinish
                 else -> R.string.action_next to next
             }
@@ -475,6 +479,7 @@ private fun ModelStep(state: MainUiState, actions: AppActions, callbacks: Onboar
 private fun MicrophoneStep(granted: Boolean, asked: Boolean, actions: AppActions) {
     Headline(R.string.mic_step_title, R.string.mic_step_body)
     StatusChip(granted)
+    if (!granted) IconTextRow(Icons.Rounded.Notifications, stringResource(R.string.mic_step_notifications))
     if (!granted && asked) {
         SectionCard(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
             Text(stringResource(R.string.mic_step_denied), style = MaterialTheme.typography.bodyMedium)
@@ -484,27 +489,38 @@ private fun MicrophoneStep(granted: Boolean, asked: Boolean, actions: AppActions
 }
 
 @Composable
-private fun KeyboardStep(enabled: Boolean) {
-    Headline(R.string.keyboard_step_title, R.string.keyboard_step_body)
-    StatusChip(enabled)
-    if (!enabled) {
+private fun OverlayStep(granted: Boolean) {
+    Headline(R.string.overlay_step_title, R.string.overlay_step_body)
+    StatusChip(granted)
+    if (!granted) {
         SectionCard {
-            listOf(R.string.keyboard_step_1, R.string.keyboard_step_2, R.string.keyboard_step_3, R.string.keyboard_step_4)
+            listOf(R.string.overlay_step_1, R.string.overlay_step_2, R.string.overlay_step_3, R.string.overlay_step_4)
                 .forEachIndexed { i, res -> NumberedStep(i + 1, styledStringResource(res)) }
         }
     }
-    IconTextRow(Icons.Rounded.Lock, stringResource(R.string.keyboard_step_privacy))
 }
 
 @Composable
-private fun SwitchStep(selected: Boolean) {
-    Headline(R.string.switch_step_title, R.string.switch_step_body)
-    StatusChip(selected)
-    Text(
-        stringResource(R.string.switch_step_note),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+private fun AccessibilityStep(enabled: Boolean, actions: AppActions) {
+    Headline(R.string.a11y_step_title, R.string.a11y_step_body)
+    StatusChip(enabled)
+    if (!enabled) {
+        SectionCard {
+            listOf(R.string.a11y_step_1, R.string.a11y_step_2, R.string.a11y_step_3, R.string.a11y_step_4)
+                .forEachIndexed { i, res -> NumberedStep(i + 1, styledStringResource(res)) }
+        }
+        SectionCard(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+            Text(stringResource(R.string.a11y_restricted_title), style = MaterialTheme.typography.titleMedium)
+            Text(styledStringResource(R.string.a11y_restricted_body), style = MaterialTheme.typography.bodyMedium)
+            SecondaryCta(stringResource(R.string.a11y_open_app_info), actions.openAppInfo)
+        }
+        Text(
+            stringResource(R.string.a11y_skip_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    IconTextRow(Icons.Rounded.Lock, stringResource(R.string.a11y_step_privacy))
 }
 
 @Composable
@@ -543,8 +559,9 @@ fun UsageTips() {
         IconTextRow(Icons.Rounded.TouchApp, stringResource(R.string.tip_tap))
         IconTextRow(Icons.Rounded.PauseCircle, stringResource(R.string.tip_pause))
         IconTextRow(Icons.Rounded.PanTool, stringResource(R.string.tip_hold))
+        IconTextRow(Icons.Rounded.DragIndicator, stringResource(R.string.tip_drag))
         IconTextRow(Icons.Rounded.Spellcheck, styledStringResource(R.string.tip_words))
-        IconTextRow(Icons.Rounded.SwapHoriz, stringResource(R.string.tip_switch))
+        IconTextRow(Icons.Rounded.RestartAlt, stringResource(R.string.tip_restart))
     }
 }
 

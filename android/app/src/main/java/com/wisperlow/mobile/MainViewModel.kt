@@ -2,14 +2,14 @@ package com.wisperlow.mobile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
 import com.wisperlow.mobile.dictation.DictationEngine
 import com.wisperlow.mobile.dictation.DictationError
 import com.wisperlow.mobile.dictation.DictationState
 import com.wisperlow.mobile.history.TranscriptEntry
 import com.wisperlow.mobile.history.TranscriptRepository
-import com.wisperlow.mobile.keyboard.LexiconRepository
+import com.wisperlow.mobile.service.DictationService
 import com.wisperlow.mobile.settings.AutoStop
-import com.wisperlow.mobile.settings.KeyboardPrefs
 import com.wisperlow.mobile.settings.SettingsRepository
 import com.wisperlow.mobile.settings.WisperlowSettings
 import com.wisperlow.mobile.stt.DownloadState
@@ -29,19 +29,21 @@ import kotlinx.coroutines.launch
 /** Permission and access state read from Android when the app resumes. */
 data class SystemAccess(
     val microphone: Boolean = false,
-    val keyboardEnabled: Boolean = false,
-    val keyboardSelected: Boolean = false,
+    val notifications: Boolean = false,
+    val overlay: Boolean = false,
+    val accessibilityEnabled: Boolean = false,
 )
 
 data class SetupStatus(
     val microphone: Boolean,
-    /** Turned on in Android's keyboard list; required before it can be picked. */
-    val keyboardEnabled: Boolean,
-    /** Currently the active keyboard. Optional: people switch to it only to dictate. */
-    val keyboardSelected: Boolean,
+    val notifications: Boolean,
+    val overlay: Boolean,
+    val accessibility: Boolean,
     val model: Boolean,
 ) {
-    val canDictate: Boolean get() = microphone && keyboardEnabled && model
+    /** Accessibility only improves insertion; the bubble works without it by copying. */
+    val canRunBubble: Boolean get() = microphone && overlay && model
+    val allDone: Boolean get() = canRunBubble && accessibility
 }
 
 data class PracticeUi(
@@ -51,9 +53,10 @@ data class PracticeUi(
 
 data class MainUiState(
     val settings: WisperlowSettings = WisperlowSettings(),
-    val setup: SetupStatus = SetupStatus(false, false, false, false),
+    val setup: SetupStatus = SetupStatus(false, false, false, false, false),
     val downloads: Map<String, DownloadState> = emptyMap(),
     val history: List<TranscriptEntry> = emptyList(),
+    val bubbleRunning: Boolean = false,
     val dictation: DictationState = DictationState.Idle,
     val practice: PracticeUi = PracticeUi(),
     val settingsLoaded: Boolean = false,
@@ -65,18 +68,22 @@ class MainViewModel @Inject constructor(
     private val transcriptRepository: TranscriptRepository,
     private val modelDownloader: ModelDownloader,
     private val engine: DictationEngine,
-    private val lexiconRepository: LexiconRepository,
 ) : ViewModel() {
 
     private val access = MutableStateFlow(SystemAccess())
     private val practice = MutableStateFlow(PracticeUi())
     private var practiceOwned = false
 
-    private val setup = combine(access, modelDownloader.states) { access, downloads ->
+    private val setup = combine(
+        access,
+        WisperlowAccessibilityService.connected,
+        modelDownloader.states,
+    ) { access, connected, downloads ->
         SetupStatus(
             microphone = access.microphone,
-            keyboardEnabled = access.keyboardEnabled,
-            keyboardSelected = access.keyboardSelected,
+            notifications = access.notifications,
+            overlay = access.overlay,
+            accessibility = access.accessibilityEnabled || connected,
             model = downloads.values.any { it is DownloadState.Completed },
         )
     }
@@ -86,14 +93,16 @@ class MainViewModel @Inject constructor(
     val uiState: StateFlow<MainUiState> = combine(
         combine(loadedSettings, setup, modelDownloader.states, ::Triple),
         transcriptRepository.entries,
+        DictationService.running,
         engine.state,
         practice,
-    ) { (settings, setup, downloads), history, dictation, practice ->
+    ) { (settings, setup, downloads), history, running, dictation, practice ->
         MainUiState(
             settings = settings ?: WisperlowSettings(),
             setup = setup,
             downloads = downloads,
             history = history,
+            bubbleRunning = running,
             dictation = dictation,
             practice = practice,
             settingsLoaded = settings != null,
@@ -147,23 +156,22 @@ class MainViewModel @Inject constructor(
 
     // ---- settings ----
 
+    fun setBubbleEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBubbleEnabled(enabled) }
+    fun setBubbleOnlyWhenTyping(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBubbleOnlyWhenTyping(enabled) }
+    fun setLivePreview(enabled: Boolean) = viewModelScope.launch { settingsRepository.setLivePreview(enabled) }
     fun setReviewBeforeInsert(enabled: Boolean) = viewModelScope.launch { settingsRepository.setReviewBeforeInsert(enabled) }
     fun setAutoStop(value: AutoStop) = viewModelScope.launch { settingsRepository.setAutoStop(value) }
     fun setHistoryEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setHistoryEnabled(enabled) }
+    fun resetBubblePosition() = viewModelScope.launch { settingsRepository.clearBubblePosition() }
 
     fun setKeepModelLoaded(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setKeepModelLoaded(enabled)
         if (enabled) engine.preload() else engine.releaseModelIfIdle()
     }
 
-    fun updateKeyboard(change: (KeyboardPrefs) -> KeyboardPrefs) = viewModelScope.launch {
-        settingsRepository.setKeyboard(change(settingsRepository.current.value.keyboard))
-    }
-
-    fun forgetLearnedWords() = lexiconRepository.forgetLearned()
-
     fun completeOnboarding() = viewModelScope.launch {
         settingsRepository.setOnboardingCompleted(true)
+        settingsRepository.setBubbleEnabled(true)
     }
 
     // ---- words ----
@@ -214,7 +222,7 @@ class MainViewModel @Inject constructor(
                     is DictationEngine.Result.Failure -> practice.update { it.copy(error = result.error) }
                 }
             },
-            // Cancelled from elsewhere (the keyboard closing it): no result will arrive.
+            // Cancelled from elsewhere (bubble, service stop): no result will arrive.
             onCancelled = { practiceOwned = false },
         )
     }

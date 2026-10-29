@@ -59,7 +59,7 @@ fun HomeScreen(
         contentPadding = screenPadding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(Space.M),
     ) {
-        item { KeyboardStatusCard(state, level, actions, callbacks) }
+        item { BubbleStatusCard(state, level, actions, callbacks) }
         val fixes = fixesFor(state, actions, callbacks)
         if (fixes.isNotEmpty()) {
             item {
@@ -118,10 +118,9 @@ fun HomeScreen(
 }
 
 @Composable
-private fun KeyboardStatusCard(state: MainUiState, level: () -> Float, actions: AppActions, callbacks: HomeCallbacks) {
-    val on = state.setup.canDictate
-    // Everything else is done; only the switch in Android's keyboard list is missing.
-    val onlyKeyboardMissing = state.setup.microphone && state.setup.model && !state.setup.keyboardEnabled
+private fun BubbleStatusCard(state: MainUiState, level: () -> Float, actions: AppActions, callbacks: HomeCallbacks) {
+    val on = state.bubbleRunning
+    val canRun = state.setup.canRunBubble
     val cardColor by animateColorAsState(
         if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         Motion.tween(),
@@ -158,7 +157,7 @@ private fun KeyboardStatusCard(state: MainUiState, level: () -> Float, actions: 
                     stringResource(
                         when {
                             on -> R.string.home_on_body
-                            onlyKeyboardMissing -> R.string.home_off_body
+                            canRun -> R.string.home_off_body
                             else -> R.string.home_needs_setup
                         },
                     ),
@@ -167,9 +166,9 @@ private fun KeyboardStatusCard(state: MainUiState, level: () -> Float, actions: 
             }
         }
         if (on) {
-            SecondaryCta(stringResource(R.string.home_pick_keyboard), actions.pickKeyboard, Modifier.fillMaxWidth())
-        } else if (onlyKeyboardMissing) {
-            PrimaryCta(stringResource(R.string.home_turn_on), actions.openKeyboardSettings, Modifier.fillMaxWidth())
+            SecondaryCta(stringResource(R.string.home_turn_off), actions.stopBubble, Modifier.fillMaxWidth())
+        } else if (canRun) {
+            PrimaryCta(stringResource(R.string.home_turn_on), actions.startBubble, Modifier.fillMaxWidth())
         } else {
             PrimaryCta(stringResource(R.string.home_guide), callbacks.onOpenGuide, Modifier.fillMaxWidth())
         }
@@ -184,7 +183,9 @@ private fun fixesFor(state: MainUiState, actions: AppActions, callbacks: HomeCal
     val setup = state.setup
     if (!setup.model) add(Fix(R.string.home_fix_model, callbacks.onOpenModels))
     if (!setup.microphone) add(Fix(R.string.home_fix_mic, actions.requestMicrophone))
-    if (!setup.keyboardEnabled) add(Fix(R.string.home_fix_keyboard, actions.openKeyboardSettings))
+    if (!setup.overlay) add(Fix(R.string.home_fix_overlay, actions.openOverlaySettings))
+    if (!setup.accessibility) add(Fix(R.string.home_fix_accessibility, actions.openAccessibilitySettings))
+    if (!setup.notifications && setup.microphone) add(Fix(R.string.home_fix_notifications, actions.openAppInfo))
 }
 
 fun screenPadding(inner: PaddingValues): PaddingValues = PaddingValues(

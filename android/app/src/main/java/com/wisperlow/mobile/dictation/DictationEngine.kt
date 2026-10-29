@@ -59,7 +59,7 @@ enum class DictationError {
 
 /**
  * The one owner of the microphone, voice detection and speech model. Every
- * surface (voice keyboard, in-app practice) runs dictation through here so
+ * surface (floating bubble, in-app practice) runs dictation through here so
  * only one recording can exist and the model is loaded once.
  *
  * Public methods must be called on the main thread. Native decoding runs on a
@@ -470,7 +470,7 @@ class DictationEngine @Inject constructor(
     }
 
     private fun wantsPreview(s: Session): Boolean =
-        s.settings.keyboard.livePreview && session === s && !s.finishing && s.heard && !s.previewTooSlow
+        s.settings.livePreview && session === s && !s.finishing && s.heard && !s.previewTooSlow
 
     /** Decodes the unfinished phrase from [from] to now, for display only. */
     private suspend fun previewTail(s: Session, engine: SttEngine, from: Int) {
