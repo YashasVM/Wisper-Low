@@ -350,7 +350,7 @@ class ModelDownloader @Inject constructor(
                                 ""
                             }
                         }
-                        val relative = normalizedName.removePrefix(stripPrefix.orEmpty())
+                        val relative = archiveRelativePath(normalizedName, stripPrefix.orEmpty(), entry.isDirectory)
                         if (relative.isEmpty()) continue
                         writeEntry(entry, relative, tar, temporary, destinationCanonical)
                     }
@@ -486,6 +486,9 @@ class ModelDownloader @Inject constructor(
     }
 
     companion object {
+        internal fun archiveRelativePath(normalizedName: String, stripPrefix: String, isDirectory: Boolean = false): String =
+            if (isDirectory && normalizedName == stripPrefix.removeSuffix("/")) "" else normalizedName.removePrefix(stripPrefix)
+
         private const val TAG = "ModelDownloader"
         private const val PREFERENCES_NAME = "model_downloads"
         private const val MARKER_FILE = ".installed"
