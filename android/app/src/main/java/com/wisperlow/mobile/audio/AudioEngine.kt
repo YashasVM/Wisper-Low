@@ -5,6 +5,8 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Process
 import android.util.Log
+import com.wisperlow.mobile.BuildConfig
+import java.io.File
 
 class AudioEngine(private val sampleRate: Int = 16000) {
 
@@ -33,6 +35,7 @@ class AudioEngine(private val sampleRate: Int = 16000) {
 
     fun start(): Boolean {
         if (running) return true
+        if (BuildConfig.DEBUG && DEBUG_MIC_FILE.isFile) return startDebugMic()
         val minBuffer = AudioRecord.getMinBufferSize(
             sampleRate,
             AudioFormat.CHANNEL_IN_MONO,
@@ -174,6 +177,40 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         }
     }
 
+    /**
+     * Debug builds only: replays raw 16 kHz mono s16le PCM from [DEBUG_MIC_FILE] in real time,
+     * then silence, in place of the microphone. Emulators often run without host audio, so this
+     * is the only way to exercise the bubble end to end there.
+     */
+    private fun startDebugMic(): Boolean {
+        val bytes = runCatching { DEBUG_MIC_FILE.readBytes() }.getOrNull() ?: return false
+        val pcm = ShortArray(bytes.size / 2) { i ->
+            ((bytes[2 * i].toInt() and 0xFF) or (bytes[2 * i + 1].toInt() shl 8)).toShort()
+        }
+        Log.i(TAG, "Debug mic: replaying ${pcm.size} samples from $DEBUG_MIC_FILE")
+        running = true
+        thread = Thread({
+            var pos = 0
+            val chunkMs = CHUNK_FRAMES * 1000L / sampleRate
+            while (running) {
+                val chunk = ShortArray(CHUNK_FRAMES)
+                val n = (pcm.size - pos).coerceIn(0, CHUNK_FRAMES)
+                if (n > 0) System.arraycopy(pcm, pos, chunk, 0, n)
+                pos += n
+                var sumSquares = 0.0
+                for (s in chunk) sumSquares += s.toDouble() * s
+                val level = (kotlin.math.sqrt(sumSquares / CHUNK_FRAMES) / 32767.0).coerceIn(0.0, 1.0)
+                listener?.invoke(chunk, level.toFloat())
+                try {
+                    Thread.sleep(chunkMs)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }, "wisperlow-audio-debug").apply { start() }
+        return true
+    }
+
     private fun notifyReadFailure(message: String) {
         Log.w(TAG, message)
         errorListener?.invoke(message)
@@ -183,5 +220,6 @@ class AudioEngine(private val sampleRate: Int = 16000) {
         private const val TAG = "AudioEngine"
         private const val CHUNK_FRAMES = 512
         private const val MAX_EMPTY_READS = 5
+        private val DEBUG_MIC_FILE = File("/sdcard/Android/data/com.wisperlow.mobile/files/debug-mic.pcm")
     }
 }
