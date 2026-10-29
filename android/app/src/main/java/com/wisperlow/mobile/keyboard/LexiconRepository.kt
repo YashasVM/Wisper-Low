@@ -5,6 +5,9 @@ import android.util.Log
 import com.wisperlow.mobile.keyboard.indic.LatinRegionalEngine
 import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.wisperlow.mobile.keyboard.lm.LanguageModel
+import com.wisperlow.mobile.keyboard.lm.NgramModel
+import java.nio.ByteBuffer
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -217,14 +220,27 @@ class LexiconRepository internal constructor(
 }
 
 /** Loads English and regional Latin dictionaries without converting text into another script. */
-internal class AssetEngineLoader(private val readAsset: (String) -> List<String>) : EngineLoader {
-    constructor(context: Context) : this({ name ->
-        context.assets.open(name).bufferedReader().use { it.readLines() }
-    })
+internal class AssetEngineLoader(
+    private val readPredictionModel: () -> LanguageModel? = { null },
+    private val readAsset: (String) -> List<String>,
+) : EngineLoader {
+    constructor(context: Context) : this(
+        readPredictionModel = {
+            context.assets.open("dict/en-next-word.wlm").use { NgramModel.load(ByteBuffer.wrap(it.readBytes())) }
+        },
+        readAsset = { name -> context.assets.open(name).bufferedReader().use { it.readLines() } },
+    )
 
     override suspend fun load(language: KeyboardLanguage): WordEngine? = try {
         when (language) {
-            KeyboardLanguage.ENGLISH -> KeyboardEngine.fromWordList(readEnglish(), keyCenters())
+            KeyboardLanguage.ENGLISH -> {
+                // Corpus probabilities improve next-word prediction but regressed correction
+                // recall in held-out evaluation, so keep the calibrated word decoder.
+                val predictions = runCatching(readPredictionModel)
+                    .onFailure { Log.w(TAG, "Next-word model unavailable; using word-list predictions", it) }
+                    .getOrNull()
+                KeyboardEngine.fromWordList(readEnglish(), keyCenters(), predictions)
+            }
             KeyboardLanguage.HINDI -> readRegional(HINDI, HINDI_BIGRAMS)
             KeyboardLanguage.KANNADA -> readRegional(KANNADA, KANNADA_BIGRAMS)
         }

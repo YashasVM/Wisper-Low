@@ -21,6 +21,14 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
@@ -48,6 +56,21 @@ fun SettingsScreen(
     contentPadding: PaddingValues,
     onOpenGuide: () -> Unit,
 ) {
+    var showNotices by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    if (showNotices) {
+        val notice = remember(context) {
+            context.assets.open("dict/en-next-word-NOTICE.txt").bufferedReader().use { it.readText() }
+        }
+        AlertDialog(
+            onDismissRequest = { showNotices = false },
+            title = { Text(stringResource(R.string.settings_prediction_credits)) },
+            text = { Text(notice, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = {
+                TextButton(onClick = { showNotices = false }) { Text(stringResource(R.string.settings_notices_close)) }
+            },
+        )
+    }
     val settings = state.settings
     LazyColumn(
         state = listState,
@@ -214,6 +237,8 @@ fun SettingsScreen(
                 LinkRow(stringResource(R.string.settings_guide), stringResource(R.string.settings_guide_body), onOpenGuide)
                 HorizontalDivider()
                 LinkRow(stringResource(R.string.settings_permissions), null, actions.openAppInfo)
+                HorizontalDivider()
+                LinkRow(stringResource(R.string.settings_prediction_credits), null) { showNotices = true }
                 Text(
                     stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.labelMedium,

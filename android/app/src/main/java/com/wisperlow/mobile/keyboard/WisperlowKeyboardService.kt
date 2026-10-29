@@ -28,7 +28,6 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.wisperlow.mobile.keyboard.spatial.KeyCenter
 import com.wisperlow.mobile.MainActivity
 import com.wisperlow.mobile.R
 import com.wisperlow.mobile.dictation.DictationEngine
@@ -215,6 +214,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        suggestJob?.cancel()
         // The field is gone; anything still being said has nowhere to go.
         if (ownsSession) engine.cancel()
         typing.reset()
@@ -286,8 +286,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             } else {
                 null
             }
-            val typed = if (touch != null && resolvable()) c?.let { resolveTap(it, touch) } else null
-            typing.type(typed?.toString() ?: text, touch)
+            typing.type(text, touch)
             afterEdit()
         }
 
@@ -307,6 +306,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
                 KeyKind.EMOJI -> {
                     typing.finishWord()
                     ui.update { it.copy(page = Page.EMOJI) }
+                    refreshSuggestions()
                 }
                 else -> Unit
             }
@@ -329,29 +329,6 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }
     }
-
-    /** Whether plain tapped letters may be read by the engine: an ordinary text field with suggestions and autocorrect on. */
-    private fun resolvable() = ui.value.field == FieldKind.TEXT &&
-        typing.options.suggestions && typing.options.autoCorrect && !privateField &&
-        // Regional Latin modes keep the landed letters while English also predicts key hits.
-        lexiconRepository.language.value == KeyboardLanguage.ENGLISH
-
-    /**
-     * Lets the engine correct a tap that may have slipped onto a neighbouring key. Everything
-     * chosen directly — capitals, digits from long presses, alternates, symbols — reaches here
-     * without a touch or fails the gate, so it types exactly as picked. Private fields
-     * (NO_PERSONALIZED_LEARNING) are typed key by key: reading taps is learning, and the
-     * marker says not to.
-     */
-    private fun resolveTap(landed: Char, touch: Touch): Char {
-        val engine = lexiconRepository.engine.value as? KeyboardEngine ?: return landed
-        val center = canonicalCenter(landed) ?: return landed
-        return engine.resolveKey(touch, landed, center, typing.composing, typing.previousWord())
-    }
-
-    /** The canonical centre of the key that types [landed], on the same grid the engine was built over. */
-    private fun canonicalCenter(landed: Char): KeyCenter? =
-        Qwerty.touch(landed.lowercaseChar(), 0f, 0f)?.let { KeyCenter(landed.lowercaseChar(), it.x, it.y) }
 
     private fun afterEdit() {
         lastEditAt = SystemClock.uptimeMillis()
@@ -397,6 +374,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
     }
 
     private fun refreshSuggestions() {
+        suggestJob?.cancel()
         val options = typing.options
         val state = ui.value
         if (!options.suggestions || state.page == Page.EMOJI || state.page == Page.CLIPBOARD) {
@@ -420,7 +398,6 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
         val corrects = typing.autoCorrectsHere()
         val revert = typing.revertible
         val hintWord = word.ifEmpty { previous.orEmpty() }
-        suggestJob?.cancel()
         suggestJob = scope.launch {
             // Words keep typing responsive; the emoji dictionary is parsed once and read here.
             val (result, emojiHints) = withContext(Dispatchers.Default) {

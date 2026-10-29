@@ -104,7 +104,8 @@ class SuggestionPolicy(private val params: PolicyParams = PolicyParams()) {
             .map { it.word }
             .toList()
         // A common word is likelier to be what the user meant than a completion of it.
-        val common = facts.literalKnown && facts.literalLogOdds >= params.commonLiteralLogOdds
+        val common = facts.userTrusted ||
+            (facts.literalKnown && facts.literalLogOdds >= params.commonLiteralLogOdds)
         // Slots read left to right; the middle one is what space will type, as on most keyboards.
         val words = when {
             auto != null -> listOf(typed, auto) + others.take(1)

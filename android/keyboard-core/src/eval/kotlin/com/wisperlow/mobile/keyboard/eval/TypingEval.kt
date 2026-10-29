@@ -27,6 +27,7 @@ object TypingEval {
         val model: File?,
         /** Where to write the evaluation-only per-token diagnostic trace, when asked. */
         val trace: File?,
+        val nextModel: File? = null,
     )
 
     data class PresetReport(
@@ -141,12 +142,12 @@ object TypingEval {
     }
 
     private fun newEngine(cfg: Config): EngineUnderTest = when (cfg.engine) {
-        "smart" -> SmartEngine.create(cfg.assets, cfg.model)
+        "smart" -> SmartEngine.create(cfg.assets, cfg.model, cfg.nextModel)
         else -> BaselineEngine(cfg.assets)
     }
 
     private fun modelLabel(cfg: Config): String = when (cfg.engine) {
-        "smart" -> cfg.model?.let { "ngram:${it.name}" } ?: "unigram:en.txt+en_modern.txt"
+        "smart" -> cfg.model?.let { "ngram:${it.name}" } ?: ("unigram:en.txt+en_modern.txt" + (cfg.nextModel?.let { "+next:${it.name}" } ?: ""))
         else -> "lexicon:en.txt+en_modern.txt"
     }
 
@@ -315,11 +316,13 @@ object TypingEval {
         var limit: Int? = null
         var model: File? = null
         var trace: File? = null
+        var nextModel: File? = null
         for (a in args) {
             when {
                 a == "--quick" -> quick = true
                 a.startsWith("--engine=") -> engine = a.substringAfter('=')
                 a.startsWith("--model=") -> model = File(a.substringAfter('='))
+                a.startsWith("--next-model=") -> nextModel = File(a.substringAfter('='))
                 a.startsWith("--seeds=") -> seeds = a.substringAfter('=').toInt()
                 a.startsWith("--out=") -> out = File(a.substringAfter('='))
                 a.startsWith("--data=") -> data = File(a.substringAfter('='))
@@ -332,7 +335,7 @@ object TypingEval {
         val assetsDir = assets
             ?: System.getProperty("wisperlow.assets")?.let(::File)
             ?: File("../app/src/main/assets")
-        return Config(quick, engine, seeds, out, data, assetsDir, limit, model, trace)
+        return Config(quick, engine, seeds, out, data, assetsDir, limit, model, trace, nextModel)
     }
 }
 

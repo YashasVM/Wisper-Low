@@ -1,6 +1,7 @@
 package com.wisperlow.mobile.keyboard
 
 import com.wisperlow.mobile.keyboard.indic.LatinRegionalEngine
+import com.wisperlow.mobile.keyboard.lm.NgramModel
 import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -17,6 +18,26 @@ class LatinRegionalAssetsTest {
 
     private fun loader(assets: Map<String, List<String>>): AssetEngineLoader =
         AssetEngineLoader { name -> assets[name] ?: throw java.io.FileNotFoundException(name) }
+
+    @Test
+    fun `packaged English corpus provides contextual predictions without changing correction`() = runTest {
+        val assets = File("src/main/assets")
+        val loader = AssetEngineLoader(
+            readPredictionModel = { NgramModel.read(File(assets, "dict/en-next-word.wlm")) },
+            readAsset = { File(assets, it).readLines() },
+        )
+        val engine = loader.load(KeyboardLanguage.ENGLISH)!!
+        val afterHow = engine.predict("how")
+        val afterThank = engine.predict("thank")
+        assertTrue(afterHow.toString(), afterHow.isNotEmpty())
+        assertTrue(afterThank.toString(), afterThank.isNotEmpty())
+        assertFalse(afterHow == afterThank)
+        assertEquals("the", engine.suggest("teh").autoCorrect)
+        engine.trust("teh")
+        assertEquals(emptyList<String>(), engine.predict("teh"))
+        engine.learn("book", "teh")
+        assertEquals(listOf("book"), engine.predict("teh"))
+    }
 
     @Test
     fun `regional modes load Latin words English mixing and contextual predictions`() = runTest {

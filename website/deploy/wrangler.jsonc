@@ -1,0 +1,6 @@
+{
+  "name": "wisperlow-site",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "../wisper", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "wisper.yash0.in", "custom_domain": true }]
+}

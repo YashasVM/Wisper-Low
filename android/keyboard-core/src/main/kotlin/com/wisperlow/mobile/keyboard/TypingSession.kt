@@ -41,7 +41,9 @@ class TypingSession(
     /** Where each character of [word] was pressed, if known. */
     private val presses = ArrayList<Touch?>()
     private var undo: Undo? = null
-    private var lastSpaceAt = 0L
+    private var lastSpaceAt: Long? = null
+    private var rejectedCorrection: String? = null
+    private var undoDoubleSpace = false
 
     /** The last word committed: what was typed and what went into the field. */
     private var last: Committed? = null
@@ -77,6 +79,9 @@ class TypingSession(
      */
     fun forgetHistory() {
         undo = null
+        lastSpaceAt = null
+        undoDoubleSpace = false
+        rejectedCorrection = null
         last = null
         rewriting = null
     }
@@ -84,6 +89,8 @@ class TypingSession(
     /** Types a key's text: letters build the current word, anything else ends it. */
     fun type(text: String, touch: Touch? = null) {
         if (text.isEmpty()) return
+        lastSpaceAt = null
+        undoDoubleSpace = false
         val c = text.singleOrNull()
         if (c != null && options.suggestions && isWordChar(c, word.isNotEmpty())) {
             undo = null
@@ -93,6 +100,7 @@ class TypingSession(
             return
         }
         field.batch {
+            val previousUndo = undo
             val corrected = endWord(autoCorrect = text in CORRECTING_PUNCTUATION, trailing = "")
             // "word ," reads wrong: closing punctuation hugs the word before it.
             if (text in HUGGING_PUNCTUATION && field.before(2).let { it.length == 2 && it[1] == ' ' && isWordChar(it[0], true) }) {
@@ -100,6 +108,10 @@ class TypingSession(
             }
             field.commit(text)
             undo = corrected?.let { Undo(it.first, it.second, text) }
+                ?: previousUndo?.takeIf {
+                    text in HUGGING_PUNCTUATION && it.trailing == " " &&
+                        field.before(it.corrected.length + text.length) == it.corrected + text
+                }?.let { Undo(it.typed, it.corrected, text) }
         }
     }
 
@@ -114,14 +126,15 @@ class TypingSession(
             undo = null
             val before = field.before(2)
             // Two quick spaces after a word end the sentence, as on any phone keyboard.
-            if (options.doubleSpacePeriod && now - lastSpaceAt < DOUBLE_SPACE_MS && before.length == 2 &&
+            if (options.doubleSpacePeriod && lastSpaceAt?.let { now - it in 0 until DOUBLE_SPACE_MS } == true && before.length == 2 &&
                 before[1] == ' ' && (before[0].isLetterOrDigit() || before[0] in "\")'")
             ) {
                 field.batch {
                     field.deleteBefore(1)
                     field.commit(". ")
                 }
-                lastSpaceAt = 0L
+                lastSpaceAt = null
+                undoDoubleSpace = true
                 return
             }
             field.commit(" ")
@@ -130,6 +143,17 @@ class TypingSession(
     }
 
     fun backspace() {
+        lastSpaceAt = null
+        if (undoDoubleSpace) {
+            undoDoubleSpace = false
+            if (field.before(2) == ". ") {
+                field.batch {
+                    field.deleteBefore(2)
+                    field.commit(" ")
+                }
+                return
+            }
+        }
         val u = undo
         undo = null
         if (u != null && word.isEmpty() && field.before(u.replacement.length) == u.replacement) {
@@ -137,6 +161,7 @@ class TypingSession(
             field.batch {
                 field.deleteBefore(u.replacement.length)
                 setWord(u.typed)
+                rejectedCorrection = u.typed
                 field.setComposing(u.typed)
             }
             if (options.learn) lexicon()?.trust(u.typed)
@@ -157,6 +182,8 @@ class TypingSession(
 
     /** Deletes the word before the cursor (held backspace). */
     fun deleteWord() {
+        lastSpaceAt = null
+        undoDoubleSpace = false
         undo = null
         // Wiping the word gives up on rewriting it.
         rewriting = null
@@ -175,12 +202,14 @@ class TypingSession(
         var start = trimmed.length
         while (start > 0 && isWordChar(trimmed[start - 1], true)) start--
         // A run of punctuation or emoji counts as one "word".
-        if (start == trimmed.length) start = (trimmed.length - 1).coerceAtLeast(0)
+        if (start == trimmed.length && start > 0) start -= Character.charCount(Character.codePointBefore(trimmed, start))
         field.deleteBefore((before.length - start).coerceAtLeast(1))
     }
 
     /** Replaces the current word with a strip suggestion, puts back an autocorrected word, or adds a predicted word. */
     fun pick(suggestion: String) {
+        lastSpaceAt = null
+        undoDoubleSpace = false
         val u = undo
         undo = null
         if (u != null && word.isEmpty() && suggestion == u.typed && field.before(u.replacement.length) == u.replacement) {
@@ -218,6 +247,8 @@ class TypingSession(
 
     /** Inserts text that is not typed key by key (emoji, clipboard), ending the current word as typed. */
     fun insert(text: String) {
+        lastSpaceAt = null
+        undoDoubleSpace = false
         undo = null
         field.batch {
             endWord(autoCorrect = false, trailing = "")
@@ -230,6 +261,8 @@ class TypingSession(
 
     /** Ends the current word as typed, e.g. before Enter or dictation. */
     fun finishWord() {
+        lastSpaceAt = null
+        undoDoubleSpace = false
         undo = null
         if (word.isNotEmpty()) endWord(autoCorrect = false, trailing = "")
     }
@@ -267,7 +300,7 @@ class TypingSession(
      * "file.ts", "my_var").
      */
     fun autoCorrectsHere(): Boolean {
-        if (!options.autoCorrect) return false
+        if (!options.autoCorrect || word.toString() == rejectedCorrection) return false
         val lead = field.before(word.length + 1).dropLast(word.length)
         return lead.isEmpty() || lead[0] !in CODE_LEAD
     }
@@ -294,6 +327,7 @@ class TypingSession(
     private fun clearWord() {
         word.clear()
         presses.clear()
+        rejectedCorrection = null
     }
 
     /** After backspacing into a word, make it editable again so its suggestions come back. */

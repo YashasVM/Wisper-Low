@@ -98,7 +98,7 @@ private class KeyRect(val key: Key, val rect: Rect)
 
 private enum class Mode { TAP, PRIMARY, ALTERNATES, CURSOR, REPEAT, DONE }
 
-private class Track(val key: KeyRect, val start: Offset) {
+private class Track(val key: KeyRect, val start: Offset, val upper: Boolean) {
     var mode = Mode.TAP
     var job: Job? = null
     var cursorSteps = 0
@@ -121,13 +121,13 @@ fun KeyArea(
     val events by rememberUpdatedState(listener)
     val upper = shift != ShiftState.OFF
     // Read through state so toggling shift mid-gesture does not restart touch handling.
-    val upperNow by rememberUpdatedState(upper)
+    val shiftNow by rememberUpdatedState(shift)
     BoxWithConstraints(modifier.fillMaxWidth().height(rowHeight * rows.size)) {
         val widthPx = constraints.maxWidth.toFloat()
         val rowPx = with(density) { rowHeight.toPx() }
         val sidePx = with(density) { SIDE_PADDING.toPx() }
         val rects = remember(rows, widthPx, rowPx) { layoutKeys(rows, widthPx, rowPx, sidePx) }
-        val pressed = remember { mutableStateMapOf<PointerId, KeyRect>() }
+        val pressed = remember { mutableStateMapOf<PointerId, Track>() }
         var alternates by remember { mutableStateOf<Alternates?>(null) }
         /** A key held long enough to type its long-press character (the top-row digit). */
         var primary by remember { mutableStateOf<KeyRect?>(null) }
@@ -135,8 +135,8 @@ fun KeyArea(
         val cursorStepPx = with(density) { CURSOR_STEP.toPx() }
         val slopPx = with(density) { CURSOR_SLOP.toPx() }
 
-        fun casedOptions(key: Key): List<String> =
-            if (upperNow) key.alternates.map { it.uppercase() } else key.alternates
+        fun casedOptions(t: Track): List<String> =
+            if (t.upper) t.key.key.alternates.map { it.uppercase() } else t.key.key.alternates
 
         fun hit(p: Offset): KeyRect? {
             if (rects.isEmpty()) return null
@@ -153,7 +153,7 @@ fun KeyArea(
                     KeyKind.CHAR -> {
                         val r = t.key.rect
                         val at = Offset((t.start.x - r.center.x) / r.width, (t.start.y - r.center.y) / r.height)
-                        events.onText(t.key.key.text.let { if (upperNow) it.uppercase() else it }, at)
+                        events.onText(t.key.key.text.let { if (t.upper) it.uppercase() else it }, at)
                     }
                     KeyKind.SPACE, KeyKind.ENTER, KeyKind.PAGE, KeyKind.EMOJI -> events.onKey(t.key.key)
                     else -> Unit
@@ -172,113 +172,131 @@ fun KeyArea(
                 .fillMaxSize()
                 .pointerInput(rects) {
                     coroutineScope {
-                        val tracks = HashMap<PointerId, Track>()
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                for (change in event.changes) {
-                                    val id = change.id
-                                    when {
-                                        change.changedToDownIgnoreConsumed() -> {
-                                            // Rollover: a second finger landing commits the key still held by the first.
-                                            tracks.values.filter { it.mode == Mode.TAP && it.key.key.kind == KeyKind.CHAR }.forEach {
-                                                release(it)
-                                            }
-                                            val target = hit(change.position) ?: continue
-                                            val t = Track(target, change.position)
-                                            tracks[id] = t
-                                            pressed[id] = target
-                                            events.onDown(target.key)
-                                            when (target.key.kind) {
-                                                KeyKind.SHIFT -> {
-                                                    events.onKey(target.key)
-                                                    t.mode = Mode.DONE
+                        val tracks = LinkedHashMap<PointerId, Track>()
+                        val capitalization = TapCapitalization()
+                        try {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    for (change in event.changes) {
+                                        val id = change.id
+                                        when {
+                                            change.changedToDownIgnoreConsumed() -> {
+                                                // Commit pending text in finger-down order, including a held space before the next word.
+                                                tracks.values.filter {
+                                                    it.mode == Mode.PRIMARY || it.mode == Mode.ALTERNATES ||
+                                                        (it.mode == Mode.TAP && it.key.key.kind in listOf(KeyKind.CHAR, KeyKind.SPACE, KeyKind.ENTER))
+                                                }.forEach {
+                                                    release(it)
                                                 }
-                                                KeyKind.BACKSPACE -> {
-                                                    t.mode = Mode.REPEAT
-                                                    events.onBackspace(0)
-                                                    t.job = launch {
-                                                        delay(REPEAT_START_MS)
-                                                        var n = 1
-                                                        while (true) {
-                                                            events.onBackspace(n++)
-                                                            delay(if (n > WORD_DELETE_AFTER) WORD_REPEAT_MS else REPEAT_MS)
-                                                        }
-                                                    }
-                                                }
-                                                KeyKind.CHAR -> if (target.key.alternates.isNotEmpty() || target.key.longPress != null) {
-                                                    t.job = launch {
-                                                        delay(longPress)
-                                                        if (t.mode != Mode.TAP) return@launch
-                                                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                                        val digit = target.key.longPress
-                                                        if (digit != null) {
-                                                            // The number comes first; keep holding for accents.
-                                                            t.mode = Mode.PRIMARY
-                                                            primary = target
-                                                            val more = target.key.alternates.size > 1
-                                                            if (!more) return@launch
-                                                            delay(ACCENT_DELAY_MS)
-                                                            if (t.mode != Mode.PRIMARY) return@launch
-                                                            primary = null
-                                                        }
-                                                        t.mode = Mode.ALTERNATES
-                                                        alternates = Alternates(target, casedOptions(target.key), 0)
-                                                    }
-                                                }
-                                                KeyKind.SPACE -> t.job = launch {
-                                                    delay(longPress * 2)
-                                                    if (t.mode == Mode.TAP) {
+                                                val target = hit(change.position) ?: continue
+                                                val t = Track(
+                                                    target,
+                                                    change.position,
+                                                    if (target.key.kind == KeyKind.CHAR) capitalization.take(shiftNow) else shiftNow != ShiftState.OFF,
+                                                )
+                                                tracks[id] = t
+                                                pressed[id] = t
+                                                events.onDown(target.key)
+                                                when (target.key.kind) {
+                                                    KeyKind.SHIFT -> {
+                                                        events.onKey(target.key)
                                                         t.mode = Mode.DONE
-                                                        pressed.remove(id)
-                                                        events.onSpaceLongPress()
+                                                    }
+                                                    KeyKind.BACKSPACE -> {
+                                                        t.mode = Mode.REPEAT
+                                                        events.onBackspace(0)
+                                                        t.job = launch {
+                                                            delay(REPEAT_START_MS)
+                                                            var n = 1
+                                                            while (true) {
+                                                                events.onBackspace(n++)
+                                                                delay(if (n > WORD_DELETE_AFTER) WORD_REPEAT_MS else REPEAT_MS)
+                                                            }
+                                                        }
+                                                    }
+                                                    KeyKind.CHAR -> if (target.key.alternates.isNotEmpty() || target.key.longPress != null) {
+                                                        t.job = launch {
+                                                            delay(longPress)
+                                                            if (t.mode != Mode.TAP) return@launch
+                                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                                            val digit = target.key.longPress
+                                                            if (digit != null) {
+                                                                // The number comes first; keep holding for accents.
+                                                                t.mode = Mode.PRIMARY
+                                                                primary = target
+                                                                val more = target.key.alternates.size > 1
+                                                                if (!more) return@launch
+                                                                delay(ACCENT_DELAY_MS)
+                                                                if (t.mode != Mode.PRIMARY) return@launch
+                                                                primary = null
+                                                            }
+                                                            t.mode = Mode.ALTERNATES
+                                                            alternates = Alternates(target, casedOptions(t), 0)
+                                                        }
+                                                    }
+                                                    KeyKind.SPACE -> t.job = launch {
+                                                        delay(longPress * 2)
+                                                        if (t.mode == Mode.TAP) {
+                                                            t.mode = Mode.DONE
+                                                            pressed.remove(id)
+                                                            events.onSpaceLongPress()
+                                                        }
+                                                    }
+                                                    else -> Unit
+                                                }
+                                            }
+                                            change.changedToUpIgnoreConsumed() -> {
+                                                pressed.remove(id)
+                                                tracks.remove(id)?.let(::release)
+                                            }
+                                            change.positionChanged() -> {
+                                                val t = tracks[id] ?: continue
+                                                val dx = change.position.x - t.start.x
+                                                when {
+                                                    t.mode == Mode.ALTERNATES -> alternates?.let { a ->
+                                                        val cell = altCellWidth(a.key.rect)
+                                                        val left = altLeft(a, cell, widthPx)
+                                                        val index = ((change.position.x - left) / cell).toInt().coerceIn(0, a.options.lastIndex)
+                                                        if (index != a.selected) alternates = Alternates(a.key, a.options, index)
+                                                    }
+                                                    t.key.key.kind == KeyKind.SPACE &&
+                                                        (t.mode == Mode.TAP || t.mode == Mode.CURSOR) &&
+                                                        (t.mode == Mode.CURSOR || abs(dx) > slopPx) -> {
+                                                        // Drag along space to move the cursor, one step per few millimetres.
+                                                        t.job?.cancel()
+                                                        t.mode = Mode.CURSOR
+                                                        val steps = (dx / cursorStepPx).toInt()
+                                                        if (steps != t.cursorSteps) {
+                                                            events.onCursor(steps - t.cursorSteps)
+                                                            t.cursorSteps = steps
+                                                        }
                                                     }
                                                 }
-                                                else -> Unit
                                             }
                                         }
-                                        change.changedToUpIgnoreConsumed() -> {
-                                            pressed.remove(id)
-                                            tracks.remove(id)?.let(::release)
-                                        }
-                                        change.positionChanged() -> {
-                                            val t = tracks[id] ?: continue
-                                            val dx = change.position.x - t.start.x
-                                            when {
-                                                t.mode == Mode.ALTERNATES -> alternates?.let { a ->
-                                                    val cell = altCellWidth(a.key.rect)
-                                                    val left = altLeft(a, cell, widthPx)
-                                                    val index = ((change.position.x - left) / cell).toInt().coerceIn(0, a.options.lastIndex)
-                                                    if (index != a.selected) alternates = Alternates(a.key, a.options, index)
-                                                }
-                                                t.key.key.kind == KeyKind.SPACE && (t.mode == Mode.CURSOR || abs(dx) > slopPx) -> {
-                                                    // Drag along space to move the cursor, one step per few millimetres.
-                                                    t.job?.cancel()
-                                                    t.mode = Mode.CURSOR
-                                                    val steps = (dx / cursorStepPx).toInt()
-                                                    if (steps != t.cursorSteps) {
-                                                        events.onCursor(steps - t.cursorSteps)
-                                                        t.cursorSteps = steps
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        change.consume()
                                     }
-                                    change.consume()
                                 }
                             }
+                        } finally {
+                            tracks.values.forEach { it.job?.cancel() }
+                            pressed.clear()
+                            alternates = null
+                            primary = null
                         }
                     }
                 },
         ) {
-            val pressedKeys = pressed.values.toSet()
+            val pressedKeys = pressed.values.map { it.key }.toSet()
             for (r in rects) {
                 KeyCap(r, r in pressedKeys, upper, shift, enter, density)
             }
             // Preview bubble over a pressed letter, the way your thumb would hide it.
-            for (r in pressedKeys) {
+            for (t in pressed.values) {
+                val r = t.key
                 if (r.key.kind == KeyKind.CHAR && alternates?.key != r) {
-                    KeyPreview(r, if (primary == r) r.key.longPress.orEmpty() else r.key.label.let { if (upper) it.uppercase() else it }, density)
+                    KeyPreview(r, if (primary == r) r.key.longPress.orEmpty() else r.key.label.let { if (t.upper) it.uppercase() else it }, density)
                 }
             }
             alternates?.let { AlternatesPopup(it, widthPx, density) }

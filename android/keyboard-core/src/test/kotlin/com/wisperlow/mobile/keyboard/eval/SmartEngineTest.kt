@@ -7,12 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/**
- * The new adapter must run the real [KeyboardEngine] through the same session as the
- * app, and must let the engine read an off-centre Latin tap through its resolver
- * instead of only swapping the suggestion source. These assertions use the canonical
- * EvalBoard geometry, so they survive a change of screen size.
- */
+/** The simulator follows the production path: preserve literal taps until word commit. */
 class SmartEngineTest {
     private val assets = File(System.getProperty("wisperlow.assets")!!)
     private val data = File("src/eval/resources/en")
@@ -24,9 +19,9 @@ class SmartEngineTest {
     }
 
     @Test
-    fun `the resolver reads an off-centre tap where the legacy engine types the key`() {
+    fun `an off-centre tap stays literal until the word is committed`() {
         // "th" is a strong prefix for 'e'. A tap near w's right edge hit-tests to w, but the
-        // engine should read it as the 'e' the context and the touch both point at.
+        // word decoder can use the touch when space commits, while composing keeps the literal.
         val (x, y) = edgeTap('w', 0.48f)
         assertEquals("the tap must land on w", 'w', EvalBoard.hit(x, y)?.text?.single())
 
@@ -40,7 +35,9 @@ class SmartEngineTest {
         smart.type("t")
         smart.type("h")
         smart.tap(x, y)
-        assertEquals("the smart engine reads the touch through resolveKey", "the", smart.composing.lowercase())
+        assertEquals("the smart engine preserves the literal key for undo", "thw", smart.composing.lowercase())
+        smart.space()
+        assertEquals("the touch still informs the committed correction", "the", lastWord(smart))
     }
 
     @Test

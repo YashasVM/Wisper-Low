@@ -66,6 +66,56 @@ class KeyboardEngineTest {
     // --- the two new behaviours ------------------------------------------------------------
 
     @Test
+    fun `trusting an OOV spelling does not promote noisy corpus continuations`() {
+        val e = KeyboardEngine(
+            modelOf(listOf("the" to 100000L)), centers,
+            predictionModel = modelOf(listOf("teh" to 44L, "densities" to 4L, "algo" to 3L)),
+        )
+        e.trust("teh")
+        assertEquals(emptyList<String>(), e.predict("teh"))
+        e.learn("book", "teh")
+        assertEquals(listOf("book"), e.predict("teh"))
+    }
+
+    @Test
+    fun `trusted context missing from the corpus does not fall back to unrelated unigrams`() {
+        val e = KeyboardEngine(
+            modelOf(listOf("the" to 100000L)), centers,
+            predictionModel = modelOf(listOf("morning" to 100L)),
+        )
+        e.trust("zorbix")
+        assertEquals(emptyList<String>(), e.predict("zorbix"))
+    }
+
+    @Test
+    fun `next word corpus uses its own vocabulary without changing correction scores`() {
+        val next = modelOf(listOf("morning" to 100L, "good" to 10L))
+        val contextual = object : LanguageModel by next {
+            override fun predict(context: IntArray, max: Int): List<ScoredWord> =
+                if (context.contentEquals(intArrayOf(next.vocabulary.id("good")))) {
+                    listOf(ScoredWord(next.vocabulary.id("morning"), -0.1f)).take(max)
+                } else emptyList()
+        }
+        val e = KeyboardEngine(
+            modelOf(listOf("good" to 10L, "the" to 100000L)), centers,
+            predictionModel = contextual,
+        )
+        assertEquals(listOf("morning"), e.predict("good"))
+        assertEquals(listOf("morning"), e.predict("Good"))
+        assertEquals("the", e.suggest("teh").autoCorrect)
+        e.learn("evening", "good")
+        assertEquals(listOf("evening"), e.predict("good"))
+    }
+
+    @Test
+    fun `slang keeps the literal in the middle instead of highlighting a rejected fix`() {
+        val e = engineOf(listOf("okay" to 100000L, "oak" to 50000L, "oaks" to 30000L))
+        val suggestions = e.suggest("ok")
+        assertNull(suggestions.autoCorrect)
+        assertEquals("ok", suggestions.words[1])
+    }
+
+    @Test
     fun `a tap landing on w near e in thw corrects to the`() {
         val touches = listOf(Qwerty.touch('t', 0f, 0f)!!, Qwerty.touch('h', 0f, 0f)!!, Qwerty.touch('w', 0.45f, 0f)!!)
         assertEquals("the", engine.suggest("thw", touches = touches).autoCorrect)

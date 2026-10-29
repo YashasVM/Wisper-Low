@@ -270,4 +270,6 @@
     <string name="settings_keyboard_list_off">Wisperlow is off. Turn it on to type and dictate in other apps.</string>
     <string name="settings_keyboard_pick">Choose keyboard</string>
     <string name="try_finish">Finish</string>
+    <string name="settings_prediction_credits">Prediction data credits</string>
+    <string name="settings_notices_close">Close</string>
 </resources>

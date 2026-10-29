@@ -36,6 +36,7 @@ class KeyboardEngine(
     decoderParams: DecoderParams = DecoderParams(),
     policyParams: PolicyParams = PolicyParams(),
     resolverParams: ResolverParams = ResolverParams(),
+    private val predictionModel: LanguageModel? = null,
 ) : WordEngine {
     private val keyRows = keys.filter { it.char in 'a'..'z' }.groupBy { it.y }.values
         .map { row -> row.sortedBy { it.x } }.sortedBy { it.first().y }
@@ -49,14 +50,12 @@ class KeyboardEngine(
     /** User words, pairs and fixes; the empty word list leaves the decoder to the word list. */
     private val user = Lexicon(emptyList())
 
-    private val sentenceStart = vocabulary.id(Vocabulary.SENTENCE_START)
-
     /**
      * The model's most probable unigram, the reference that makes rarity a ratio rather
      * than a magic count: a word's log-odds against it do not move when every count is
      * scaled by the same constant.
      */
-    private val topUnigram: Float by lazy {
+    private val topUnigram: Float = run {
         var best = Float.NEGATIVE_INFINITY
         for (id in 0 until vocabulary.size) {
             val p = model.unigramLogProb(id)
@@ -130,23 +129,28 @@ class KeyboardEngine(
         }
         val facts = TypedFacts(
             literalKnown = literalKnown,
-            userTrusted = user.isKnown(typed),
+            userTrusted = user.isKnown(typed) || key in SLANG,
             literalLogOdds = literalLogOdds,
         )
-        val decided = policy.decide(typed, ranking, facts, max.coerceAtLeast(0))
-        return if (key in SLANG) decided.copy(autoCorrect = null) else decided
+        return policy.decide(typed, ranking, facts, max.coerceAtLeast(0))
     }
 
     override fun predict(previous: String?, max: Int): List<String> {
         if (max <= 0) return emptyList()
         val learned = user.predict(previous, max)
         if (learned.isNotEmpty()) return learned.take(max)
-        // A learned word that has been forgotten must not leave model-only predictions behind.
-        if (previous != null && vocabulary.id(previous) == Vocabulary.UNKNOWN && !user.isKnown(previous)) {
+        // A trusted typo can occur sparsely in the corpus ("teh densities"). Trust
+        // protects spelling; only a lexical context or a learned pair supports prediction.
+        val nextModel = predictionModel ?: model
+        val nextVocabulary = nextModel.vocabulary
+        val nextContext = contextOf(previous, nextVocabulary)
+        if (previous != null &&
+            (nextContext.last() == Vocabulary.UNKNOWN || contextOf(previous).last() == Vocabulary.UNKNOWN)
+        ) {
             return emptyList()
         }
-        return model.predict(contextOf(previous), max)
-            .map { vocabulary.surface(it.id) }
+        return nextModel.predict(nextContext, max)
+            .map { nextVocabulary.surface(it.id) }
             .filter { it != Vocabulary.SENTENCE_START }
             .take(max)
     }
@@ -202,10 +206,14 @@ class KeyboardEngine(
     }
 
     /** The preceding word ids, oldest first: "<s>" at a sentence start, [Vocabulary.UNKNOWN] otherwise. */
-    private fun contextOf(previous: String?): IntArray {
-        if (previous == null) return intArrayOf(sentenceStart)
-        val id = vocabulary.id(previous)
-        return intArrayOf(if (id == Vocabulary.UNKNOWN) Vocabulary.UNKNOWN else id)
+    private fun contextOf(previous: String?, words: Vocabulary = vocabulary): IntArray {
+        if (previous == null) return intArrayOf(words.id(Vocabulary.SENTENCE_START))
+        val exact = words.id(previous)
+        val id = if (exact != Vocabulary.UNKNOWN) exact else {
+            words.idsForKey(Vocabulary.keyOf(previous))
+                .firstOrNull { words.surface(it).equals(previous, ignoreCase = true) } ?: Vocabulary.UNKNOWN
+        }
+        return intArrayOf(id)
     }
 
     /** One [TypedKey] per character, with its touch when the caller tracks them. */
@@ -264,7 +272,11 @@ class KeyboardEngine(
          * A [KeyboardEngine] over "surface to count" [entries], with the sentence-start marker
          * added so contexts can begin a sentence. Duplicate surfaces keep their first count.
          */
-        fun fromWordList(entries: List<Pair<String, Long>>, keys: List<KeyCenter>): KeyboardEngine {
+        fun fromWordList(
+            entries: List<Pair<String, Long>>,
+            keys: List<KeyCenter>,
+            predictionModel: LanguageModel? = null,
+        ): KeyboardEngine {
             val distinct = LinkedHashMap<String, Long>()
             for ((word, count) in entries) {
                 if (word.isNotBlank() && word !in distinct) distinct[word] = count.coerceAtLeast(1L)
@@ -277,7 +289,7 @@ class KeyboardEngine(
                 surfaces += word
                 counts += count
             }
-            return KeyboardEngine(UnigramModel(Vocabulary(surfaces), counts.toLongArray()), keys)
+            return KeyboardEngine(UnigramModel(Vocabulary(surfaces), counts.toLongArray()), keys, predictionModel = predictionModel)
         }
     }
 }

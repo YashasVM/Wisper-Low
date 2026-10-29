@@ -409,7 +409,7 @@ private fun Suggestions(
     Row(modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
         words.forEachIndexed { i, word ->
             if (i > 0) Box(Modifier.width(1.dp).height(18.dp).background(colors.divider))
-            val strong = word == autoCorrect || (autoCorrect == null && i == 1)
+            val strong = word == autoCorrect
             val label = stringResource(R.string.keyboard_suggestion, word)
             Box(
                 Modifier

@@ -46,6 +46,13 @@ class SuggestionPolicyTest {
     )
 
     @Test
+    fun `a restored literal keeps the middle slot over a high scoring correction`() {
+        val out = policy.decide("teh", teh, facts(known = false, trusted = true))
+        assertNull(out.autoCorrect)
+        assertEquals(listOf("the", "teh", "they"), out.words)
+    }
+
+    @Test
     fun `a clear slip on an unknown literal is corrected`() {
         val out = policy.decide("teh", teh, facts(known = false))
         assertEquals("the", out.autoCorrect)
@@ -181,7 +188,7 @@ class SuggestionPolicyTest {
     fun `a word the user owns is never corrected`() {
         val out = policy.decide("teh", teh, facts(known = false, trusted = true))
         assertNull(out.autoCorrect)
-        assertEquals(listOf("teh", "the", "they"), out.words)
+        assertEquals(listOf("the", "teh", "they"), out.words)
     }
 
     @Test

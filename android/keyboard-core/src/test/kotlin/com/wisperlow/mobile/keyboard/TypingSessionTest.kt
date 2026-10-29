@@ -54,6 +54,66 @@ class TypingSessionTest {
     private fun typeWord(s: String) = s.forEach { session.type(it.toString()) }
 
     @Test
+    fun `punctuation after corrected space keeps correction reversible`() {
+        typeWord("teh")
+        session.space()
+        session.type(",")
+        assertEquals("the,", field.toString())
+        session.backspace()
+        assertEquals("teh", field.toString())
+    }
+
+    @Test
+    fun `undo disables the correction highlighted in the strip`() {
+        session.options = TypingOptions(learn = false)
+        typeWord("teh")
+        session.space()
+        session.backspace()
+        assertEquals(false, session.autoCorrectsHere())
+    }
+
+    @Test
+    fun `held delete removes a complete supplementary character`() {
+        session.insert("hello 😀")
+        session.deleteWord()
+        assertEquals("hello ", field.toString())
+    }
+
+    @Test
+    fun `rejected correction stays rejected without personalized learning`() {
+        session.options = TypingOptions(learn = false)
+        typeWord("teh")
+        session.space()
+        assertEquals("the ", field.toString())
+        session.backspace()
+        session.space()
+        assertEquals("teh ", field.toString())
+    }
+
+    @Test
+    fun `backspace reverses double space punctuation`() {
+        typeWord("hello")
+        session.space()
+        now += 200
+        session.space()
+        session.backspace()
+        assertEquals("hello ", field.toString())
+        session.backspace()
+        assertEquals("hello", field.toString())
+    }
+
+    @Test
+    fun `typing between spaces cancels the double space shortcut`() {
+        typeWord("hello")
+        session.space()
+        session.type("x")
+        session.backspace()
+        now += 200
+        session.space()
+        assertEquals("hello  ", field.toString())
+    }
+
+    @Test
     fun `space corrects the typed word`() {
         typeWord("teh")
         session.space()

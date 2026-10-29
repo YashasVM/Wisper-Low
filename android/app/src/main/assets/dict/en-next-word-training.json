@@ -1,0 +1,24 @@
+{
+  "bigram_occurrences": 11479221,
+  "bigrams": 1389375,
+  "elapsed_seconds": 104.522,
+  "inputs": [
+    "/home/yvm/kbdata/raw/en/tatoeba/tatoeba_cc0_eng.txt.gz",
+    "/home/yvm/kbdata/raw/en/openassistant_oasst1/oasst1_eng_prompter.txt.gz",
+    "/home/yvm/kbdata/raw/en/wildchat/wildchat_eng_user.txt.gz"
+  ],
+  "lines": 169397,
+  "pruning": {
+    "min1": 2,
+    "min2": 1,
+    "min3": 1,
+    "vocab": 60000
+  },
+  "sentences": 684565,
+  "tokens": 12320523,
+  "trigram_occurrences": 10273483,
+  "trigrams": 3019127,
+  "unigram_occurrences": 13005088,
+  "unigrams": 60001,
+  "vocabulary_size": 60001
+}

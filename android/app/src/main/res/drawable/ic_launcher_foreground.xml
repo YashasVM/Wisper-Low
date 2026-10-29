@@ -1,19 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A spoken wave that settles into a "w"; the dot is the floating mic bubble. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,28A13,13 0,0 0,41 41V56A13,13 0,0 0,67 56V41A13,13 0,0 0,54 28Z" />
+        android:pathData="M28,46C34,46 35.5,68 41,68C46.5,68 47.5,50 54,50C60.5,50 61.5,68 67,68C72.5,68 74,46 80,46"
+        android:strokeWidth="7.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M31,48V56A23,23 0,0 0,77 56V48H72V56A18,18 0,0 1,36 56V48Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M51,74H57V88H51Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,85H66V91H42Z" />
+        android:fillColor="#E9E3FF"
+        android:pathData="M80,33m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
 </vector>
