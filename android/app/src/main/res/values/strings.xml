@@ -23,15 +23,15 @@
     <string name="bubble_loading_keep_talking">Listening… (getting ready)</string>
     <string name="bubble_tap_to_finish">Tap to finish · hold to cancel</string>
     <string name="bubble_transcribing">Writing it down…</string>
-    <string name="bubble_review_title">Check before inserting</string>
-    <string name="bubble_review_text">Dictated text. Edit before inserting.</string>
+    <string name="bubble_review_title">Check before copying</string>
+    <string name="bubble_review_text">Dictated text. Edit before copying.</string>
     <string name="bubble_cancel">Discard</string>
     <string name="bubble_copy">Copy</string>
-    <string name="bubble_insert">Insert</string>
+    <string name="bubble_insert">Copy</string>
     <string name="demo_sentence">Running ten minutes late, see you soon!</string>
     <string name="demo_message_hint">Message</string>
     <string name="bubble_inserted">Typed it</string>
-    <string name="bubble_copied">Copied</string>
+    <string name="bubble_copied">Copied. Long-press a text field and tap Paste.</string>
     <string name="bubble_copied_no_field">No text field found. Copied, so you can paste it.</string>
     <string name="bubble_copied_no_accessibility">Copied. Turn on Wisperlow in Accessibility to type automatically.</string>
     <string name="bubble_cancelled">Cancelled</string>
@@ -76,14 +76,14 @@
     <!-- Onboarding -->
     <string name="onboarding_step">Step %1$d of %2$d</string>
     <string name="welcome_title">Talk instead of type, in any app</string>
-    <string name="welcome_body">Wisperlow puts a small microphone bubble next to your keyboard. Tap it, speak, and your words are typed for you.</string>
+    <string name="welcome_body">Tap the floating microphone bubble, speak, then paste your words into any app.</string>
     <string name="welcome_point_private">Everything runs on your phone. Your voice never leaves it.</string>
     <string name="welcome_start">Let’s set it up</string>
 
     <string name="how_title">How it works</string>
     <string name="how_body">Three steps, every time:</string>
     <string name="how_step1_title">Tap any text field</string>
-    <string name="how_step1_body">When your keyboard opens, the Wisperlow bubble appears at the edge of the screen.</string>
+    <string name="how_step1_body">Start the bubble in Wisperlow. It stays at the edge of the screen while you use other apps.</string>
     <string name="how_step2_title">Tap the bubble and speak</string>
     <string name="how_step2_body">It turns purple while it listens. Your words appear in it as you talk.</string>
     <string name="how_step3_title">Pause, and it types for you</string>
@@ -222,8 +222,8 @@
     <string name="auto_stop_relaxed">2.5 seconds (thinking time)</string>
     <string name="auto_stop_long">4 seconds (long pauses)</string>
     <string name="auto_stop_manual">Never, I’ll tap to finish</string>
-    <string name="settings_review">Review before inserting</string>
-    <string name="settings_review_body">Show an editable preview instead of typing right away.</string>
+    <string name="settings_review">Review before copying</string>
+    <string name="settings_review_body">Show an editable preview before copying the transcript.</string>
     <string name="settings_keep_loaded">Keep model ready</string>
     <string name="settings_keep_loaded_body">Instant start every time, but uses about 1 GB of memory in the background. Otherwise it’s freed after 5 idle minutes.</string>
     <string name="settings_section_model">Speech model</string>
@@ -241,5 +241,5 @@
         <item quantity="other">%1$d words</item>
     </plurals>
     <string name="settings_live_preview">Live transcript</string>
-    <string name="settings_live_preview_body">Show words in the bubble while you speak. Turns off for the session if decoding is too slow. Only the final transcript is inserted.</string>
+    <string name="settings_live_preview_body">Show words in the bubble while you speak. Only the final transcript is copied.</string>
 </resources>

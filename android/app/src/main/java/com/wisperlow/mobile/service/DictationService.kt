@@ -20,7 +20,6 @@ import android.util.Log
 import android.widget.Toast
 import com.wisperlow.mobile.MainActivity
 import com.wisperlow.mobile.R
-import com.wisperlow.mobile.accessibility.InsertResult
 import com.wisperlow.mobile.accessibility.WisperlowAccessibilityService
 import com.wisperlow.mobile.dictation.DictationEngine
 import com.wisperlow.mobile.dictation.DictationError
@@ -260,7 +259,6 @@ class DictationService : Service(), BubbleActions {
         local.update { it.copy(flash = null) }
         // Remember the field now; the review editor could take focus later. The lookup
         // crosses into the other app, so keep it off the frame that starts the bubble animation.
-        scope.launch(Dispatchers.Default) { WisperlowAccessibilityService.captureTarget() }
         ownsSession = engine.start(
             listener = { result ->
                 ownsSession = false
@@ -283,22 +281,8 @@ class DictationService : Service(), BubbleActions {
 
     private fun deliver(text: String) {
         if (text.isBlank()) return
-        when (WisperlowAccessibilityService.insert(text)) {
-            InsertResult.INSERTED, InsertResult.PASTED -> flash(getString(R.string.bubble_inserted), success = true)
-            InsertResult.NO_TARGET -> {
-                copyToClipboard(text)
-                flash(
-                    getString(
-                        if (WisperlowAccessibilityService.connected.value) {
-                            R.string.bubble_copied_no_field
-                        } else {
-                            R.string.bubble_copied_no_accessibility
-                        },
-                    ),
-                    success = true,
-                )
-            }
-        }
+        copyToClipboard(text)
+        flash(getString(R.string.bubble_copied), success = true)
         remember(text)
     }
 

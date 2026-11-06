@@ -1,3 +1,7 @@
+## Clipboard bubble
+
+The bubble copies completed transcripts. Long-press the destination text field and tap Paste. Accessibility access and the restricted-settings unlock are not required. The bubble stays visible until dismissed or turned off.
+
 # Wisperlow for Android
 
 Wisperlow Android is a native Kotlin/Compose app. Speech recognition, voice

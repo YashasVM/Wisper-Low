@@ -129,13 +129,16 @@ impl CapabilityProbe {
             Some(arch) if KNOWN_ARCHES.contains(&arch) => Compatibility::Compatible,
             _ => Compatibility::MaybeIncompatible,
         };
+        let supports_streaming = meta
+            .get_bool(KEY_CAP_STREAMING)
+            .or_else(|| (architecture.as_deref() == Some("voxtral_realtime")).then_some(true));
         CapabilityProbe {
             verdict,
             display_name: meta.get_str(KEY_NAME).map(str::to_string),
             architecture,
             variant: meta.get_str(KEY_VARIANT).map(str::to_string),
             languages: meta.get_string_array(KEY_LANGUAGES),
-            supports_streaming: meta.get_bool(KEY_CAP_STREAMING),
+            supports_streaming,
             supports_translation: meta.get_bool(KEY_CAP_TRANSLATE),
             supports_language_detect: meta.get_bool(KEY_CAP_LANG_DETECT),
         }

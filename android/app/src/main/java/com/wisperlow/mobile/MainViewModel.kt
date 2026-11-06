@@ -43,7 +43,7 @@ data class SetupStatus(
 ) {
     /** Accessibility only improves insertion; the bubble works without it by copying. */
     val canRunBubble: Boolean get() = microphone && overlay && model
-    val allDone: Boolean get() = canRunBubble && accessibility
+    val allDone: Boolean get() = canRunBubble
 }
 
 data class PracticeUi(

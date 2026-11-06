@@ -66,15 +66,6 @@ fun SettingsScreen(
                     onCheckedChange = { if (it) actions.startBubble() else actions.stopBubble() },
                 )
                 HorizontalDivider()
-                SwitchRow(
-                    title = stringResource(R.string.settings_only_typing),
-                    body = stringResource(
-                        if (state.setup.accessibility) R.string.settings_only_typing_body else R.string.settings_only_typing_needs_a11y,
-                    ),
-                    checked = settings.bubbleOnlyWhenTyping,
-                    onCheckedChange = { viewModel.setBubbleOnlyWhenTyping(it) },
-                )
-                HorizontalDivider()
                 LinkRow(stringResource(R.string.settings_reset_position), null, onPositionReset)
             }
         }

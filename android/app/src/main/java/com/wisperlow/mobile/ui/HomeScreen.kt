@@ -184,7 +184,6 @@ private fun fixesFor(state: MainUiState, actions: AppActions, callbacks: HomeCal
     if (!setup.model) add(Fix(R.string.home_fix_model, callbacks.onOpenModels))
     if (!setup.microphone) add(Fix(R.string.home_fix_mic, actions.requestMicrophone))
     if (!setup.overlay) add(Fix(R.string.home_fix_overlay, actions.openOverlaySettings))
-    if (!setup.accessibility) add(Fix(R.string.home_fix_accessibility, actions.openAccessibilitySettings))
     if (!setup.notifications && setup.microphone) add(Fix(R.string.home_fix_notifications, actions.openAppInfo))
 }
 

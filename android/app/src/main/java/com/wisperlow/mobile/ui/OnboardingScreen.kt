@@ -139,7 +139,7 @@ fun OnboardingScreen(
     var index by rememberSaveable { mutableIntStateOf(if (startAtOverlay) GuideStep.OVERLAY.ordinal else 0) }
     var micAsked by rememberSaveable { mutableStateOf(false) }
     var demoPhase by remember { mutableIntStateOf(0) }
-    val steps = GuideStep.entries
+    val steps = GuideStep.entries.filter { it != GuideStep.ACCESSIBILITY }
     val step = steps[index]
     val setup = state.setup
     val next = { index = (index + 1).coerceAtMost(steps.lastIndex) }
