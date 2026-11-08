@@ -521,7 +521,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
             return@runCatching null
         }
         clipboard?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
-    }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }.getOrNull()?.let { clipboardText(it, ClipboardHistory.MAX_LENGTH) }
 
     private fun endResize() {
         val scale = ui.value.heightScale
@@ -538,7 +538,7 @@ class WisperlowKeyboardService : InputMethodService(), LifecycleOwner, SavedStat
                 return@runCatching null
             }
             clipboard?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
-        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_CLIP && it != dismissedClip }
+        }.getOrNull()?.let { clipboardText(it, MAX_CLIP) }?.takeIf { it != dismissedClip }
         val allowed = ui.value.field != FieldKind.PASSWORD
         ui.update { it.copy(clip = if (allowed) text else null) }
     }

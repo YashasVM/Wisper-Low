@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Android tests, lint, and debug build
         working-directory: android
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
+        run: ./gradlew :keyboard-core:test testDebugUnitTest lintDebug assembleDebug --no-daemon
 
       - name: Upload Android reports
         if: ${{ !cancelled() }}
@@ -53,6 +53,8 @@ jobs:
           path: |
             android/app/build/reports/
             android/app/build/test-results/
+            android/keyboard-core/build/reports/
+            android/keyboard-core/build/test-results/
           if-no-files-found: ignore
           retention-days: 14
 
